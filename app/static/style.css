@@ -764,6 +764,13 @@ input.cloze-input:disabled { opacity: 1; }
 .dash-body .course-progress { margin-top: 18px; }
 
 /* Nouveau cours */
+.start-drop { display: flex; flex-direction: column; align-items: center; gap: 8px; text-align: center; margin: 18px 0;
+  padding: 44px 24px; cursor: pointer; }
+.start-drop[hidden] { display: none; }
+.start-drop .tile-ico { width: 34px; height: 34px; color: var(--accent); }
+.start-drop strong { font-size: 1.15rem; }
+.start-drop .muted { max-width: 460px; }
+.start-drop .fake-button { margin-top: 6px; pointer-events: none; border-radius: 999px; padding: 7px 16px; font-size: 14px; }
 .small-drop { display: flex; flex-direction: column; align-items: center; gap: 4px; text-align: center; margin: 14px 0 4px; padding: 26px 16px; }
 .small-drop.has-files { border-style: solid; border-color: var(--accent); background: var(--accent-soft); }
 .small-drop.has-files strong { color: var(--accent-ink); word-break: break-word; }
@@ -926,8 +933,9 @@ input.cloze-input:disabled { opacity: 1; }
 /* Tout préparer au dépôt d'un cours */
 .prepare { margin-top: 16px; border: 1.5px solid var(--accent); }
 .prepare h2 { margin-bottom: 4px; }
-.prepare .option-row { display: flex; margin: 10px 0; }
-.prepare input[type=number] { width: 70px; padding: 4px 8px; display: inline-block; margin: 0 4px; }
+.prepare .option-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin: 10px 0; }
+.prepare .option-row label { display: flex; align-items: center; gap: 10px; cursor: pointer; }
+.prepare .dd.chip .dd-list { min-width: 100%; }
 main { padding-bottom: 120px; }
 .jobs.open .jobs-list { grid-template-columns: minmax(0, 1fr); }
 .job .primary.small, .job .ghost.small { flex: none; }

@@ -1107,6 +1107,10 @@ async function openCourse(id, tab, { keepScroll = false } = {}) {
   chip.hidden = !course.exam || course.exam.days <= -7;
   if (course.exam) chip.innerHTML = `${ICON_CALENDAR}<span>${examLabel(course.exam.date)}</span>`;
   renderTiles(course);
+  // Cours tout neuf, sans fichier ni carte : on invite d'abord à importer le cours.
+  const empty = !course.files.length && !course.quizzes.length && !course.cards.total;
+  $("#start-drop").hidden = !empty;
+  $(".course-tiles").hidden = empty;
   renderCourseRevise(course);
   renderQuizPanel(course);
   renderFiles(course);
@@ -1281,14 +1285,21 @@ const dropzone = $("#dropzone");
 ["dragleave", "drop"].forEach((ev) =>
   dropzone.addEventListener(ev, (e) => { e.preventDefault(); dropzone.classList.remove("over"); }));
 dropzone.addEventListener("drop", (e) => uploadFiles(e.dataTransfer.files));
+const startDrop = $("#start-drop");
+["dragenter", "dragover"].forEach((ev) =>
+  startDrop.addEventListener(ev, (e) => { e.preventDefault(); startDrop.classList.add("over"); }));
+["dragleave", "drop"].forEach((ev) =>
+  startDrop.addEventListener(ev, (e) => { e.preventDefault(); startDrop.classList.remove("over"); }));
+startDrop.addEventListener("drop", (e) => uploadFiles(e.dataTransfer.files));
 $("#file-input").addEventListener("change", (e) => { uploadFiles(e.target.files); e.target.value = ""; });
 
 async function uploadFiles(fileList) {
-  if (!fileList.length) return;
+  const files = [...fileList];  // copie : la liste du champ est vidée juste après l'appel
+  if (!files.length) return;
   if (state.tab !== "fichiers") await openCourse(state.course.id, "fichiers");
   if (location.hash !== courseHash("fichiers")) history.replaceState(null, "", courseHash("fichiers"));
   const form = new FormData();
-  for (const file of fileList) form.append("files", file);
+  for (const file of files) form.append("files", file);
   const status = $("#upload-status");
   status.hidden = false;
   status.className = "status";
@@ -3680,6 +3691,10 @@ document.addEventListener("click", (e) => {
 function prepareDismissed(id) {
   try { return JSON.parse(localStorage.getItem("pirouette.prepareLater") || "[]").includes(id); } catch { return false; }
 }
+// Case décochée : son nombre (questions ou cartes) est grisé.
+[["#prepare-quizzes", "#prepare-nq"], ["#prepare-cards", "#prepare-nc"]].forEach(([box, count]) =>
+  $(box).addEventListener("change", () => { $(count).disabled = !$(box).checked; }));
+
 function renderPrepare(course, tab) {
   const units = course.files.length ? chapterUnits(course) : [];
   const fresh = !course.quizzes.length && !course.cards.total && !prepareDismissed(course.id);

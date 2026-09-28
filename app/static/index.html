@@ -458,6 +458,14 @@
         </div>
       </div>
 
+      <label class="dropzone start-drop" id="start-drop" for="file-input" hidden>
+        <svg class="tile-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 16V4M7 9l5-5 5 5"/><path d="M4 16v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/></svg>
+        <strong>Importe ton cours pour commencer</strong>
+        <span class="muted">Glisse ton fichier ici ou clique pour le choisir : Pirouette le lit, repère les chapitres,
+          puis te propose des quiz et des flashcards. PDF, Word, PowerPoint, Pages, Keynote, texte.</span>
+        <span class="primary small fake-button">Choisir un fichier</span>
+      </label>
+
       <nav class="course-tiles" aria-label="Sections du cours">
         <div class="course-tile" data-tab="quiz">
           <a class="tile-link" data-tab-link="quiz"><svg class="tile-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .8-1 1.5v.4M12 17h.01"/></svg><span class="tile-num" id="tile-quiz-num">0</span><strong>Quiz</strong><small id="tile-quiz-sub"></small></a>
@@ -485,10 +493,10 @@
       <div class="card prepare" id="prepare-panel" hidden>
         <h2>Tout préparer pour ce cours ?</h2>
         <p class="muted" id="prepare-text"></p>
-        <label class="option-row"><input type="checkbox" id="prepare-quizzes" checked>
-          <span>Un quiz par chapitre, de <input type="number" id="prepare-nq" min="3" max="30" value="10"> questions</span></label>
-        <label class="option-row"><input type="checkbox" id="prepare-cards" checked>
-          <span>Des flashcards par chapitre : <input type="number" id="prepare-nc" min="3" max="40" value="10"> cartes</span></label>
+        <div class="option-row"><label><input type="checkbox" id="prepare-quizzes" checked> Un quiz par chapitre</label>
+          <select id="prepare-nq" class="chip" aria-label="Questions par quiz"><option value="5">5 questions</option><option value="10" selected>10 questions</option><option value="15">15 questions</option><option value="20">20 questions</option><option value="30">30 questions</option></select></div>
+        <div class="option-row"><label><input type="checkbox" id="prepare-cards" checked> Des flashcards par chapitre</label>
+          <select id="prepare-nc" class="chip" aria-label="Cartes par chapitre"><option value="5">5 cartes</option><option value="10" selected>10 cartes</option><option value="15">15 cartes</option><option value="20">20 cartes</option><option value="30">30 cartes</option><option value="40">40 cartes</option></select></div>
         <p class="heat-note">Tout se crée en arrière-plan, chapitre après chapitre : tu peux commencer à réviser dès que le premier
           est prêt. Ton Mac peut chauffer un peu pendant ce temps : évite d'ouvrir d'autres apps gourmandes.</p>
         <p class="error" id="prepare-error" hidden></p>
