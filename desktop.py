@@ -6,6 +6,7 @@ fenêtre, sans navigateur ni Terminal. C'est le point d'entrée de Pirouette.app
     python desktop.py                 # ouvre la fenêtre
     python desktop.py --server-only   # serveur seul (vérifications, sans interface graphique)
     python desktop.py --remind        # rappel quotidien : notification s'il y a des cartes à réviser
+    python desktop.py --mcp           # branché à l'app Claude : outils Pirouette pour Claude (voir app/mcp_server.py)
 """
 
 from __future__ import annotations
@@ -115,6 +116,27 @@ def remind() -> None:
         notify(text)
 
 
+def refresh_claude_link() -> None:
+    """Branchée à l'app Claude, Pirouette a pu être déplacée (autre dossier) : on remet le bon chemin."""
+    from app import claude_desktop
+
+    try:
+        entry = claude_desktop._read(claude_desktop.config_path()).get("mcpServers", {}).get(claude_desktop.NAME)
+        program = claude_desktop.command()
+        if entry and [entry.get("command"), *entry.get("args", [])] != program:
+            claude_desktop.install()
+    except (OSError, ValueError):
+        pass
+
+
+def serve_claude() -> None:
+    """Lancé par l'app Claude (voir app/mcp_server.py) : Pirouette répond à Claude par l'entrée / la sortie standard."""
+    from app.mcp_server import serve
+    from app.storage import Store
+
+    serve(Store(Path(os.environ["QUIZZ_DATA_DIR"])))
+
+
 def app_menu() -> list:
     """Barre des menus du Mac : « Rechercher une mise à jour… » dans le menu Pirouette, et un menu « Mise à jour »."""
     import webview
@@ -145,6 +167,8 @@ def main() -> None:
     Path(os.environ["QUIZZ_DATA_DIR"]).mkdir(parents=True, exist_ok=True)
     if "--remind" in sys.argv:
         return remind()
+    if "--mcp" in sys.argv:
+        return serve_claude()
     port = free_port()
     server = start_server(port)
     url = f"http://127.0.0.1:{port}/"
@@ -162,6 +186,7 @@ def main() -> None:
     from app.main import store
 
     updater.resume_pending()  # une mise à jour téléchargée attend encore : elle s'installera à la fermeture
+    refresh_claude_link()
     threading.Thread(target=backup.run_if_due, args=(store,), daemon=True).start()  # sauvegarde automatique
 
     import webview

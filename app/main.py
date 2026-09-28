@@ -22,7 +22,7 @@ from pydantic import BaseModel
 
 load_dotenv()
 
-from . import backup, local_ai, plan as plans, reminder, srs, updater  # noqa: E402
+from . import backup, claude_desktop, local_ai, plan as plans, reminder, srs, updater  # noqa: E402
 from .grounding import Grounding  # noqa: E402
 from .jobs import Jobs  # noqa: E402
 from .chapters import (CHAPTERS_SCHEMA, CHAPTERS_SYSTEM, ai_candidates, build_chapters_prompt,  # noqa: E402
@@ -205,6 +205,37 @@ async def save_settings(body: SettingsIn) -> dict:
         else:
             os.environ.pop("ANTHROPIC_API_KEY", None)
     return _settings_view()
+
+
+# ---------- Branchement à l'app Claude (MCP, voir app/mcp_server.py) ----------
+
+def _claude_app_view() -> dict:
+    return claude_desktop.status() | {"supported": sys.platform == "darwin" and os.getenv("PIROUETTE_DESKTOP") == "1"}
+
+
+@app.get("/api/claude-app")
+async def claude_app_status() -> dict:
+    return _claude_app_view()
+
+
+@app.post("/api/claude-app")
+async def claude_app_install() -> dict:
+    if not _claude_app_view()["supported"]:
+        raise HTTPException(400, "Le branchement à l'app Claude se fait depuis l'app Pirouette pour Mac.")
+    try:
+        claude_desktop.install()
+    except (OSError, ValueError) as exc:
+        raise HTTPException(400, str(exc)) from exc
+    return _claude_app_view()
+
+
+@app.delete("/api/claude-app")
+async def claude_app_remove() -> dict:
+    try:
+        claude_desktop.uninstall()
+    except (OSError, ValueError) as exc:
+        raise HTTPException(400, str(exc)) from exc
+    return _claude_app_view()
 
 
 @app.post("/api/backup")

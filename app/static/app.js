@@ -450,6 +450,7 @@ async function openSettings() {
   $("#local-thinking-status").hidden = true;
   $("#settings-data-dir").textContent = settings.data_dir;
   renderBackup(settings);
+  loadClaudeApp();
   $("#settings-import").hidden = !settings.desktop;
   ["#settings-name-status", "#settings-key-status", "#settings-import-status"].forEach((id) => ($(id).hidden = true));
 
@@ -471,6 +472,37 @@ $("#local-thinking").addEventListener("change", async (e) => {
   } catch (err) {
     e.target.checked = !e.target.checked;
     setStatus("#local-thinking-status", err.message, false);
+  }
+});
+
+// ---------- L'app Claude : Pirouette comme outil de Claude (MCP) ----------
+function renderClaudeApp(info) {
+  $("#claude-app-install").hidden = info.installed || !info.supported;
+  $("#claude-app-remove").hidden = !info.installed;
+  $("#claude-app-state").innerHTML = !info.supported
+    ? "Disponible dans l'app Pirouette pour Mac."
+    : info.installed
+      ? "<b>Branchée.</b> Quitte et rouvre l'app Claude si c'est tout frais, puis demande-lui par exemple : « Fais-moi un quiz de 10 questions sur le chapitre 2 de Neuro dans Pirouette »."
+      : info.claude_found ? "Pas encore branchée."
+        : `L'app Claude n'est pas encore installée sur ce Mac : <a href="https://claude.ai/download" target="_blank" rel="noopener">claude.ai/download</a>.`;
+}
+async function loadClaudeApp() {
+  renderClaudeApp(await api("/api/claude-app").catch(() => ({ supported: false })));
+}
+$("#claude-app-install").addEventListener("click", async () => {
+  try {
+    renderClaudeApp(await api("/api/claude-app", { method: "POST" }));
+    setStatus("#claude-app-status", "C'est branché. Quitte l'app Claude (⌘Q) et rouvre-la : Pirouette apparaît dans ses outils.", true);
+  } catch (err) {
+    setStatus("#claude-app-status", err.message, false);
+  }
+});
+$("#claude-app-remove").addEventListener("click", async () => {
+  try {
+    renderClaudeApp(await api("/api/claude-app", { method: "DELETE" }));
+    setStatus("#claude-app-status", "Débranchée. Rouvre l'app Claude pour qu'elle en tienne compte.", true);
+  } catch (err) {
+    setStatus("#claude-app-status", err.message, false);
   }
 });
 
@@ -1262,7 +1294,7 @@ function quizItem(q, course, number = null, { play = false } = {}) {
     <li class="quiz-item${play ? " play" : ""}">
       <button class="quiz-open" ${play ? `data-open-quiz="${q.id}"` : `data-preview-quiz="${q.id}" aria-expanded="false"`}>
         <strong>${escapeHtml(label)}</strong>
-        <small class="muted">${q.count} questions${play && q.course_name ? ` · ${escapeHtml(q.course_name)}` : ` · ${q.difficulty || "moyen"} · ${q.provider === "claude" ? "Claude" : "Local"} · ${formatDate(q.created_at)}`}</small>
+        <small class="muted">${q.count} questions${play && q.course_name ? ` · ${escapeHtml(q.course_name)}` : ` · ${q.difficulty || "moyen"} · ${q.provider === "claude-app" ? "App Claude" : q.provider === "claude" ? "Claude" : "Local"} · ${formatDate(q.created_at)}`}</small>
         ${scopeNote(q.scope)}
         <small><span class="badge">${best}</span>${q.attempts > 1 ? ` <span class="muted">${q.attempts} essais</span>` : ""}
           ${outdated ? ` <span class="badge warn-badge" title="Le cours a été modifié depuis la création de ce quiz">cours mis à jour depuis</span>` : ""}</small>

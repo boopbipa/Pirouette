@@ -206,6 +206,15 @@ premier jour de la semaine d'examens. L'accueil et Réviser affichent « Partiel
 tombent toujours avant la semaine, se resserrent les deux dernières semaines, puis reviennent chaque jour pendant la
 semaine ; les nouvelles cartes sont étalées pour être toutes vues à temps.
 
+**L'app Claude** (Mac) : Réglages → L'app Claude → « Brancher l'app Claude », puis quitter et rouvrir l'app Claude.
+Pirouette apparaît dans ses outils (protocole MCP) : on demande par exemple « Fais-moi un quiz de 10 questions sur le
+chapitre 2 de Neuro dans Pirouette » ou « Ajoute 15 flashcards sur la myéline ». Claude liste les cours, lit les
+chapitres voulus et enregistre quiz et cartes dans Pirouette, avec l'abonnement Claude (sans clé API). Chaque question
+passe les mêmes contrôles que celles de l'IA locale (citation du cours, réponse tirée du cours, ni trop facile ni en
+double) ; Claude reçoit la raison des refus pour corriger. Il peut aussi lire tes cartes difficiles pour te réexpliquer
+une notion. Techniquement : Pirouette s'inscrit dans `~/Library/Application Support/Claude/claude_desktop_config.json`
+(clé `mcpServers`, sans toucher aux autres outils) et l'app Claude lance `Pirouette --mcp`.
+
 **Sauvegardes** : Réglages → Tes données → « Sauvegarde automatique » à chaque ouverture, chaque semaine (par défaut)
 ou jamais, et « Sauvegarder maintenant ». Chaque sauvegarde est un dossier daté dans `Documents/Pirouette - Sauvegardes`
 avec `pirouette-donnees.zip` (tout, pour tout récupérer ; sans la clé API) et `flashcards.csv` / `quiz.csv` (Numbers,

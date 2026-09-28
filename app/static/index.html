@@ -447,6 +447,19 @@
         <p class="status" id="settings-key-status" hidden></p>
       </form>
 
+      <div class="card" id="claude-app-card">
+        <h2>L'app Claude</h2>
+        <p class="muted small-text">Tu as l'app Claude sur ton Mac ? Branche-la à Pirouette : tu lui demandes « Fais-moi un quiz de
+          10 questions sur le chapitre 2 de Neuro » et le quiz arrive dans Pirouette, avec ton abonnement Claude (sans clé API).
+          Claude lit tes cours ici et chaque question est vérifiée comme les autres.</p>
+        <p class="key-state" id="claude-app-state"></p>
+        <div class="actions">
+          <button class="primary small" type="button" id="claude-app-install">Brancher l'app Claude</button>
+          <button class="ghost small danger" type="button" id="claude-app-remove" hidden>Débrancher</button>
+        </div>
+        <p class="status" id="claude-app-status" hidden></p>
+      </div>
+
       <div class="card" id="local-ai">
         <h2>IA locale</h2>
         <p class="muted small-text">Gratuite et hors ligne : l'IA tourne directement sur ton ordinateur, grâce à l'app Ollama.</p>

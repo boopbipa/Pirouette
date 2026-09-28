@@ -131,6 +131,18 @@ def main(binary: str) -> None:
         assert done.returncode == 0, done.stderr
         print("Rappel quotidien (--remind) : OK")
 
+        # Branché à l'app Claude : l'app lancée avec --mcp répond au protocole MCP, et rien d'autre sur sa sortie.
+        messages = [{"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"protocolVersion": "2025-06-18"}},
+                    {"jsonrpc": "2.0", "method": "notifications/initialized"},
+                    {"jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": {"name": "pirouette_cours", "arguments": {}}}]
+        talk = subprocess.run([binary, "--mcp"], env=env, capture_output=True, text=True, timeout=120,
+                              input="".join(json.dumps(m) + "\n" for m in messages))
+        lines = talk.stdout.splitlines()
+        assert len(lines) == 2, (talk.stdout, talk.stderr)
+        assert json.loads(lines[0])["result"]["serverInfo"]["name"] == "pirouette", lines[0]
+        assert "Test" in json.loads(lines[1])["result"]["content"][0]["text"], lines[1]
+        print("App Claude (--mcp) : OK")
+
 
 if __name__ == "__main__":
     main(sys.argv[1])
