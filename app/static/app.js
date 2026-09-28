@@ -483,7 +483,7 @@ function renderClaudeApp(info) {
   $("#claude-app-state").innerHTML = !info.supported
     ? "Disponible dans l'app Pirouette pour Mac."
     : info.installed
-      ? "<b>Branchée.</b> Quitte et rouvre l'app Claude si c'est tout frais, puis demande-lui par exemple : « Fais-moi un quiz de 10 questions sur le chapitre 2 de Neuro dans Pirouette »."
+      ? "<b>Branchée.</b> Il n'y a plus qu'à demander à Claude, dans n'importe quelle conversation."
       : info.claude_found ? "Pas encore branchée."
         : `L'app Claude n'est pas encore installée sur ce Mac : <a href="https://claude.ai/download" target="_blank" rel="noopener">claude.ai/download</a>.`;
 }
@@ -493,7 +493,7 @@ async function loadClaudeApp() {
 $("#claude-app-install").addEventListener("click", async () => {
   try {
     renderClaudeApp(await api("/api/claude-app", { method: "POST" }));
-    setStatus("#claude-app-status", "C'est branché. Quitte l'app Claude (⌘Q) et rouvre-la : Pirouette apparaît dans ses outils.", true);
+    setStatus("#claude-app-status", "C'est branché. Quitte l'app Claude (⌘Q) et rouvre-la, puis pose-lui simplement ta demande.", true);
   } catch (err) {
     setStatus("#claude-app-status", err.message, false);
   }

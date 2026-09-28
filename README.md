@@ -215,7 +215,8 @@ chapitre 2 de Neuro dans Pirouette » ou « Ajoute 15 flashcards sur la myéline
 chapitres voulus et enregistre quiz et cartes dans Pirouette, avec l'abonnement Claude (sans clé API). Chaque question
 passe les mêmes contrôles que celles de l'IA locale (citation du cours, réponse tirée du cours, ni trop facile ni en
 double) ; Claude reçoit la raison des refus pour corriger. Il peut aussi lire tes cartes difficiles pour te réexpliquer
-une notion. Techniquement : Pirouette s'inscrit dans `~/Library/Application Support/Claude/claude_desktop_config.json`
+une notion. **Pirouette n'a pas besoin d'être ouverte** : l'app Claude la lance elle-même, en arrière-plan et sans
+fenêtre. Techniquement : Pirouette s'inscrit dans `~/Library/Application Support/Claude/claude_desktop_config.json`
 (clé `mcpServers`, sans toucher aux autres outils) et l'app Claude lance `Pirouette --mcp`.
 
 **Sauvegardes** : Réglages → Tes données → « Sauvegarde automatique » à chaque ouverture, chaque semaine (par défaut)
