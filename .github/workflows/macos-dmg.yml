@@ -1,0 +1,112 @@
+name: Pirouette pour Mac (.dmg)
+
+# Fabrique les .dmg (Apple Silicon et Intel) sur des Mac GitHub, les teste,
+# puis publie la page de téléchargement « Releases » avec des liens permanents.
+
+on:
+  push:
+    branches: [main, claude/quiz-generator-app-l39aci]
+    paths:
+      - "app/**"
+      - "desktop.py"
+      - "packaging/**"
+      - "tests/**"
+      - "requirements*.txt"
+      - ".github/workflows/macos-dmg.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  dmg:
+    name: dmg (${{ matrix.label }})
+    # Fabriqué et publié seulement sur le dépôt public (boopbipa/Pirouette), d'où l'app télécharge ses mises à jour.
+    if: ${{ !github.event.repository.private }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-14        # Apple Silicon (M1, M2, M3…)
+            label: Apple-Silicon
+          - runner: macos-15-intel  # anciens Mac à processeur Intel
+            label: Intel
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Dépendances
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements-desktop.txt pytest
+
+      - name: Tests
+        run: python -m pytest -q
+
+      - name: Fabrication de l'app et du .dmg
+        run: packaging/build_macos.sh
+
+      - name: Test de l'app empaquetée (serveur, PDF/Word/PowerPoint)
+        run: python packaging/smoke_test.py dist/Pirouette.app/Contents/MacOS/Pirouette
+
+      - name: Test de la fenêtre (l'app doit rester ouverte)
+        run: |
+          dist/Pirouette.app/Contents/MacOS/Pirouette &
+          PID=$!
+          sleep 25
+          screencapture -x fenetre.png || true
+          if kill -0 "$PID" 2>/dev/null; then
+            echo "✓ La fenêtre Pirouette est ouverte"
+            kill "$PID"
+          else
+            echo "✗ Pirouette s'est fermée au démarrage"
+            exit 1
+          fi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Pirouette-${{ matrix.label }}
+          path: dist/*.dmg
+          if-no-files-found: error
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: capture-${{ matrix.label }}
+          path: fenetre.png
+          if-no-files-found: ignore
+
+  release:
+    name: Page de téléchargement
+    needs: dmg
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: Pirouette-*
+          path: dmg
+          merge-multiple: true
+
+      - name: Publier la version
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION=$(python3 -c "import re; print(re.search(r'__version__ = \"(.+)\"', open('app/__init__.py').read()).group(1))")
+          TAG="v${VERSION}"
+          # Noms sans numéro de version : les liens .../releases/latest/download/… restent valables d'une version à l'autre
+          cp dmg/*-Apple-Silicon.dmg Pirouette-Apple-Silicon.dmg
+          cp dmg/*-Intel.dmg Pirouette-Intel.dmg
+          # Une version republiée remplace la précédente du même numéro (les nouveautés arrivent sans changer de lien)
+          gh release delete "$TAG" --yes --cleanup-tag || true
+          gh release create "$TAG" Pirouette-Apple-Silicon.dmg Pirouette-Intel.dmg \
+            --target "$GITHUB_SHA" --title "Pirouette ${VERSION}" \
+            --notes-file packaging/RELEASE_NOTES.md --latest

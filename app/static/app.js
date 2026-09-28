@@ -1,0 +1,3433 @@
+const $ = (sel) => document.querySelector(sel);
+const TYPE_LABELS = { qcm: "QCM", vrai_faux: "Vrai / Faux", reponse_courte: "Réponse courte", texte_a_trous: "Texte à trous" };
+const BLANK = "_____";
+// Petites icônes dessinées (pas d'emoji dans l'app).
+const svgIcon = (path) => `<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${path}</svg>`;
+const ICON_EDIT = svgIcon('<path d="M4 20h4L19 9l-4-4L4 16z"/><path d="m13.5 6.5 4 4"/>');
+const ICON_CALENDAR = svgIcon('<rect x="3.5" y="5" width="17" height="15" rx="2"/><path d="M3.5 10h17M8 3v4M16 3v4"/>');
+const ICON_TRASH = svgIcon('<path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/>');
+
+const state = {
+  config: null,
+  configTimer: null,
+  course: null,     // cours affiché
+  quiz: null,       // quiz complet en cours
+  questions: [],    // questions de la session en cours
+  index: 0,
+  results: [],      // { question, given, correct }
+  answered: false,  // la question affichée a-t-elle été validée ?
+  fullRun: false,   // session sur toutes les questions (compte dans l'historique des scores)
+  deck: null,       // paquet de flashcards du cours affiché
+  cardFilter: "review", // cartes affichées : à revoir, apprises ou toutes
+  newCards: null,   // cartes qui viennent d'être ajoutées (repérées dans la grille)
+  tab: null,        // entrée du cours affichée : quiz, cartes ou fichiers
+  createKind: null, // page de création : "quiz" ou "cartes"
+  keepSelection: false, // garder les chapitres cochés en ouvrant la page de création
+  cards: null,      // session de flashcards en cours
+  profile: null,    // prénom affiché sur l'accueil
+  excluded: {},     // par cours : chapitres décochés (tout le reste est coché, y compris les nouveaux)
+  detecting: false, // l'IA est en train de repérer des chapitres
+};
+
+// ---------- Navigation ----------
+function show(view) {
+  document.querySelectorAll(".view").forEach((v) => (v.hidden = v.id !== `view-${view}`));
+  window.scrollTo(0, 0);
+}
+
+// #/ accueil · #/cours mes cours · #/cours/<id> un cours · #/cours/<id>/quiz|cartes|fichiers une partie du cours
+// #/cours/<id>/nouveau/quiz|cartes création · #/reviser (choix) · #/reviser/tout|dossier/<id>|cours/<id> · #/reglages
+async function route() {
+  const hash = location.hash;
+  const match = hash.match(/^#\/cours\/([0-9a-f]{12})(?:\/(nouveau\/)?([a-z]+))?/);
+  // Lien actif du menu du haut
+  const section = !hash || hash === "#/" ? "accueil"
+    : hash.startsWith("#/cours") || hash.startsWith("#/nouveau-cours") ? "cours" : hash.slice(2).split("/")[0];
+  document.querySelectorAll("[data-nav]").forEach((a) => a.classList.toggle("on", a.dataset.nav === section));
+  try {
+    if (match && match[2]) await openCreate(match[1], match[3] === "quiz" ? "quiz" : "cartes");
+    else if (match) await openCourse(match[1], match[3]);
+    else if (hash.startsWith("#/reglages")) await openSettings();
+    else if (hash.match(/^#\/reviser\/(tout|dossier|cours)/)) await openReviewScope(...hash.slice(10).split("/"));
+    else if (hash.startsWith("#/reviser")) await openReview();
+    else if (hash.startsWith("#/nouveau-cours")) {
+      await loadCourses();
+      history.replaceState(null, "", "#/cours");
+      openNewCourse();
+    }
+    else if (hash.startsWith("#/cours")) await loadCourses();
+    else await openHome();
+  } catch (err) {
+    alert(err.message);
+    location.hash = "#/cours";
+  }
+}
+
+// ---------- Fil d'Ariane : où je suis, et un clic pour remonter ----------
+// crumbs : [{ label, href }] ; le dernier est la page affichée (pas de lien).
+function setCrumbs(crumbs = []) {
+  const nav = $("#crumbs");
+  nav.hidden = crumbs.length < 2;
+  nav.innerHTML = crumbs.map((c, i) => i < crumbs.length - 1
+    ? `<a href="${c.href}">${escapeHtml(c.label)}</a><span class="sep" aria-hidden="true">›</span>`
+    : `<span class="here" aria-current="page">${escapeHtml(c.label)}</span>`).join("");
+}
+const COURSES_CRUMB = { label: "Mes cours", href: "#/cours" };
+const TAB_NAMES = { quiz: "Quiz", cartes: "Flashcards", fichiers: "Fichiers" };
+function courseCrumbs(course, tab = null, ...more) {
+  const list = [COURSES_CRUMB, { label: course.name, href: `#/cours/${course.id}` }];
+  if (tab) list.push({ label: TAB_NAMES[tab], href: `#/cours/${course.id}/${tab}` });
+  return [...list, ...more.map((label) => ({ label }))];
+}
+window.addEventListener("hashchange", route);
+
+async function api(url, options = {}) {
+  const response = await fetch(url, options);
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({}));
+    throw new Error(body.detail || `Erreur ${response.status}`);
+  }
+  return response.json();
+}
+const jsonBody = (method, data) => ({ method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) });
+
+// ---------- Accueil ----------
+// Une phrase d'accueil tirée au hasard à chaque ouverture ; certaines utilisent le prénom, d'autres l'heure.
+const GREETINGS = [
+  () => "On révise ?",
+  (n) => n && `On révise, ${n} ?`,
+  () => "On s'y remet ?",
+  () => "Une petite pirouette dans tes cours ?",
+  () => "Qu'est-ce qu'on apprend aujourd'hui ?",
+  () => "Un petit quiz pour s'échauffer ?",
+  () => "Allez, dix minutes de révision ?",
+  () => "Quel cours au programme ?",
+  () => "Tes flashcards t'attendent",
+  () => "On fait travailler la mémoire ?",
+  () => "Pas à pas, on y arrive",
+  () => "On teste ce qui est resté ?",
+  () => "Un cours, un quiz, et hop",
+  () => "La mémoire, ça s'entraîne",
+  () => "On révise tranquillement ?",
+  (n) => n && `À toi de jouer, ${n}`,
+  (n) => n && `Te revoilà, ${n} !`,
+  () => "Une révision rapide ?",
+  () => "On attaque quel chapitre ?",
+  () => "Petite séance de révision ?",
+  () => "Quelques cartes avec le café ?",
+  () => "Petit rappel, grande mémoire",
+];
+const TIMED_GREETINGS = [
+  { from: 5, to: 11, say: (n) => (n ? `Bonjour ${n}, on révise ?` : "Bonjour, on révise ?") },
+  { from: 5, to: 11, say: () => "Un quiz avec le café ?" },
+  { from: 12, to: 18, say: () => "Une révision pour la pause ?" },
+  { from: 18, to: 22, say: (n) => (n ? `Bonsoir ${n}, on révise ?` : "Bonsoir, on révise ?") },
+  { from: 18, to: 22, say: () => "Une dernière révision ce soir ?" },
+  { from: 22, to: 29, say: () => "Encore debout ? Une dernière carte, alors." },
+  { from: 22, to: 29, say: () => "Révision de minuit ?" },
+];
+
+function pickGreeting(name) {
+  const hour = new Date().getHours();
+  const h = hour < 5 ? hour + 24 : hour;
+  const timed = TIMED_GREETINGS.filter((g) => h >= g.from && h < g.to).map((g) => g.say);
+  const pool = Math.random() < 0.3 && timed.length ? timed : GREETINGS;
+  const options = pool.map((f) => f(name)).filter(Boolean);
+  let last = null;
+  try { last = sessionStorage.getItem("pirouette.greeting"); } catch {}
+  const choices = options.length > 1 ? options.filter((o) => o !== last) : options;
+  const greeting = choices[Math.floor(Math.random() * choices.length)];
+  try { sessionStorage.setItem("pirouette.greeting", greeting); } catch {}
+  return greeting;
+}
+
+const plural = (n, one, many) => `${n} ${n > 1 ? many : one}`;
+
+function renderStats(stats) {
+  const sub = $("#hero-sub");
+  $("#today").hidden = !stats.courses;
+  if (!stats.courses) {
+    sub.textContent = "Crée ton premier cours pour commencer : donne-lui un nom juste en dessous.";
+    return;
+  }
+  sub.innerHTML = stats.cards_today
+    ? `<b>${plural(stats.cards_today, "carte t'attend", "cartes t'attendent")}</b> aujourd'hui.`
+    : stats.decks ? "Tes cartes sont à jour pour aujourd'hui. Un petit quiz pour vérifier ?" : "Prêt pour un quiz ou quelques flashcards ?";
+  $("#stat-review").textContent = stats.cards_today;
+  $("#stat-review-label").textContent = stats.cards_today > 1 ? "cartes du jour" : "carte du jour";
+  $("#stat-streak").textContent = plural(stats.streak, "jour", "jours");
+  $("#stat-streak-label").textContent = stats.streak ? "de révision d'affilée" : "révise aujourd'hui pour lancer ta série";
+  $("#stat-week").textContent = stats.week_success === null ? "—" : `${stats.week_success} %`;
+  $("#stat-week-label").textContent = stats.week_success === null ? "pas encore de quiz cette semaine" : "de réussite aux quiz (7 jours)";
+}
+
+async function openHome() {
+  const [profile, stats, config] = await Promise.all([api("/api/profile"), api("/api/stats"), api("/api/config")]);
+  $("#setup-banner").hidden = config.local.available || config.claude.available;
+  state.course = null;
+  state.profile = profile;
+  state.stats = stats;
+  $("#greeting").textContent = pickGreeting(profile.name);
+  $("#name-prompt").hidden = profile.asked;
+  renderStats(stats);
+  const start = $("#home-start");
+  start.textContent = !stats.courses ? "Créer mon premier cours"
+    : stats.cards_today ? `Réviser mes ${plural(stats.cards_today, "carte", "cartes")} du jour` : "Réviser";
+  $("#home-courses").hidden = !stats.courses;
+  const exam = stats.next_exam;
+  $("#home-exam").hidden = !exam;
+  if (exam) $("#home-exam").innerHTML = examSentence(exam, exam.course);
+  setCrumbs();
+  show("home");
+}
+
+$("#home-start").addEventListener("click", () => {
+  const stats = state.stats || {};
+  if (!stats.courses) return go("#/nouveau-cours");
+  if (stats.cards_today) {
+    return startSession({ mode: "today" }, { title: "Révision du jour", back: "#/" });
+  }
+  go("#/reviser");
+});
+
+async function loadCourses() {
+  const [courses, orphans, folders] = await Promise.all([
+    api("/api/courses"), api("/api/quizzes?orphans=true"), api("/api/folders"),
+  ]);
+  state.course = null;
+  setCrumbs();
+
+  $("#course-count").textContent = courses.length ? `· ${courses.length}` : "";
+  $("#courses-empty").hidden = courses.length > 0;
+  renderFolders(courses, folders);
+
+  $("#orphans").hidden = orphans.length === 0;
+  $("#orphan-list").innerHTML = orphans.map((q) => quizItem(q, null)).join("");
+  show("courses");
+}
+
+function courseCard(c) {
+  return `
+    <a class="course-card" href="#/cours/${c.id}" draggable="false" data-course-card="${c.id}">
+      <span class="course-main">
+        <strong>${escapeHtml(c.name)}</strong>
+        <small>${plural(c.files.length, "fichier", "fichiers")} · ${c.quiz_count} quiz · ${plural(c.card_count || 0, "carte", "cartes")}</small>
+      </span>
+      <small class="course-date">${formatDay(c.updated_at)}</small>
+    </a>`;
+}
+
+// ---------- Dossiers de cours (un semestre, une UE…) ----------
+// Dossiers repliés : une préférence de cet ordinateur (les dossiers archivés sont repliés par défaut).
+function folderOpen(folder) {
+  try {
+    const saved = JSON.parse(localStorage.getItem("pirouette.folders") || "{}");
+    if (folder.id in saved) return saved[folder.id];
+  } catch {}
+  return !folder.archived;
+}
+function rememberFolder(id, open) {
+  try {
+    const saved = JSON.parse(localStorage.getItem("pirouette.folders") || "{}");
+    saved[id] = open;
+    localStorage.setItem("pirouette.folders", JSON.stringify(saved));
+  } catch {}
+}
+
+const FOLDER_ICON = `<svg class="folder-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>`;
+
+function folderHtml(folder, courses) {
+  return `
+    <details class="folder${folder.archived ? " is-archived" : ""}" data-folder="${folder.id}" ${folderOpen(folder) ? "open" : ""}>
+      <summary class="folder-head drop-zone" data-drop-folder="${folder.id}">
+        ${FOLDER_ICON}<strong>${escapeHtml(folder.name)}</strong>
+        <small class="muted">${plural(courses.length, "cours", "cours")}${folder.exam_week && !folder.archived ? ` · ${examLabel(folder.exam_week)}` : ""}</small>
+        <span class="folder-actions">
+          <button class="icon" type="button" data-folder-rename="${folder.id}" title="Renommer le dossier" aria-label="Renommer le dossier">${ICON_EDIT}</button>
+          <button class="icon" type="button" data-folder-exam="${folder.id}" title="Semaine des partiels" aria-label="Semaine des partiels">${ICON_CALENDAR}</button>
+          <button class="ghost small" type="button" data-folder-archive="${folder.id}">${folder.archived ? "Désarchiver" : "Archiver"}</button>
+          <button class="icon" type="button" data-folder-delete="${folder.id}" title="Supprimer le dossier (les cours sont gardés)" aria-label="Supprimer le dossier">${ICON_TRASH}</button>
+        </span>
+      </summary>
+      <div class="course-grid drop-zone" data-drop-folder="${folder.id}">
+        ${courses.length ? courses.map(courseCard).join("")
+          : `<p class="folder-empty muted small-text">Dossier vide : glisse un cours ici.</p>`}
+      </div>
+    </details>`;
+}
+
+function renderFolders(courses, folders) {
+  state.folders = folders;
+  const known = new Set(folders.map((f) => f.id));
+  const inFolder = (f) => courses.filter((c) => c.folder_id === f.id);
+  $("#course-list").innerHTML = courses.filter((c) => !known.has(c.folder_id)).map(courseCard).join("");
+  $("#folder-list").innerHTML = folders.filter((f) => !f.archived).map((f) => folderHtml(f, inFolder(f))).join("");
+  const archived = folders.filter((f) => f.archived);
+  $("#archived").hidden = !archived.length;
+  $("#archived-list").innerHTML = archived.map((f) => folderHtml(f, inFolder(f))).join("");
+  $("#folders-help").hidden = !folders.length || !courses.length;
+}
+
+$("#view-courses").addEventListener("toggle", (e) => {
+  if (e.target.matches?.("details[data-folder]")) rememberFolder(e.target.dataset.folder, e.target.open);
+}, true);
+
+$("#new-folder").addEventListener("click", async () => {
+  const name = await askText("Nom du dossier", "", "ex. Semestre 1, L2 psycho…");
+  if (!name) return;
+  await api("/api/folders", jsonBody("POST", { name }));
+  loadCourses();
+});
+
+$("#view-courses").addEventListener("click", async (e) => {
+  const button = e.target.closest("[data-folder-rename], [data-folder-archive], [data-folder-delete], [data-folder-exam]");
+  if (!button) return;
+  e.preventDefault();  // un bouton dans le titre du dossier ne le replie pas
+  const { folderRename, folderArchive, folderDelete, folderExam } = button.dataset;
+  const folder = state.folders.find((f) => f.id === (folderRename || folderArchive || folderDelete || folderExam));
+  if (folderExam) return openExamDialog({ folder });
+  try {
+    if (folderRename) {
+      const name = await askText("Nouveau nom du dossier", folder.name);
+      if (!name) return;
+      await api(`/api/folders/${folder.id}`, jsonBody("PATCH", { name }));
+    }
+    if (folderArchive) {
+      rememberFolder(folder.id, folder.archived);  // désarchivé : ouvert ; archivé : replié
+      await api(`/api/folders/${folder.id}`, jsonBody("PATCH", { archived: !folder.archived }));
+    }
+    if (folderDelete) {
+      if (!confirm(`Supprimer le dossier « ${folder.name} » ? Ses cours ne sont pas supprimés : ils reviennent dans « Mes cours ».`)) return;
+      await api(`/api/folders/${folder.id}`, { method: "DELETE" });
+    }
+    loadCourses();
+  } catch (err) {
+    alert(err.message);
+  }
+});
+
+// Glisser un cours sur un dossier (ou sur « Mes cours » pour le sortir de son dossier).
+// Fait à la main (souris / doigt) : le glisser-déposer du navigateur ne marche pas dans la fenêtre de l'app Mac.
+const drag = { card: null, ghost: null, zone: null, startX: 0, startY: 0, moved: false };
+
+$("#view-courses").addEventListener("pointerdown", (e) => {
+  const card = e.target.closest("[data-course-card]");
+  if (!card || e.button !== 0) return;
+  Object.assign(drag, { card, zone: null, startX: e.clientX, startY: e.clientY, moved: false });
+});
+
+document.addEventListener("pointermove", (e) => {
+  if (!drag.card) return;
+  if (!drag.moved) {
+    if (Math.hypot(e.clientX - drag.startX, e.clientY - drag.startY) < 6) return;
+    drag.moved = true;
+    const rect = drag.card.getBoundingClientRect();
+    drag.ghost = drag.card.cloneNode(true);
+    drag.ghost.classList.add("drag-ghost");
+    drag.ghost.style.width = `${rect.width}px`;
+    drag.offsetX = drag.startX - rect.left;
+    drag.offsetY = drag.startY - rect.top;
+    document.body.appendChild(drag.ghost);
+    drag.card.classList.add("drag-source");
+    document.body.classList.add("dragging-course");
+  }
+  e.preventDefault();
+  drag.ghost.style.transform = `translate(${e.clientX - drag.offsetX}px, ${e.clientY - drag.offsetY}px)`;
+  const zone = document.elementFromPoint(e.clientX, e.clientY)?.closest("[data-drop-folder]") || null;
+  if (zone !== drag.zone) {
+    drag.zone?.classList.remove("drop-over");
+    zone?.classList.add("drop-over");
+    drag.zone = zone;
+  }
+});
+
+async function endDrag() {
+  const { card, ghost, zone, moved } = drag;
+  drag.card = null;
+  if (!moved) return;
+  ghost?.remove();
+  card.classList.remove("drag-source");
+  zone?.classList.remove("drop-over");
+  document.body.classList.remove("dragging-course");
+  // Le lâcher ne doit pas ouvrir le cours (le clic qui suit tout de suite est ignoré).
+  drag.justDropped = true;
+  setTimeout(() => { drag.justDropped = false; }, 80);
+  if (!zone) return;
+  const folderId = zone.dataset.dropFolder || null;
+  const course = card.dataset.courseCard;
+  try {
+    await api(`/api/courses/${course}/folder`, jsonBody("PUT", { folder_id: folderId }));
+    if (folderId) rememberFolder(folderId, true);
+  } catch (err) {
+    alert(err.message);
+  }
+  loadCourses();
+}
+document.addEventListener("click", (e) => {
+  if (drag.justDropped) { e.preventDefault(); e.stopPropagation(); }
+}, true);
+document.addEventListener("pointerup", endDrag);
+document.addEventListener("pointercancel", endDrag);
+// Pas de glisser natif des liens (il prendrait le dessus sur le nôtre).
+$("#view-courses").addEventListener("dragstart", (e) => { if (e.target.closest?.("[data-course-card]")) e.preventDefault(); });
+
+// Petite question avec un champ texte (remplace prompt(), absent de certaines fenêtres d'app).
+function askText(title, value = "", placeholder = "") {
+  const dialog = $("#ask-dialog");
+  $("#ask-title").textContent = title;
+  $("#ask-input").value = value;
+  $("#ask-input").placeholder = placeholder;
+  dialog.returnValue = "";
+  dialog.showModal();
+  $("#ask-input").select();
+  return new Promise((resolve) => {
+    dialog.addEventListener("close", () => {
+      const text = $("#ask-input").value.trim();
+      resolve(dialog.returnValue === "ok" && text ? text : null);
+    }, { once: true });
+  });
+}
+$("#ask-cancel").addEventListener("click", () => $("#ask-dialog").close(""));
+
+async function saveName(name) {
+  state.profile = await api("/api/profile", jsonBody("PUT", { name }));
+  $("#name-prompt").hidden = true;
+  $("#greeting").textContent = pickGreeting(state.profile.name);
+}
+
+$("#name-prompt").addEventListener("submit", (e) => {
+  e.preventDefault();
+  saveName($("#name-input").value);
+});
+$("#name-skip").addEventListener("click", () => saveName(""));
+// ---------- Réglages ----------
+const isDesktop = () => Boolean(window.pywebview?.api);
+
+async function openSettings() {
+  const settings = await api("/api/settings");
+  state.course = null;
+  $("#settings-name").value = settings.name;
+  const claude = settings.claude;
+  $("#settings-key-state").innerHTML = claude.configured
+    ? `<span class="ok-text">✓ Clé enregistrée</span> <span class="muted">(${escapeHtml(claude.hint)} · modèle ${escapeHtml(claude.model)})</span>`
+    : `<span class="muted">Aucune clé pour l'instant.</span>`;
+  $("#settings-key-test").hidden = !claude.configured;
+  $("#settings-key-remove").hidden = !claude.saved_in_app;
+  $("#settings-key-form").hidden = !settings.claude_enabled;  // Claude est mis de côté pour l'instant
+  $("#local-thinking").checked = settings.local_thinking;
+  renderDefinitionRule(settings.definition_rule);
+  renderReminder(settings);
+  $("#calib-result").hidden = $("#calib-status").hidden = true;
+  $("#local-thinking-status").hidden = true;
+  $("#settings-data-dir").textContent = settings.data_dir;
+  $("#settings-import").hidden = !settings.desktop;
+  ["#settings-name-status", "#settings-key-status", "#settings-import-status"].forEach((id) => ($(id).hidden = true));
+
+  state.config = null;  // la page d'un cours relira l'état des moteurs
+  $("#app-version").textContent = settings.version;
+  $("#update-status").hidden = true;
+  setCrumbs();
+  show("settings");
+  openAppearance(settings.appearance);
+  await refreshLocalAi();
+}
+
+$("#local-thinking").addEventListener("change", async (e) => {
+  try {
+    await api("/api/settings", jsonBody("PUT", { local_thinking: e.target.checked }));
+    setStatus("#local-thinking-status", e.target.checked
+      ? "Réflexion activée : les modèles comme qwen3 réfléchiront avant de répondre (plus long)."
+      : "Réflexion désactivée : les modèles comme qwen3 répondront directement (plus rapide).", true);
+  } catch (err) {
+    e.target.checked = !e.target.checked;
+    setStatus("#local-thinking-status", err.message, false);
+  }
+});
+
+// ---------- Révisions : rappel quotidien, nouvelles cartes par jour ----------
+function renderReminder(settings) {
+  $("#reminder-on").checked = Boolean(settings.reminder_time);
+  $("#reminder-on").disabled = !settings.reminder_supported;
+  $("#reminder-time").value = settings.reminder_time || "19:00";
+  $("#reminder-time-row").hidden = !settings.reminder_time;
+  $("#reminder-help").textContent = settings.reminder_supported
+    ? "Une notification du Mac à l'heure choisie, même app fermée, s'il y a des cartes du jour."
+    : "Disponible dans l'app Mac (Pirouette.app).";
+  $("#new-per-day").value = settings.new_per_day;
+  $("#revision-status").hidden = true;
+}
+
+async function saveReminder() {
+  const time = $("#reminder-on").checked ? $("#reminder-time").value || "19:00" : "";
+  try {
+    const settings = await api("/api/settings", jsonBody("PUT", { reminder_time: time }));
+    renderReminder(settings);
+    setStatus("#revision-status", time
+      ? `C'est noté : rappel chaque jour à ${time.replace(":", " h ")}, s'il y a des cartes à réviser. La première fois, macOS peut demander d'autoriser les notifications (de « Éditeur de script »).`
+      : "Rappel quotidien arrêté.", true);
+  } catch (err) {
+    $("#reminder-on").checked = !$("#reminder-on").checked;
+    setStatus("#revision-status", err.message, false);
+  }
+}
+$("#reminder-on").addEventListener("change", saveReminder);
+$("#reminder-time").addEventListener("change", saveReminder);
+$("#reminder-test").addEventListener("click", async () => {
+  try {
+    const result = await api("/api/reminder/test", { method: "POST" });
+    setStatus("#revision-status", result.shown ? `Notification envoyée : « ${result.message} »`
+      : "La notification n'a pas pu s'afficher : vérifie Réglages Système → Notifications.", result.shown);
+  } catch (err) {
+    setStatus("#revision-status", err.message, false);
+  }
+});
+$("#new-per-day").addEventListener("change", async (e) => {
+  const settings = await api("/api/settings", jsonBody("PUT", { new_per_day: Number(e.target.value) || 0 }));
+  e.target.value = settings.new_per_day;
+  setStatus("#revision-status", `${plural(settings.new_per_day, "nouvelle carte", "nouvelles cartes")} au plus chaque jour dans la révision du jour.`, true);
+});
+
+// ---------- Tes définitions : calibrer le repérage ----------
+const RULE_NAMES = {
+  gras_italique: "un titre en gras et italique, puis sa définition",
+  gras: "un titre en gras, puis sa définition",
+  italique: "un titre en italique, puis sa définition",
+  deux_points: "« Terme : définition »",
+  auto: "automatique (Pirouette devine d'après chaque fichier)",
+  aucune: "désactivé",
+};
+
+function renderDefinitionRule(rule) {
+  $("#definitions-current").innerHTML = rule === "auto"
+    ? `<span class="muted">Repérage : ${RULE_NAMES.auto}.</span>`
+    : `<span class="ok-text">✓ Tes définitions : ${escapeHtml(RULE_NAMES[rule] || rule)}.</span>`;
+  $("#calib-auto").hidden = rule === "auto";
+}
+
+// Un passage collé (depuis Pages, Word…) garde sa mise en forme : on la traduit en **gras** / *italique*.
+function pastedToMarkdown(root) {
+  const lines = [[]];
+  const newLine = () => lines.push([]);
+  const walk = (node) => {
+    for (const child of node.childNodes) {
+      if (child.nodeType === Node.TEXT_NODE) {
+        if (!child.textContent.trim() && child.textContent.includes("\n")) continue;  // indentation du HTML collé
+        const style = getComputedStyle(child.parentElement);
+        lines[lines.length - 1].push({ text: child.textContent, bold: Number(style.fontWeight) >= 600, italic: style.fontStyle === "italic" });
+      } else if (child.nodeName === "BR") {
+        newLine();
+      } else if (child.nodeType === Node.ELEMENT_NODE) {
+        const block = /^(DIV|P|LI|H[1-6]|TR|UL|OL|TABLE)$/.test(child.nodeName);
+        if (block && lines[lines.length - 1].length) newLine();
+        walk(child);
+        if (block) newLine();
+      }
+    }
+  };
+  walk(root);
+  const wrap = (text, bold, italic) => {
+    const marker = bold && italic ? "***" : bold ? "**" : italic ? "*" : "";
+    const core = text.trim();
+    return marker && core ? text.replace(core, `${marker}${core}${marker}`) : text;
+  };
+  return lines.map((segments) => {
+    const visible = segments.filter((seg) => seg.text.trim());
+    if (visible.length && visible.every((seg) => seg.bold === visible[0].bold && seg.italic === visible[0].italic)) {
+      return wrap(segments.map((seg) => seg.text).join(""), visible[0].bold, visible[0].italic);
+    }
+    return segments.map((seg) => wrap(seg.text, seg.bold, seg.italic)).join("");
+  }).join("\n").replace(/\n{3,}/g, "\n\n");
+}
+
+async function analyseDefinitions(form) {
+  setStatus("#calib-status", "Analyse du passage…", true);
+  try {
+    const result = await api("/api/definitions/analyse", { method: "POST", body: form });
+    state.calibration = result;
+    const select = $("#calib-rule");
+    select.innerHTML = result.rules.map((r) => `<option value="${r.id}">${escapeHtml(r.label)} · ${
+      r.definitions.length} trouvée${r.definitions.length > 1 ? "s" : ""}</option>`).join("");
+    select.value = result.best || result.rules[0].id;
+    renderCalibrationList();
+    $("#calib-result").hidden = false;
+    setStatus("#calib-status", result.best
+      ? "Vérifie la liste ci-dessus : si ce sont bien tes définitions, valide."
+      : "Aucune définition repérée dans ce passage : essaie un passage plus long, avec au moins deux définitions.", Boolean(result.best));
+  } catch (err) {
+    setStatus("#calib-status", err.message, false);
+  }
+}
+
+function renderCalibrationList() {
+  const rule = state.calibration.rules.find((r) => r.id === $("#calib-rule").value);
+  $("#calib-list").innerHTML = rule.definitions.length
+    ? rule.definitions.slice(0, 12).map((d) => `<li><strong>${escapeHtml(d.term)}</strong>
+        <span class="muted">${escapeHtml(d.definition.length > 180 ? d.definition.slice(0, 180) + "…" : d.definition)}</span></li>`).join("")
+    : `<li class="muted">Rien trouvé avec cette règle.</li>`;
+  $("#calib-save").disabled = !rule.definitions.length;
+}
+
+$("#calib-file").addEventListener("change", (e) => {
+  if (!e.target.files.length) return;
+  const form = new FormData();
+  form.append("file", e.target.files[0]);
+  e.target.value = "";
+  analyseDefinitions(form);
+});
+$("#calib-analyse").addEventListener("click", () => {
+  const form = new FormData();
+  form.append("text", pastedToMarkdown($("#calib-paste")));
+  analyseDefinitions(form);
+});
+$("#calib-rule").addEventListener("change", renderCalibrationList);
+$("#calib-save").addEventListener("click", async () => {
+  const settings = await api("/api/settings", jsonBody("PUT", { definition_rule: $("#calib-rule").value }));
+  renderDefinitionRule(settings.definition_rule);
+  $("#calib-result").hidden = true;
+  setStatus("#calib-status", "C'est noté : Pirouette repérera tes définitions de cette façon dans tous tes cours.", true);
+});
+$("#calib-auto").addEventListener("click", async () => {
+  const settings = await api("/api/settings", jsonBody("PUT", { definition_rule: "auto" }));
+  renderDefinitionRule(settings.definition_rule);
+  setStatus("#calib-status", "Repérage automatique rétabli.", true);
+});
+
+// ---------- Couleur de l'app (roue chromatique) ----------
+const DEFAULT_ACCENT = "#B4532A";
+const PRESETS = [
+  ["Terre cuite", "#B4532A"], ["Chocolat", "#6B4430"], ["Pétrole", "#0E6E7E"], ["Sapin", "#1E6B52"], ["Cobalt", "#2F4BE0"],
+  ["Moutarde", "#E0A100"], ["Framboise", "#D12F62"], ["Orange", "#F2541B"],
+];
+const PAPER = "#FAF8F3";
+const NIGHT = "#1D1512";
+
+const hexToRgb = (hex) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
+const rgbToHex = (rgb) => "#" + rgb.map((c) => Math.round(Math.min(255, Math.max(0, c))).toString(16).padStart(2, "0")).join("").toUpperCase();
+
+function hsvToRgb(h, s, v) {
+  const f = (n) => {
+    const k = (n + h / 60) % 6;
+    return v - v * s * Math.max(0, Math.min(k, 4 - k, 1));
+  };
+  return [f(5) * 255, f(3) * 255, f(1) * 255];
+}
+function rgbToHsv([r, g, b]) {
+  [r, g, b] = [r / 255, g / 255, b / 255];
+  const max = Math.max(r, g, b), d = max - Math.min(r, g, b);
+  let h = 0;
+  if (d) h = max === r ? ((g - b) / d) % 6 : max === g ? (b - r) / d + 2 : (r - g) / d + 4;
+  return [(h * 60 + 360) % 360, max ? d / max : 0, max];
+}
+function luminance(hex) {
+  const lin = hexToRgb(hex).map((c) => { c /= 255; return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4; });
+  return 0.2126 * lin[0] + 0.7152 * lin[1] + 0.0722 * lin[2];
+}
+function contrast(a, b) {
+  const [x, y] = [luminance(a), luminance(b)].sort((m, n) => n - m);
+  return (x + 0.05) / (y + 0.05);
+}
+const mix = (a, b, t) => rgbToHex(hexToRgb(a).map((c, i) => c * t + hexToRgb(b)[i] * (1 - t)));
+
+// Assombrit (vers le noir) ou éclaircit (vers le blanc) jusqu'au contraste voulu avec le fond.
+function untilContrast(hex, background, target, towards) {
+  let color = hex;
+  for (let t = 0; contrast(color, background) < target && t <= 1; t += 0.04) color = mix(towards, hex, t);
+  return color;
+}
+
+// À partir d'une seule couleur, toutes les teintes utilisées par l'app (modes clair et sombre).
+function derivePalette(hex) {
+  return {
+    accent: hex,
+    ink: untilContrast(hex, PAPER, 4.5, "#000000"),       // texte lisible sur le papier
+    soft: mix(hex, PAPER, 0.12),                           // fonds légers (pastilles, badges)
+    d_accent: untilContrast(hex, NIGHT, 3.2, "#FFFFFF"),
+    d_ink: untilContrast(hex, NIGHT, 5.5, "#FFFFFF"),
+    d_soft: mix(hex, NIGHT, 0.22),
+  };
+}
+
+// Même résultat que appearance_css() côté serveur.
+function paletteCss(p) {
+  if (!p) return "";
+  return `:root{--accent:${p.accent};--accent-ink:${p.ink};--accent-soft:${p.soft}}`
+    + `@media (prefers-color-scheme: dark){:root{--accent:${p.d_accent};--accent-ink:${p.d_ink};--accent-soft:${p.d_soft}}}`;
+}
+
+const picker = { h: 0, s: 0, v: 1, saved: DEFAULT_ACCENT, ready: false };
+
+function setupPicker() {
+  if (picker.ready) return;
+  picker.ready = true;
+  const canvas = $("#color-wheel");
+  const ratio = window.devicePixelRatio || 1;
+  canvas.width = canvas.height = 220 * ratio;
+  $("#color-presets").innerHTML = PRESETS.map(([name, hex]) =>
+    `<button type="button" class="preset" data-hex="${hex}" title="${name}" aria-label="${name}" style="background:${hex}"></button>`).join("");
+
+  const pick = (e) => {
+    const rect = canvas.getBoundingClientRect();
+    const dx = e.clientX - rect.left - rect.width / 2;
+    const dy = e.clientY - rect.top - rect.height / 2;
+    picker.h = (Math.atan2(dy, dx) * 180 / Math.PI + 360) % 360;
+    picker.s = Math.min(1, Math.hypot(dx, dy) / (rect.width / 2));
+    updatePicker();
+  };
+  canvas.addEventListener("pointerdown", (e) => { canvas.setPointerCapture(e.pointerId); pick(e); });
+  canvas.addEventListener("pointermove", (e) => { if (canvas.hasPointerCapture(e.pointerId)) pick(e); });
+  $("#color-value").addEventListener("input", (e) => { picker.v = e.target.value / 100; drawWheel(); updatePicker(); });
+  $("#color-hex").addEventListener("input", (e) => {
+    const value = e.target.value.trim().replace(/^([^#])/, "#$1");
+    if (/^#[0-9a-fA-F]{6}$/.test(value)) setPickerColor(value.toUpperCase(), { keepHex: true });
+  });
+  $("#color-presets").addEventListener("click", (e) => {
+    const hex = e.target.closest("[data-hex]")?.dataset.hex;
+    if (hex) setPickerColor(hex);
+  });
+  $("#color-save").addEventListener("click", saveAppearance);
+  $("#color-reset").addEventListener("click", resetAppearance);
+}
+
+function drawWheel() {
+  const canvas = $("#color-wheel");
+  const ctx = canvas.getContext("2d");
+  const size = canvas.width, r = size / 2;
+  const image = ctx.createImageData(size, size);
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const dx = x - r + 0.5, dy = y - r + 0.5, dist = Math.hypot(dx, dy);
+      if (dist > r) continue;
+      const [red, green, blue] = hsvToRgb((Math.atan2(dy, dx) * 180 / Math.PI + 360) % 360, dist / r, picker.v);
+      const i = (y * size + x) * 4;
+      image.data[i] = red; image.data[i + 1] = green; image.data[i + 2] = blue;
+      image.data[i + 3] = dist > r - 1 ? (r - dist) * 255 : 255;  // bord adouci
+    }
+  }
+  ctx.putImageData(image, 0, 0);
+}
+
+function currentHex() {
+  return rgbToHex(hsvToRgb(picker.h, picker.s, picker.v));
+}
+
+function setPickerColor(hex, { keepHex = false } = {}) {
+  [picker.h, picker.s, picker.v] = rgbToHsv(hexToRgb(hex));
+  $("#color-value").value = Math.round(Math.max(0.3, picker.v) * 100);
+  drawWheel();
+  updatePicker({ keepHex, hex });
+}
+
+function updatePicker({ keepHex = false, hex = null } = {}) {
+  hex = hex || currentHex();
+  const angle = picker.h * Math.PI / 180;
+  const handle = $("#wheel-handle");
+  handle.style.left = `${110 + Math.cos(angle) * picker.s * 110}px`;
+  handle.style.top = `${110 + Math.sin(angle) * picker.s * 110}px`;
+  handle.style.background = hex;
+  $("#hex-swatch").style.background = hex;
+  if (!keepHex) $("#color-hex").value = hex;
+  document.querySelectorAll(".preset").forEach((b) => b.classList.toggle("selected", b.dataset.hex === hex));
+  const p = derivePalette(hex);
+  const apply = (el, accent, ink, soft) => {
+    el.style.setProperty("--accent", accent);
+    el.style.setProperty("--accent-ink", ink);
+    el.style.setProperty("--accent-soft", soft);
+  };
+  apply($("#preview-light"), p.accent, p.ink, p.soft);
+  apply($("#preview-dark"), p.d_accent, p.d_ink, p.d_soft);
+  picker.current = hex;
+  $("#color-save").disabled = hex === picker.saved;
+}
+
+function openAppearance(saved) {
+  setupPicker();
+  picker.saved = saved?.accent || DEFAULT_ACCENT;
+  $("#color-status").hidden = true;
+  setPickerColor(picker.saved);
+}
+
+async function saveAppearance() {
+  const palette = derivePalette(picker.current);
+  const result = await api("/api/appearance", jsonBody("PUT", { palette }));
+  $("#appearance-style").textContent = result.css;
+  picker.saved = picker.current;
+  $("#color-save").disabled = true;
+  setStatus("#color-status", "Couleur appliquée à toute l'app.", true);
+}
+
+async function resetAppearance() {
+  const result = await api("/api/appearance", jsonBody("PUT", { palette: null }));
+  $("#appearance-style").textContent = result.css;
+  picker.saved = DEFAULT_ACCENT;
+  setPickerColor(DEFAULT_ACCENT);
+  setStatus("#color-status", "Couleur d'origine (terre cuite) rétablie.", true);
+}
+
+// ---------- Assistant IA locale ----------
+// Étapes : 1. Ollama installé et ouvert → 2. un modèle téléchargé → 3. prêt.
+// Tant qu'Ollama n'est pas ouvert, on revérifie toutes les 3 s (l'utilisateur est en train de l'installer).
+const aiSetup = { timer: null, downloading: false };
+
+async function refreshLocalAi() {
+  clearTimeout(aiSetup.timer);
+  if ($("#view-settings").hidden) return;
+  const status = await api("/api/ollama/status");
+  renderLocalAi(status);
+  if (!status.running) aiSetup.timer = setTimeout(refreshLocalAi, 3000);
+}
+
+function setStep(selector, step) {
+  $(selector).classList.toggle("active", step === "active");
+  $(selector).classList.toggle("done", step === "done");
+}
+
+function renderLocalAi(st) {
+  const hasModel = st.models.length > 0;
+
+  if (st.running) {
+    setStep("#step-install", "done");
+    $("#step-install-body").innerHTML = `<p class="muted">Ollama est ouvert.</p>`;
+  } else {
+    setStep("#step-install", "active");
+    $("#step-install-body").innerHTML = (st.installed
+      ? (st.can_open
+        ? `<p>Ollama est installé mais pas ouvert.</p>
+           <div class="actions"><button class="primary small" type="button" id="ollama-open">Ouvrir Ollama</button></div>`
+        : `<p>Ollama est installé mais pas ouvert : lance-le depuis tes Applications.</p>`)
+      : `<p>Ollama est l'app gratuite qui fait tourner l'IA sur ton ordinateur.</p>
+         <div class="actions"><a class="button primary small" href="https://ollama.com/download" target="_blank" rel="noopener">Télécharger Ollama ↗</a></div>
+         <p class="muted small-text">Ouvre le fichier téléchargé, glisse Ollama dans Applications, puis lance-le.</p>`)
+      + `<p class="muted small-text waiting">En attente d'Ollama… Pirouette le détectera toute seule.</p>`;
+  }
+
+  if (!st.running) {
+    setStep("#step-model", "");
+    $("#step-model-body").innerHTML = "";
+  } else if (!aiSetup.downloading) {
+    setStep("#step-model", hasModel ? "done" : "active");
+    if (!st.enough_ram) {
+      $("#step-model-body").innerHTML = `<p class="warn">Cet ordinateur a ${st.ram_gb} Go de mémoire : c'est trop juste pour une IA locale
+        (il faut au moins 8 Go) : la génération risque d'être très lente.</p>`;
+    } else {
+      const ram = st.ram_gb ? ` (${String(st.ram_gb).replace(".", ",")} Go de mémoire)` : "";
+      const recommendedMissing = st.options.find((o) => o.name === st.recommended && !o.installed);
+      const choice = recommendedMissing
+        || st.options.find((o) => !o.installed && o.min_ram_gb <= (st.ram_gb || 16) + 1);
+      $("#step-model-body").innerHTML = `
+        ${hasModel ? `<p class="muted">Installé : ${st.models.map(escapeHtml).join(", ")}.</p>` : `<p>Choisis un modèle (un seul suffit) :</p>`}
+        ${hasModel && recommendedMissing ? `<p class="setup-hint">Conseillé pour ton Mac : <strong>${escapeHtml(st.recommended)}</strong>
+          (${String(recommendedMissing.size_gb).replace(".", ",")} Go), plus récent et meilleur en français. Choisis-le ci-dessous puis « Télécharger ».</p>` : ""}
+        <details ${hasModel && !recommendedMissing ? "" : "open"}><summary class="small-text">${hasModel ? "Télécharger un autre modèle" : "Modèles disponibles"}</summary>
+        <div class="model-options">${st.options.map((o) => `
+          <label class="model-option">
+            <input type="radio" name="ai-model" value="${o.name}" ${o.installed ? "disabled" : ""} ${choice && o.name === choice.name ? "checked" : ""}>
+            <span><strong>${o.label} <small>· ${o.name} · ${String(o.size_gb).replace(".", ",")} Go</small></strong>
+              <small>${o.name === st.recommended ? `<b class="ok-text">Conseillé pour cet ordinateur${ram}.</b> ` : ""}${o.installed ? "✓ Déjà installé. " : ""}${o.note}</small></span>
+          </label>`).join("")}</div>
+        <div class="actions"><button class="primary small" type="button" id="model-download" ${choice ? "" : "disabled"}>Télécharger le modèle</button></div>
+        </details>
+        <div class="download" id="model-download-progress" hidden>
+          <div class="progress"><div></div></div><small></small>
+        </div>`;
+    }
+  }
+
+  renderContextStep(st);
+  setStep("#step-ready", st.running && hasModel ? "done" : "");
+  $("#step-ready-body").innerHTML = st.running && hasModel
+    ? `<p class="ok-text">L'IA locale est prête : dans un cours, clique sur + pour créer un quiz ou des flashcards.</p>`
+    : "";
+}
+
+// Étape 3 : la mémoire de lecture (contexte), réglée d'office selon la mémoire du Mac et modifiable.
+const formatTokens = (n) => n.toLocaleString("fr-FR");
+const pagesFor = (tokens) => Math.round((tokens * 1.5) / 1800);  // ~1 800 caractères par page de cours
+
+function renderContextStep(st) {
+  const ready = st.running && st.models.length > 0;
+  setStep("#step-context", ready ? "done" : "");
+  if (!ready) { $("#step-context-body").innerHTML = ""; return; }
+  const ctx = st.context;
+  const ram = st.ram_gb ? `${String(st.ram_gb).replace(".", ",")} Go de mémoire` : "cet ordinateur";
+  $("#step-context-body").innerHTML = `
+    <p>La quantité de cours que l'IA lit d'un coup. Plus elle est grande, moins Pirouette découpe ton cours
+      (questions mieux réparties), mais plus le Mac utilise de mémoire. Pas besoin de Terminal : Pirouette
+      l'applique à chaque demande.</p>
+    <label class="field context-field">Mémoire de lecture
+      <select id="context-select">
+        <option value="0" ${ctx.chosen ? "" : "selected"}>Automatique : ${formatTokens(ctx.auto)} tokens (conseillé pour ${ram})</option>
+        ${ctx.options.map((o) => `<option value="${o.tokens}" ${ctx.chosen === o.tokens ? "selected" : ""}>
+          ${formatTokens(o.tokens)} tokens · environ ${pagesFor(o.tokens)} pages d'un coup${o.too_big ? " · trop pour cette mémoire" : ""}</option>`).join("")}
+      </select>
+    </label>
+    <p class="muted small-text">Utilisé en ce moment : ${formatTokens(ctx.used)} tokens, soit environ ${pagesFor(ctx.used)} pages de cours par passage.</p>
+    <p class="status" id="context-status" hidden></p>`;
+}
+
+document.addEventListener("change", async (e) => {
+  if (e.target.id !== "context-select") return;
+  try {
+    await api("/api/settings", jsonBody("PUT", { local_context: Number(e.target.value) }));
+    const st = await api("/api/ollama/status");
+    renderContextStep(st);
+    setStatus("#context-status", `Enregistré : ${formatTokens(st.context.used)} tokens.`, true);
+  } catch (err) {
+    setStatus("#context-status", err.message, false);
+  }
+});
+
+document.addEventListener("click", async (e) => {
+  if (e.target.id === "ollama-open") {
+    e.target.disabled = true;
+    e.target.textContent = "Ouverture…";
+    await api("/api/ollama/open", { method: "POST" });
+    setTimeout(refreshLocalAi, 2000);
+  }
+  if (e.target.id === "model-download") {
+    const model = document.querySelector("input[name=ai-model]:checked")?.value;
+    if (model) downloadModel(model);
+  }
+});
+
+async function downloadModel(model) {
+  aiSetup.downloading = true;
+  document.querySelectorAll("input[name=ai-model], #model-download").forEach((el) => (el.disabled = true));
+  const box = $("#model-download-progress");
+  const bar = box.querySelector(".progress div");
+  const text = box.querySelector("small");
+  box.hidden = false;
+  text.textContent = "Préparation du téléchargement…";
+  const gb = (bytes) => (bytes / 1e9).toFixed(1).replace(".", ",");  // même unité que les tailles annoncées
+  try {
+    const response = await fetch("/api/ollama/pull", jsonBody("POST", { model }));
+    if (!response.ok) throw new Error((await response.json().catch(() => ({}))).detail || `Erreur ${response.status}`);
+    for await (const event of ndjson(response)) {
+      if (event.type === "progress") {
+        if (event.percent !== null) {
+          bar.style.width = `${event.percent}%`;
+          text.textContent = `${gb(event.completed)} / ${gb(event.total)} Go · ${Math.floor(event.percent)} % — garde Pirouette ouverte`;
+        } else {
+          text.textContent = event.status === "verifying sha256 digest" ? "Vérification…" : "Préparation…";
+        }
+      }
+      if (event.type === "error") throw new Error(event.message);
+      if (event.type === "done") {
+        bar.style.width = "100%";
+        text.textContent = "Téléchargement terminé !";
+      }
+    }
+  } catch (err) {
+    text.textContent = err.message;
+    text.className = "error-text";
+  } finally {
+    aiSetup.downloading = false;
+    state.config = null;
+    setTimeout(refreshLocalAi, 1200);
+  }
+}
+
+// Lit une réponse en NDJSON (une ligne JSON par événement), au fur et à mesure qu'elle arrive.
+async function* ndjson(response) {
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split("\n");
+    buffer = lines.pop();
+    for (const line of lines) if (line.trim()) yield JSON.parse(line);
+  }
+}
+
+function setStatus(selector, message, ok) {
+  const el = $(selector);
+  el.textContent = message;
+  el.className = `status ${ok ? "ok" : "ko"}`;
+  el.hidden = !message;
+}
+
+$("#settings-name-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const settings = await api("/api/settings", jsonBody("PUT", { name: $("#settings-name").value }));
+  state.profile = { name: settings.name, asked: true };
+  setStatus("#settings-name-status", settings.name ? `Enchanté, ${settings.name} !` : "Prénom retiré.", true);
+});
+
+$("#settings-key-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const key = $("#settings-key").value.trim();
+  if (!key) return;
+  try {
+    await api("/api/settings", jsonBody("PUT", { api_key: key }));
+    $("#settings-key").value = "";
+    await openSettings();
+    await testKey();
+  } catch (err) {
+    setStatus("#settings-key-status", err.message, false);
+  }
+});
+
+async function testKey() {
+  setStatus("#settings-key-status", "Vérification…", true);
+  try {
+    setStatus("#settings-key-status", (await api("/api/settings/test-claude", { method: "POST" })).message, true);
+  } catch (err) {
+    setStatus("#settings-key-status", err.message, false);
+  }
+}
+$("#settings-key-test").addEventListener("click", testKey);
+
+$("#settings-key-remove").addEventListener("click", async () => {
+  if (!confirm("Supprimer la clé API enregistrée dans Pirouette ?")) return;
+  await api("/api/settings", jsonBody("PUT", { api_key: "" }));
+  await openSettings();
+  setStatus("#settings-key-status", "Clé supprimée.", true);
+});
+
+$("#settings-import-btn").addEventListener("click", async () => {
+  const result = await window.pywebview.api.import_legacy_data();
+  if (result.message) setStatus("#settings-import-status", result.message, result.ok);
+});
+
+// ---------- Nouveau cours : une petite fenêtre, on y glisse son fichier ----------
+const newCourse = { files: [] };
+
+async function openNewCourse() {
+  newCourse.files = [];
+  $("#new-course-name").value = "";
+  $("#new-course-status").hidden = true;
+  $("#new-course-create").disabled = false;
+  renderNewCourseFiles();
+  const folders = (await api("/api/folders")).filter((f) => !f.archived);
+  $("#new-course-folder-field").hidden = !folders.length;
+  $("#new-course-folder").innerHTML = `<option value="">Sans dossier</option>`
+    + folders.map((f) => `<option value="${f.id}">${escapeHtml(f.name)}</option>`).join("");
+  $("#new-course-folder").value = "";
+  $("#new-course-dialog").showModal();
+  $("#new-course-name").focus();
+}
+
+function renderNewCourseFiles() {
+  const files = newCourse.files;
+  $("#new-course-drop").classList.toggle("has-files", files.length > 0);
+  $("#new-course-drop-title").textContent = files.length
+    ? files.map((f) => f.name).join(", ") : "Glisse ton cours ici";
+  $("#new-course-drop-sub").textContent = files.length
+    ? "Clique pour en choisir d'autres" : "ou clique pour choisir · PDF, Word, PowerPoint, Pages, Keynote, texte";
+}
+
+function addNewCourseFiles(fileList) {
+  newCourse.files = [...fileList];
+  // Pas encore de nom : celui du premier fichier, sans l'extension.
+  if (!$("#new-course-name").value.trim() && newCourse.files.length) {
+    $("#new-course-name").value = newCourse.files[0].name.replace(/\.[^.]+$/, "").replace(/[_-]+/g, " ").trim();
+  }
+  renderNewCourseFiles();
+}
+
+$("#new-course-btn").addEventListener("click", openNewCourse);
+$("#new-course-cancel").addEventListener("click", () => $("#new-course-dialog").close());
+$("#new-course-files").addEventListener("change", (e) => { addNewCourseFiles(e.target.files); e.target.value = ""; });
+const courseDrop = $("#new-course-drop");
+["dragenter", "dragover"].forEach((ev) => courseDrop.addEventListener(ev, (e) => { e.preventDefault(); courseDrop.classList.add("over"); }));
+["dragleave", "drop"].forEach((ev) => courseDrop.addEventListener(ev, (e) => { e.preventDefault(); courseDrop.classList.remove("over"); }));
+courseDrop.addEventListener("drop", (e) => addNewCourseFiles(e.dataTransfer.files));
+
+$("#new-course-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const name = $("#new-course-name").value.trim();
+  if (!name) {
+    setStatus("#new-course-status", "Donne un nom au cours (ou glisse un fichier : son nom sera repris).", false);
+    return $("#new-course-name").focus();
+  }
+  $("#new-course-create").disabled = true;
+  try {
+    const course = await api("/api/courses", jsonBody("POST", { name }));
+    const folder = $("#new-course-folder").value;
+    if (folder) await api(`/api/courses/${course.id}/folder`, jsonBody("PUT", { folder_id: folder }));
+    $("#new-course-dialog").close();
+    const files = newCourse.files;
+    if (!files.length) return go(`#/cours/${course.id}`);
+    // Avec un fichier : on ouvre la page Fichiers du cours, où l'on suit la lecture puis le repérage des chapitres.
+    history.pushState(null, "", `#/cours/${course.id}/fichiers`);
+    document.querySelectorAll("[data-nav]").forEach((a) => a.classList.toggle("on", a.dataset.nav === "cours"));
+    await openCourse(course.id, "fichiers");
+    await uploadFiles(files);
+  } catch (err) {
+    setStatus("#new-course-status", err.message, false);
+    $("#new-course-create").disabled = false;
+  }
+});
+
+// ---------- Un cours ----------
+// #/cours/<id>/quiz | cartes | fichiers : les trois entrées du cours ; #/cours/<id>/nouveau/quiz | cartes : création.
+const TABS = ["quiz", "cartes", "fichiers"];
+
+function courseHash(tab) {
+  return `#/cours/${state.course.id}${tab ? `/${tab}` : ""}`;
+}
+
+// Va à une adresse ; si c'est déjà l'adresse affichée (retour depuis un quiz…), réaffiche quand même.
+function go(hash) {
+  if (location.hash === hash) route();
+  else location.hash = hash;
+}
+
+async function loadCourse(id) {
+  const course = await api(`/api/courses/${id}`);
+  if (state.course?.id !== id) {
+    $("#chapters-status").hidden = $("#upload-status").hidden = $("#cards-status").hidden = true;
+    state.deck = null;
+    state.newCards = null;
+    state.cardFilter = "review";
+  }
+  state.course = course;
+  if (!state.config) await loadConfig();
+  return course;
+}
+
+async function openCourse(id, tab, { keepScroll = false } = {}) {
+  const course = await loadCourse(id);
+  // Sans partie choisie : la page du cours, avec ses trois entrées. Sinon, la partie seule.
+  if (!TABS.includes(tab)) tab = null;
+  state.tab = tab;
+  $("#course-name").textContent = course.name;
+  setCrumbs(courseCrumbs(course, tab));
+  renderFolderPick(course);
+  const chip = $("#course-exam-chip");
+  chip.hidden = !course.exam || course.exam.days <= -7;
+  if (course.exam) chip.innerHTML = `${ICON_CALENDAR}<span>${examLabel(course.exam.date)}</span>`;
+  renderTiles(course);
+  renderCourseRevise(course);
+  renderQuizPanel(course);
+  renderFiles(course);
+  if (tab === "cartes") await loadDeck();
+
+  const scroll = window.scrollY;
+  show("course");
+  if (keepScroll) window.scrollTo(0, scroll);
+  $("#course-overview").hidden = Boolean(tab);
+  // Nouvelle version d'un fichier : questions et cartes à vérifier (sur la page du cours et ses fichiers).
+  $("#outdated-note").hidden = !course.outdated || !(tab === null || tab === "fichiers");
+  $("#outdated-text").textContent = `Ton cours a changé : ${plural(course.outdated, "question ou carte ne correspond", "questions ou cartes ne correspondent")} plus au cours.`;
+  TABS.forEach((t) => { $(`#panel-${t}`).hidden = t !== tab; });
+}
+
+// Menu « ••• » du cours : renommer, supprimer.
+$("#course-more").addEventListener("click", () => {
+  const menu = $("#course-more-menu");
+  menu.hidden = !menu.hidden;
+});
+document.addEventListener("click", (e) => {
+  if (!e.target.closest(".more")) $("#course-more-menu").hidden = true;
+});
+
+async function renderFolderPick(course) {
+  const folders = await api("/api/folders");
+  const select = $("#course-folder");
+  select.innerHTML = `<option value="">Sans dossier</option>`
+    + folders.map((f) => `<option value="${f.id}">${escapeHtml(f.name)}${f.archived ? " (archivé)" : ""}</option>`).join("")
+    + `<option value="__new">+ Nouveau dossier…</option>`;
+  select.value = folders.some((f) => f.id === course.folder_id) ? course.folder_id : "";
+}
+
+$("#course-folder").addEventListener("change", async (e) => {
+  let folderId = e.target.value || null;
+  if (folderId === "__new") {
+    const name = await askText("Nom du dossier", "", "ex. Semestre 1, L2 psycho…");
+    if (!name) return renderFolderPick(state.course);
+    folderId = (await api("/api/folders", jsonBody("POST", { name }))).id;
+  }
+  state.course = { ...state.course, ...(await api(`/api/courses/${state.course.id}/folder`, jsonBody("PUT", { folder_id: folderId }))) };
+  renderFolderPick(state.course);
+});
+
+// Recharge le cours affiché sans changer d'onglet ni de position.
+const refreshCourse = () => openCourse(state.course.id, state.tab, { keepScroll: true });
+
+function renderTiles(course) {
+  document.querySelectorAll("[data-tab-link]").forEach((a) => { a.href = courseHash(a.dataset.tabLink); });
+  const quizzes = course.quizzes;
+  const done = quizzes.filter((q) => q.best_score);
+  const best = done.length ? Math.max(...done.map((q) => Math.round((100 * q.best_score.score) / q.best_score.total))) : null;
+  $("#tile-quiz-num").textContent = quizzes.length;
+  $("#tile-quiz-sub").textContent = !quizzes.length ? "Aucun quiz" : best === null ? "Pas encore fait" : `Meilleur score ${best} %`;
+  $("#tile-cards-num").textContent = course.cards.total;
+  $("#tile-cards-sub").textContent = course.cards.total ? `${plural(course.cards.known, "apprise", "apprises")} · ${course.cards.review} à revoir` : "Aucune carte";
+  const chapters = course.files.reduce((n, f) => n + (f.chapters?.length || 0), 0);
+  $("#tile-files-num").textContent = course.files.length;
+  $("#tile-files-sub").textContent = !course.files.length ? "Dépose ton cours" : chapters ? `${chapters} chapitres` : "Tout le cours";
+}
+
+function renderQuizPanel(course) {
+  $("#quiz-list").innerHTML = course.quizzes.length
+    ? course.quizzes.map((q, i) => quizItem(q, course, course.quizzes.length - i)).join("")
+    : `<li class="empty muted">Aucun quiz pour l'instant : clique sur « + Nouveau quiz ».</li>`;
+}
+
+function renderFiles(course) {
+  $("#file-list").innerHTML = course.files.length ? course.files.map((f) => {
+    const chapters = f.chapters || [];
+    const found = chapters.length
+      ? `${chapters.length} chapitres ${f.chapters_by === "ai" ? "repérés par l'IA" : "repérés automatiquement"}`
+      : f.chapters_by === "ai" ? "L'IA n'a pas trouvé de chapitres" : "Pas de chapitres repérés";
+    return `
+    <li class="file-item">
+      <div class="file-main">
+        <strong>${escapeHtml(f.name)}</strong>
+        <small class="muted">${formatSize(f.size)} · ${f.revisions > 1 ? `version ${f.revisions}, ` : ""}mis à jour ${formatDate(f.updated_at)}</small>
+        <small class="muted">${found} · <button class="link-button inline" data-detect-file="${f.id}" ${state.detecting ? "disabled" : ""}>${
+          f.chapters_by === "ai" ? "Relancer l'IA" : "Repérer avec l'IA"}</button></small>
+        ${f.definitions ? `<small class="muted"><button class="link-button inline" data-show-defs="${f.id}">${
+          plural(f.definitions, "définition repérée", "définitions repérées")}</button></small>` : ""}
+      </div>
+      <div class="file-actions">
+        <button class="ghost small" data-file-create="quiz" data-file="${f.id}">Quiz</button>
+        <button class="ghost small" data-file-create="cartes" data-file="${f.id}">Flashcards</button>
+        <button class="icon" data-remove-file="${f.id}" aria-label="Retirer ${escapeHtml(f.name)}" title="Retirer du cours">✕</button>
+      </div>
+    </li>`;
+  }).join("") : `<li class="empty muted">Aucun fichier : dépose ton cours ci-dessus.</li>`;
+}
+
+// « Quiz 3 · Titre » ; un quiz renommé s'affiche exactement avec le nom choisi.
+const quizLabel = (q, number = null) => (number && !q.custom_title ? `Quiz ${number} · ${q.title}` : q.title);
+
+function quizItem(q, course, number = null) {
+  const outdated = course && q.course_version < course.version;
+  const best = q.best_score ? `Meilleur score ${q.best_score.score}/${q.best_score.total}` : "Pas encore fait";
+  return `
+    <li class="quiz-item">
+      <button class="quiz-open" data-open-quiz="${q.id}">
+        <strong>${escapeHtml(quizLabel(q, number))}</strong>
+        <small class="muted">${q.count} questions · ${q.difficulty || "moyen"} · ${q.provider === "claude" ? "Claude" : "Local"} · ${formatDate(q.created_at)}</small>
+        ${scopeNote(q.scope)}
+        <small><span class="badge">${best}</span>${q.attempts > 1 ? ` <span class="muted">${q.attempts} essais</span>` : ""}
+          ${outdated ? ` <span class="badge warn-badge" title="Le cours a été modifié depuis la création de ce quiz">cours mis à jour depuis</span>` : ""}</small>
+      </button>
+      <button class="icon" data-rename-quiz="${q.id}" data-title="${escapeHtml(quizLabel(q, number))}" aria-label="Renommer ce quiz" title="Renommer">${ICON_EDIT}</button>
+      <button class="icon" data-delete-quiz="${q.id}" aria-label="Supprimer ce quiz" title="Supprimer">${ICON_TRASH}</button>
+    </li>`;
+}
+
+document.addEventListener("click", async (e) => {
+  const target = e.target.closest("[data-open-quiz], [data-rename-quiz], [data-delete-quiz], [data-remove-file], [data-create], [data-file-create]");
+  if (!target) return;
+  const { openQuiz, renameQuiz, deleteQuiz, removeFile, create, fileCreate, file } = target.dataset;
+  try {
+    if (openQuiz) startQuiz(await api(`/api/quizzes/${openQuiz}`));
+    if (renameQuiz) {
+      const title = await askText("Nouveau nom du quiz", target.dataset.title);
+      if (title) {
+        await api(`/api/quizzes/${renameQuiz}`, jsonBody("PATCH", { title }));
+        state.course && !$("#view-course").hidden ? refreshCourse() : loadCourses();
+      }
+    }
+    if (deleteQuiz && confirm("Supprimer ce quiz ?")) {
+      await api(`/api/quizzes/${deleteQuiz}`, { method: "DELETE" });
+      state.course && !$("#view-course").hidden ? refreshCourse() : loadCourses();
+    }
+    if (removeFile && confirm("Retirer ce fichier du cours ?")) {
+      await api(`/api/courses/${state.course.id}/files/${removeFile}`, { method: "DELETE" });
+      refreshCourse();
+    }
+    if (create === "cartes") return openCardsMenu(target);
+    if (create) {
+      if (!state.course.files.length) return go(courseHash("fichiers"));
+      go(courseHash(`nouveau/${create}`));
+    }
+    if (fileCreate) {
+      // Quiz ou flashcards sur ce fichier seulement : tout le reste est décoché.
+      const excluded = excludedSet();
+      excluded.clear();
+      chapterUnits().filter((u) => u.file !== file).forEach((u) => excluded.add(u.key));
+      state.keepSelection = true;
+      go(courseHash(`nouveau/${fileCreate}`));
+    }
+  } catch (err) {
+    alert(err.message);
+  }
+});
+
+$("#rename-course").addEventListener("click", async () => {
+  $("#course-more-menu").hidden = true;
+  const name = await askText("Nouveau nom du cours", state.course.name);
+  if (!name) return;
+  await api(`/api/courses/${state.course.id}`, jsonBody("PATCH", { name }));
+  refreshCourse();
+});
+
+$("#delete-course").addEventListener("click", async () => {
+  $("#course-more-menu").hidden = true;
+  if (!confirm(`Supprimer le cours « ${state.course.name} », ses fichiers, ses quiz et ses flashcards ?`)) return;
+  await api(`/api/courses/${state.course.id}`, { method: "DELETE" });
+  location.hash = "#/cours";
+});
+
+// ---------- Dépôt des fichiers ----------
+const dropzone = $("#dropzone");
+["dragenter", "dragover"].forEach((ev) =>
+  dropzone.addEventListener(ev, (e) => { e.preventDefault(); dropzone.classList.add("over"); }));
+["dragleave", "drop"].forEach((ev) =>
+  dropzone.addEventListener(ev, (e) => { e.preventDefault(); dropzone.classList.remove("over"); }));
+dropzone.addEventListener("drop", (e) => uploadFiles(e.dataTransfer.files));
+$("#file-input").addEventListener("change", (e) => { uploadFiles(e.target.files); e.target.value = ""; });
+
+async function uploadFiles(fileList) {
+  if (!fileList.length) return;
+  if (state.tab !== "fichiers") await openCourse(state.course.id, "fichiers");
+  if (location.hash !== courseHash("fichiers")) history.replaceState(null, "", courseHash("fichiers"));
+  const form = new FormData();
+  for (const file of fileList) form.append("files", file);
+  const status = $("#upload-status");
+  status.hidden = false;
+  status.className = "status";
+  status.textContent = "Lecture du cours…";
+  try {
+    const { results, course } = await api(`/api/courses/${state.course.id}/files`, { method: "POST", body: form });
+    await refreshCourse();
+    status.textContent = Object.entries(results)
+      .map(([name, r]) => `${r === "updated" ? "Nouvelle version enregistrée" : "Ajouté"} : ${name}`).join(" · ");
+    status.className = "status ok";
+    // Puis l'IA repère les chapitres des fichiers déposés (si un moteur est prêt).
+    const names = Object.keys(results).map((n) => n.toLowerCase());
+    const ids = course.files.filter((f) => names.includes(f.name.toLowerCase())).map((f) => f.id);
+    await detectChapters(ids, { quiet: true });
+  } catch (err) {
+    status.textContent = err.message;
+    status.className = "status ko";
+  }
+}
+
+// ---------- Chapitres ----------
+// Chaque fichier est découpé en chapitres (clé « <fichier>-<n> ») ; un fichier sans chapitre compte en entier
+// (clé « <fichier> »). Le choix se fait sur la page de création d'un quiz ou de flashcards.
+function chapterUnits(course = state.course) {
+  return course.files.flatMap((f) => f.chapters?.length
+    ? f.chapters.map((c, i) => ({ key: `${f.id}-${i}`, file: f.id, title: c.title }))
+    : [{ key: f.id, file: f.id, title: f.name }]);
+}
+
+function excludedSet() {
+  const id = state.course.id;
+  return (state.excluded[id] ||= new Set());
+}
+
+const isChecked = (key) => !excludedSet().has(key);
+const hasSelection = () => chapterUnits().some((u) => isChecked(u.key));
+
+// Ce qu'on envoie au serveur : "" = tout le cours ; sinon les fichiers entiers et les chapitres cochés.
+function selectionParam() {
+  const units = chapterUnits();
+  if (units.every((u) => isChecked(u.key))) return "";
+  const keys = [];
+  for (const f of state.course.files) {
+    const own = units.filter((u) => u.file === f.id);
+    if (own.every((u) => isChecked(u.key))) keys.push(f.id);
+    else keys.push(...own.filter((u) => isChecked(u.key)).map((u) => u.key));
+  }
+  return keys.join(",");
+}
+
+function renderChapterPicker(course) {
+  const known = new Set(chapterUnits(course).map((u) => u.key));
+  for (const key of [...excludedSet()]) if (!known.has(key)) excludedSet().delete(key);  // fichier modifié
+
+  $("#chapter-groups").innerHTML = course.files.map((f) => {
+    const chapters = f.chapters || [];
+    const body = chapters.length
+      ? `<ul class="chapter-list">${chapters.map((c, i) => `
+          <li><label><input type="checkbox" data-chapter="${f.id}-${i}" ${isChecked(`${f.id}-${i}`) ? "checked" : ""}>
+            <span>${escapeHtml(c.title)}</span><small class="muted">${formatWords(c.chars)}</small></label></li>`).join("")}</ul>`
+      : `<p class="chapter-note muted">Pas de chapitres repérés : le fichier est pris en entier.</p>`;
+    return `<div class="chapter-group">
+      <div class="chapter-file"><label><input type="checkbox" data-chapter-file="${f.id}"> ${escapeHtml(f.name)}</label></div>
+      ${body}</div>`;
+  }).join("");
+  syncFileBoxes();
+  renderScope();
+}
+
+// Case du fichier : cochée, décochée ou « à moitié » selon ses chapitres.
+function syncFileBoxes() {
+  for (const box of document.querySelectorAll("[data-chapter-file]")) {
+    const own = chapterUnits().filter((u) => u.file === box.dataset.chapterFile);
+    const checked = own.filter((u) => isChecked(u.key)).length;
+    box.checked = checked === own.length;
+    box.indeterminate = checked > 0 && checked < own.length;
+  }
+}
+
+function renderScope() {
+  const units = chapterUnits();
+  const chosen = units.filter((u) => isChecked(u.key));
+  for (const el of document.querySelectorAll("[data-scope]")) {
+    el.classList.toggle("none", !chosen.length);
+    if (!chosen.length) el.innerHTML = "<strong>Rien de coché</strong> : coche au moins un chapitre.";
+    else if (chosen.length === units.length) el.innerHTML = "Porte sur <strong>tout le cours</strong>.";
+    else el.innerHTML = `Porte sur <strong>${chosen.length} partie${chosen.length > 1 ? "s" : ""} sur ${units.length}</strong> : ${chosen.map((u) => escapeHtml(u.title)).join(" · ")}`;
+  }
+}
+
+function scopeNote(scope) {
+  return scope?.length ? `<small class="muted">Sur : ${scope.map(escapeHtml).join(" · ")}</small>` : "";
+}
+
+function formatWords(chars) {
+  const words = Math.max(1, Math.round((chars || 0) / 6 / 10) * 10);
+  return `≈ ${words.toLocaleString("fr-FR")} mots`;
+}
+
+document.addEventListener("change", (e) => {
+  const key = e.target.dataset?.chapter;
+  const file = e.target.dataset?.chapterFile;
+  if (!key && !file) return;
+  const excluded = excludedSet();
+  const keys = key ? [key] : chapterUnits().filter((u) => u.file === file).map((u) => u.key);
+  for (const k of keys) e.target.checked ? excluded.delete(k) : excluded.add(k);
+  if (file) document.querySelectorAll(`[data-chapter^="${file}-"]`).forEach((b) => { b.checked = e.target.checked; });
+  syncFileBoxes();
+  renderScope();
+});
+
+$("#chapters-all").addEventListener("click", () => { excludedSet().clear(); renderChapterPicker(state.course); });
+$("#chapters-none").addEventListener("click", () => {
+  chapterUnits().forEach((u) => excludedSet().add(u.key));
+  renderChapterPicker(state.course);
+});
+
+document.addEventListener("click", (e) => {
+  const id = e.target.closest("[data-detect-file]")?.dataset.detectFile;
+  if (id) detectChapters([id]);
+});
+
+// L'IA choisie (moteur par défaut, ou le dernier utilisé) repère les chapitres, fichier par fichier.
+async function detectChapters(fileIds, { quiet = false } = {}) {
+  if (!fileIds.length || state.detecting) return;
+  if (!state.config) await loadConfig();
+  const provider = selectedProvider();
+  const status = $("#chapters-status");
+  if (!state.config[provider]?.available) {
+    if (quiet) return;  // pas d'IA prête : on garde le repérage automatique
+    status.hidden = false;
+    status.className = "status ko";
+    status.innerHTML = `L'IA « ${provider === "claude" ? "Claude" : "locale"} » n'est pas prête : <a href="#/reglages">configure-la dans Réglages</a>.`;
+    return;
+  }
+  const courseId = state.course.id;
+  state.detecting = true;
+  renderFiles(state.course);
+  status.hidden = false;
+  const found = [];
+  try {
+    for (const id of fileIds) {
+      const f = state.course.files.find((x) => x.id === id);
+      if (!f) continue;
+      status.className = "status";
+      status.textContent = `L'IA repère les chapitres de « ${f.name} »…`;
+      const result = await api(`/api/courses/${courseId}/files/${id}/chapters`, { method: "POST", body: engineForm() });
+      found.push(`${f.name} : ${result.found ? `${result.found} chapitres` : "pas de chapitres"}`);
+      if (state.course?.id !== courseId) return;  // on a changé de cours entre-temps
+      state.course.files = result.course.files;
+      renderFiles(state.course);
+      renderTiles(state.course);
+    }
+    status.className = "status ok";
+    status.textContent = `Chapitres repérés · ${found.join(" · ")}`;
+  } catch (err) {
+    status.className = "status ko";
+    status.textContent = `Repérage par l'IA impossible (${err.message}). Le découpage automatique est gardé.`;
+  } finally {
+    state.detecting = false;
+    if (state.course?.id === courseId) renderFiles(state.course);
+  }
+}
+
+// ---------- Moteurs ----------
+async function loadConfig({ keepSelection = false } = {}) {
+  const config = await api("/api/config");
+  state.config = config;
+
+  const localStatus = $("#local-status");
+  localStatus.classList.toggle("warn", !config.local.available);
+  if (config.local.available) {
+    localStatus.textContent = `Sur ton Mac, hors ligne, gratuit · ${config.local.models.length} modèle(s)`;
+  } else if (config.local.running) {
+    localStatus.innerHTML = `Aucun modèle installé : <a href="#/reglages">télécharge-le dans Réglages</a>`;
+  } else {
+    localStatus.innerHTML = `Ollama n'est pas ouvert ou pas installé : <a href="#/reglages">configurer l'IA locale</a>`;
+  }
+  // Claude est mis de côté pour l'instant : seule l'IA locale est proposée.
+  const claudeOn = config.claude.enabled;
+  $("#engines").hidden = !claudeOn;
+  $("#engine-title").textContent = claudeOn ? "Moteur IA" : "IA locale";
+  $("#engine-note").hidden = claudeOn;
+  $("#engine-note").innerHTML = config.local.available
+    ? `Sur ton Mac, hors ligne et gratuite · ${config.local.models.length} modèle(s)`
+    : localStatus.innerHTML;
+  $("#engine-note").classList.toggle("warn", !config.local.available);
+  const claudeStatus = $("#claude-status");
+  claudeStatus.classList.toggle("warn", !config.claude.available);
+  claudeStatus.innerHTML = config.claude.available
+    ? `Meilleure qualité · ${escapeHtml(config.claude.default_model)}`
+    : `Ajoute ta clé API dans <a href="#/reglages">Réglages</a>`;
+
+  const select = $("#local-model");
+  const previous = select.value;
+  const models = config.local.models.length ? config.local.models : [config.local.default_model];
+  select.innerHTML = models.map((m) => `<option>${escapeHtml(m)}</option>`).join("");
+  if (keepSelection && models.includes(previous)) select.value = previous;
+  else if (models.includes(config.local.default_model)) select.value = config.local.default_model;
+
+  // Tant qu'Ollama n'est pas prêt, on revérifie toutes les 5 s (inutile de recharger la page).
+  clearTimeout(state.configTimer);
+  if (!config.local.available) state.configTimer = setTimeout(() => loadConfig({ keepSelection: true }), 5000);
+  if (keepSelection) return;
+
+  const provider = claudeOn && config.default_provider === "claude" ? "claude" : "local";
+  document.querySelector(`input[name=provider][value=${provider}]`).checked = true;
+  updateProviderUi();
+}
+
+document.querySelectorAll("input[name=provider]").forEach((r) => r.addEventListener("change", updateProviderUi));
+function updateProviderUi() {
+  $("#local-model-field").hidden = selectedProvider() !== "local";
+}
+const selectedProvider = () => document.querySelector("input[name=provider]:checked")?.value || "local";
+
+// ---------- Créer un quiz ou des flashcards ----------
+async function openCreate(id, kind) {
+  const course = await loadCourse(id);
+  if (!course.files.length) return go(courseHash("fichiers"));
+  if (!state.keepSelection) excludedSet().clear();  // par défaut : tout le cours
+  state.keepSelection = false;
+  state.createKind = kind;
+  const isQuiz = kind === "quiz";
+  $("#create-title").textContent = isQuiz ? "Nouveau quiz" : "Ajouter des flashcards";
+  setCrumbs(courseCrumbs(course, isQuiz ? "quiz" : "cartes", isQuiz ? "Nouveau quiz" : "Ajouter des cartes"));
+  $("#create-quiz-options").hidden = !isQuiz;
+  $("#create-cards-options").hidden = isQuiz;
+  $("#manual-field").hidden = !isQuiz;
+  $("#focus").value = $("#manual").value = "";
+  $("#focus-hint").textContent = isQuiz
+    ? "Pirouette ne garde que les passages du cours qui en parlent, et l'IA ne pose de questions que là-dessus."
+    : "Pirouette ne garde que les passages du cours qui en parlent, et l'IA ne fait de cartes que là-dessus.";
+  updateManualHint();
+  $("#create-btn").textContent = isQuiz ? "Générer le quiz" : "Créer les cartes";
+  showError("#create-error", "");
+  renderChapterPicker(course);
+  show("create");
+}
+
+function engineForm() {
+  const form = new FormData();
+  const provider = selectedProvider();
+  form.append("provider", provider);
+  form.append("model", provider === "local" ? $("#local-model").value : "");
+  form.append("language", $("#language").value);
+  form.append("chapters", selectionParam());
+  return form;
+}
+
+// Lance une génération côté serveur, affiche sa progression et renvoie le résultat.
+async function runJob(path, form, title) {
+  $("#loading-title").textContent = title;
+  $("#progress-log").innerHTML = "";
+  show("loading");
+  const response = await fetch(`/api/courses/${state.course.id}/${path}`, { method: "POST", body: form });
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({}));
+    throw new Error(body.detail || `Erreur ${response.status}`);
+  }
+  for await (const event of ndjson(response)) {
+    if (event.type === "progress") logProgress(event.message);
+    if (event.type === "error") throw new Error(event.message);
+    if (event.type === "done") return event.result;
+  }
+  throw new Error("La génération s'est interrompue.");
+}
+
+$("#create-btn").addEventListener("click", () => (state.createKind === "quiz" ? generateQuiz() : createCards()));
+
+async function generateQuiz() {
+  const types = [...document.querySelectorAll("input[name=types]:checked")].map((c) => c.value);
+  if (!types.length) return showError("#create-error", "Choisis au moins un type de question.");
+  if (!hasSelection()) return showError("#create-error", "Coche au moins un chapitre.");
+  const form = engineForm();
+  form.append("num_questions", $("#num-questions").value);
+  form.append("difficulty", $("#difficulty").value);
+  form.append("types", types.join(","));
+  form.append("course_share", $("#course-share").value);
+  form.append("focus", $("#focus").value);
+  form.append("manual", $("#manual").value);
+  showError("#create-error", "");
+  try {
+    startQuiz(await runJob("quizzes", form, "Génération du quiz…"));
+  } catch (err) {
+    backToCreate(err.message);
+  }
+}
+
+async function createCards() {
+  if (!hasSelection()) return showError("#create-error", "Coche au moins un chapitre.");
+  const form = engineForm();
+  form.append("count", $("#cards-count").value);
+  form.append("focus", $("#focus").value);
+  showError("#create-error", "");
+  try {
+    const deck = await runJob("cards", form, "Création des flashcards…");
+    state.deck = deck;
+    state.cardFilter = "review";
+    state.newCards = new Set(deck.cards.slice(-deck.added).map((c) => c.id));
+    await openCourse(state.course.id, "cartes");
+    history.replaceState(null, "", courseHash("cartes"));
+    const status = $("#cards-status");
+    status.textContent = `${deck.added} carte${deck.added > 1 ? "s" : ""} ajoutée${deck.added > 1 ? "s" : ""} au paquet.`;
+    status.hidden = false;
+  } catch (err) {
+    backToCreate(err.message);
+  }
+}
+
+const manualLines = () => $("#manual").value.split("\n").map((l) => l.replace(/^\s*(?:[-•*]|\d{1,2}[.)])\s*/, "").trim()).filter((l) => l.length >= 4);
+
+function updateManualHint() {
+  const mine = manualLines().length;
+  const total = Math.max(Number($("#num-questions").value) || 0, mine);
+  $("#manual-hint").textContent = mine
+    ? `Ton quiz : ${plural(mine, "question à toi", "questions à toi")}${total > mine ? ` + ${total - mine} créée${total - mine > 1 ? "s" : ""} par l'IA` : ""} (règle le nombre de questions plus haut). L'IA écrit les réponses et les propositions à partir du cours.`
+    : "L'IA cherche la réponse dans ton cours et écrit les propositions. Une question sans réponse dans le cours est écartée.";
+}
+$("#manual").addEventListener("input", updateManualHint);
+$("#num-questions").addEventListener("input", updateManualHint);
+
+function backToCreate(message) {
+  show("create");
+  showError("#create-error", message);
+  $("#create-error").scrollIntoView({ block: "center" });
+}
+
+function logProgress(message) {
+  const li = document.createElement("li");
+  li.textContent = message;
+  $("#progress-log").appendChild(li);
+}
+
+function showError(selector, message) {
+  const el = $(selector);
+  el.textContent = message;
+  el.hidden = !message;
+}
+
+// ---------- Flashcards : toutes les cartes sous les yeux ----------
+async function loadDeck() {
+  if (!state.deck || state.deck.course_id !== state.course.id) {
+    state.deck = await api(`/api/courses/${state.course.id}/cards`);
+    state.deck.course_id = state.course.id;
+  }
+  renderCardGrid();
+}
+
+const cardIsKnown = (card) => card.status === "known";
+const CARD_FILTERS = {
+  review: { test: (c) => !cardIsKnown(c), empty: "Aucune carte à revoir : tu les connais toutes." },
+  known: { test: cardIsKnown, empty: "Aucune carte apprise pour l'instant : clique sur une carte quand tu la connais." },
+  all: { test: () => true, empty: "" },
+};
+
+function renderCardGrid() {
+  const cards = state.deck.cards;
+  const filter = CARD_FILTERS[state.cardFilter] ? state.cardFilter : "review";
+  document.querySelectorAll("[data-filter]").forEach((b) => {
+    const count = cards.filter(CARD_FILTERS[b.dataset.filter].test).length;
+    b.querySelector("span").textContent = count;
+    b.classList.toggle("active", b.dataset.filter === filter);
+    b.setAttribute("aria-selected", b.dataset.filter === filter);
+  });
+  const shown = cards.filter(CARD_FILTERS[filter].test);
+  const none = !cards.length;
+  $("#card-filters").hidden = $("#cards-help").hidden = $("#cards-foot").hidden = $("#cards-study").hidden = none;
+  $("#cards-empty").hidden = shown.length > 0;
+  $("#cards-empty").textContent = none ? "Pas encore de flashcards pour ce cours : clique sur « + Ajouter des cartes »."
+    : CARD_FILTERS[filter].empty;
+  $("#card-grid").innerHTML = shown.map((c) => fcardHtml(c, { removable: true })).join("");
+}
+
+// Une flashcard de la grille : question, réponse au survol, ✓ quand elle est apprise.
+function fcardHtml(c, { removable = false, course = "" } = {}) {
+  const known = cardIsKnown(c);
+  const isNew = state.newCards?.has(c.id);
+  return `
+    <div class="fcard${known ? " is-known" : ""}" data-card="${c.id}" ${course ? `data-card-course="${course}"` : ""}
+         role="button" tabindex="0" aria-pressed="${known}" title="${known ? "Cliquer pour la remettre à revoir" : "Cliquer quand tu la connais"}">
+      <div class="fcard-inner">
+        <div class="fcard-face fcard-front"><p>${escapeHtml(c.front)}</p></div>
+        <div class="fcard-face fcard-back"><small>${escapeHtml(c.front)}</small><p>${escapeHtml(c.back)}</p></div>
+      </div>
+      <span class="fcard-mark" ${known ? 'aria-label="Apprise"' : ""}>${known ? "✓" : isNew ? "Nouvelle" : ""}</span>
+      ${removable ? `<span class="fcard-tools">
+        <button class="icon" data-edit-card="${c.id}" aria-label="Modifier cette carte" title="Modifier cette carte">${ICON_EDIT}</button>
+        <button class="icon fcard-delete" data-delete-card="${c.id}" aria-label="Supprimer cette carte" title="Supprimer cette carte">✕</button>
+      </span>` : ""}
+    </div>`;
+}
+
+document.querySelectorAll("[data-filter]").forEach((b) => b.addEventListener("click", () => {
+  state.cardFilter = b.dataset.filter;
+  renderCardGrid();
+}));
+
+async function toggleCard(el) {
+  const card = state.deck.cards.find((c) => c.id === el.dataset.card);
+  const known = !cardIsKnown(card);
+  card.status = known ? "known" : "review";
+  card.due = null;
+  api(`/api/courses/${state.course.id}/cards/${card.id}/review`, jsonBody("POST", { known }))
+    .then((updated) => { Object.assign(card, updated); if (!el.classList.contains("leaving")) renderCardGrid(); })
+    .catch(() => {});
+  state.course.cards.known += known ? 1 : -1;
+  state.course.cards.review += known ? -1 : 1;
+  renderTiles(state.course);
+  // La carte quitte la liste affichée (« À revoir » → « Apprises ») : petite animation avant de réafficher.
+  if (!CARD_FILTERS[state.cardFilter].test(card)) {
+    el.classList.add("leaving");
+    setTimeout(renderCardGrid, 260);
+  } else {
+    renderCardGrid();
+  }
+}
+
+$("#card-grid").addEventListener("click", async (e) => {
+  const edit = e.target.closest("[data-edit-card]");
+  if (edit) return openCardDialog(state.deck.cards.find((c) => c.id === edit.dataset.editCard));
+  const del = e.target.closest("[data-delete-card]");
+  if (del) {
+    if (!confirm("Supprimer cette carte ?")) return;
+    state.deck = await api(`/api/courses/${state.course.id}/cards/${del.dataset.deleteCard}`, { method: "DELETE" });
+    state.deck.course_id = state.course.id;
+    return refreshCourse();
+  }
+  const el = e.target.closest("[data-card]");
+  if (el) toggleCard(el);
+});
+$("#card-grid").addEventListener("keydown", (e) => {
+  if (e.target.closest("button")) return;
+  const el = e.target.closest("[data-card]");
+  if (el && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); toggleCard(el); }
+});
+
+$("#cards-clear").addEventListener("click", async () => {
+  if (!confirm("Effacer toutes les flashcards de ce cours (et leur suivi) ?")) return;
+  await api(`/api/courses/${state.course.id}/cards`, { method: "DELETE" });
+  state.deck = null;
+  refreshCourse();
+});
+
+// ---------- « + » des flashcards : générer avec l'IA ou écrire une carte ----------
+function openCardsMenu(button) {
+  const menu = $("#cards-menu");
+  if (!menu.hidden && menu.anchor === button) return closeCardsMenu();
+  menu.anchor = button;
+  menu.hidden = false;
+  const rect = button.getBoundingClientRect();
+  const left = Math.min(window.innerWidth - menu.offsetWidth - 12, Math.max(12, rect.right - menu.offsetWidth));
+  menu.style.left = `${left + window.scrollX}px`;
+  menu.style.top = `${rect.bottom + window.scrollY + 6}px`;
+  menu.querySelector("button").focus();
+}
+function closeCardsMenu() { $("#cards-menu").hidden = true; }
+document.addEventListener("click", (e) => {
+  if (!$("#cards-menu").hidden && !e.target.closest("#cards-menu, [data-create=cartes]")) closeCardsMenu();
+});
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeCardsMenu(); });
+$("#cards-menu").addEventListener("click", async (e) => {
+  const choice = e.target.closest("[data-cards-choice]")?.dataset.cardsChoice;
+  if (!choice) return;
+  closeCardsMenu();
+  if (choice === "ai") {
+    if (!state.course.files.length) return go(courseHash("fichiers"));
+    return go(courseHash("nouveau/cartes"));
+  }
+  if (state.tab !== "cartes") {
+    await openCourse(state.course.id, "cartes");
+    history.replaceState(null, "", courseHash("cartes"));
+  }
+  openCardDialog();
+});
+
+// ---------- Écrire ou corriger une carte ----------
+function openCardDialog(card = null, { onSaved = null } = {}) {
+  state.editing = { card, onSaved };
+  $("#card-dialog-title").textContent = card ? "Modifier la carte" : "Nouvelle carte";
+  $("#card-front-input").value = card?.front || "";
+  $("#card-back-input").value = card?.back || "";
+  $("#card-save").textContent = card ? "Enregistrer" : "Ajouter la carte";
+  $("#card-save-next").hidden = Boolean(card);
+  $("#card-dialog-status").hidden = true;
+  $("#card-dialog").showModal();
+  $("#card-front-input").focus();
+}
+
+async function saveCardDialog(keepOpen) {
+  const { card, onSaved } = state.editing;
+  const body = { front: $("#card-front-input").value, back: $("#card-back-input").value };
+  try {
+    if (card) {
+      Object.assign(card, await api(`/api/courses/${state.course.id}/cards/${card.id}`, jsonBody("PATCH", body)));
+    } else {
+      const result = await api(`/api/courses/${state.course.id}/cards/manual`, jsonBody("POST", body));
+      state.deck?.cards.push(result.card);
+      state.newCards = new Set([...(state.newCards || []), result.card.id]);
+      state.course.cards.total += 1;
+      state.course.cards.review += 1;
+      if (keepOpen) {
+        $("#card-front-input").value = $("#card-back-input").value = "";
+        $("#card-front-input").focus();
+        setStatus("#card-dialog-status", result.similar
+          ? `Carte ajoutée. Elle ressemble à « ${result.similar.front} » : supprime l'une des deux si c'est la même.`
+          : "Carte ajoutée. À la suivante !", !result.similar);
+      } else if (result.similar) {
+        alert(`Carte ajoutée. Elle ressemble à une carte existante : « ${result.similar.front} ».`);
+      }
+    }
+  } catch (err) {
+    return setStatus("#card-dialog-status", err.message, false);
+  }
+  if (!keepOpen) $("#card-dialog").close();
+  if (onSaved) onSaved();
+  else if (state.deck && !$("#view-course").hidden) {
+    if (!card) state.cardFilter = state.cardFilter === "known" ? "review" : state.cardFilter;
+    renderTiles(state.course);
+    renderCardGrid();
+  }
+}
+
+$("#card-form").addEventListener("submit", (e) => { e.preventDefault(); saveCardDialog(false); });
+$("#card-save-next").addEventListener("click", () => saveCardDialog(true));
+$("#card-cancel").addEventListener("click", () => $("#card-dialog").close());
+$("#card-write").addEventListener("click", () => openCardDialog());
+
+// ---------- Séance de révision : flashcards, et questions de quiz mélangées ----------
+// Une séance = une liste d'éléments { kind: "card" | "question", … } venant de /api/session.
+// Les cartes se notent À revoir / Difficile / Bien / Facile : Pirouette en déduit quand les reposer.
+const RATING_LABELS = { again: "À revoir", hard: "Difficile", good: "Bien", easy: "Facile" };
+
+function cardMode() {
+  try { return localStorage.getItem("pirouette.cardMode") === "type" ? "type" : "flip"; } catch { return "flip"; }
+}
+function setCardMode(mode) {
+  try { localStorage.setItem("pirouette.cardMode", mode); } catch {}
+  document.querySelectorAll("[data-card-mode]").forEach((b) => {
+    b.classList.toggle("active", b.dataset.cardMode === mode);
+    b.setAttribute("aria-checked", b.dataset.cardMode === mode);
+  });
+}
+document.addEventListener("click", (e) => {
+  const button = e.target.closest("[data-card-mode]");
+  if (!button) return;
+  setCardMode(button.dataset.cardMode);
+  // En pleine séance : la carte affichée passe tout de suite dans le nouveau mode (si on n'a pas encore répondu).
+  const s = state.session;
+  if (s && !$("#view-cards").hidden && s.items[s.index]?.kind === "card" && !s.revealed) showCard();
+});
+function mixQuestions() {
+  try { return localStorage.getItem("pirouette.mixQuestions") !== "0"; } catch { return true; }
+}
+
+// Lance une séance. `params` : mode (today / weak / cards), course, folder, filter.
+async function startSession(params, { title, back }) {
+  const query = new URLSearchParams({ questions: mixQuestions() ? "1" : "0", ...params });
+  if (params.mode === "cards") query.set("questions", "0");
+  const data = await api(`/api/session?${query}`);
+  if (!data.items.length) {
+    alert(params.mode === "weak" ? "Aucun point faible pour l'instant : continue comme ça !"
+      : params.mode === "today" ? "Rien à réviser aujourd'hui : tout est à jour." : "Aucune carte à réviser ici.");
+    return;
+  }
+  runSession(data.items, { title, back, params });
+}
+
+function runSession(items, { title, back, params = null }) {
+  state.session = { items, index: 0, flipped: false, results: [], title, back, params };
+  $("#session-correction").hidden = true;
+  $("#cards-title").textContent = title;
+  setCrumbs(sessionCrumbs(back, title));
+  $("#cards-done").hidden = true;
+  setCardMode(cardMode());
+  show("cards");
+  showItem();
+}
+
+function showItem() {
+  const s = state.session;
+  const item = s.items[s.index];
+  s.flipped = false;   // la carte montre sa réponse
+  s.revealed = false;  // la réponse a été vue : on peut noter (et retourner la carte autant qu'on veut)
+  s.checked = null;
+  $("#cards-counter").textContent = `${s.index + 1} / ${s.items.length}`;
+  $("#cards-bar").style.width = `${(s.index / s.items.length) * 100}%`;
+  const several = new Set(s.items.map((i) => i.course_id)).size > 1;
+  $("#session-origin").textContent = item.kind === "question"
+    ? `Question de quiz · ${several ? `${item.course_name} · ` : ""}${item.quiz_title}` : several ? item.course_name : "";
+  $("#card-stage").hidden = item.kind !== "card";
+  $("#question-stage").hidden = item.kind !== "question";
+  $("#session-mode").hidden = item.kind !== "card";
+  if (item.kind === "card") showCard();
+  else showSessionQuestion(item);
+}
+
+function showCard() {
+  const s = state.session;
+  const { card } = s.items[s.index];
+  const typing = cardMode() === "type";
+  $("#flashcard").classList.remove("flipped");
+  $("#card-front").textContent = card.front;
+  $("#card-back").textContent = card.back;
+  $("#card-back-question").textContent = card.front;
+  $("#card-source").innerHTML = card.source ? `Dans ton cours : « ${escapeHtml(card.source)} »` : "";
+  $("#card-front-hint").textContent = typing ? "Écris ta réponse ci-dessous" : "Clique ou appuie sur Espace pour retourner";
+  $("#typed-area").hidden = !typing;
+  $("#typed-answer").value = "";
+  $("#typed-answer").disabled = false;
+  $("#typed-result").hidden = true;
+  $("#ratings").hidden = true;
+  $("#card-keys-text").textContent = typing ? "Entrée pour vérifier, puis 1, 2 ou 3 pour répondre"
+    : "Espace pour retourner la carte, puis 1, 2 ou 3 pour répondre";
+  (typing ? $("#typed-answer") : $("#flashcard")).focus();
+}
+
+// Retourne la carte ; un nouveau clic la remet côté question (et ainsi de suite).
+function flipCard() {
+  const s = state.session;
+  if (!s || s.items[s.index]?.kind !== "card") return;
+  if (cardMode() === "type" && !s.checked) return checkTyped();
+  s.flipped = !s.flipped;
+  $("#flashcard").classList.toggle("flipped", s.flipped);
+  if (!s.revealed) {
+    s.revealed = true;
+    showRatings();
+  }
+}
+
+function showRatings(suggested = null) {
+  document.querySelectorAll("#ratings [data-rating]").forEach((b) => b.classList.toggle("suggested", b.dataset.rating === suggested));
+  $("#ratings").hidden = false;
+}
+
+// ---- Mode « j'écris la réponse » : comparaison souple avec le verso ----
+const FILLER_WORDS = new Set(("le la les l un une des du de d au aux a à en et ou est sont qui que qu ce ces cette se "
+  + "sa son ses leur leurs par pour sur dans avec il elle ils elles on ne pas plus y the of and to in is").split(" "));
+
+function answerWords(text) {
+  return normalize(text).split(" ").filter((w) => w.length > 1 && !FILLER_WORDS.has(w));
+}
+const stem = (w) => w.slice(0, 6);
+
+// Part des mots importants de la réponse attendue qu'on retrouve dans la réponse écrite (au début de mot près).
+function compareAnswer(given, expected) {
+  const said = new Set(answerWords(given).map(stem));
+  const wanted = [...new Set(answerWords(expected))];
+  if (!wanted.length) return { score: looselyEqual(given, expected) ? 1 : 0, found: new Set() };
+  const found = new Set(wanted.filter((w) => said.has(stem(w))));
+  return { score: found.size / wanted.length, found };
+}
+
+function highlightFound(expected, found) {
+  const stems = new Set([...found].map(stem));
+  return escapeHtml(expected).replace(/[\p{L}\p{N}]+/gu, (word) => {
+    const key = normalize(word);
+    return key.length > 1 && stems.has(stem(key)) ? `<mark>${word}</mark>` : word;
+  });
+}
+
+function checkTyped() {
+  const s = state.session;
+  const given = $("#typed-answer").value.trim();
+  if (!given) return $("#typed-answer").focus();
+  const { card } = s.items[s.index];
+  const { score, found } = compareAnswer(given, card.back);
+  const verdict = score >= 0.7 ? "right" : score >= 0.4 ? "close" : "wrong";
+  s.checked = { given, verdict };
+  s.flipped = s.revealed = true;
+  $("#typed-answer").disabled = true;
+  $("#flashcard").classList.add("flipped");
+  $("#card-back").innerHTML = highlightFound(card.back, found);
+  const box = $("#typed-result");
+  box.className = `typed-result ${verdict}`;
+  box.innerHTML = `<strong>${{ right: "✓ C'est juste !", close: "≈ Presque", wrong: "✗ Pas tout à fait" }[verdict]}</strong>
+    <span class="muted">${Math.round(score * 100)} % des mots importants de la réponse (surlignés sur la carte). À toi de juger :</span>`;
+  box.hidden = false;
+  showRatings({ right: "good", close: "hard", wrong: "again" }[verdict]);
+  $("#ratings .suggested")?.focus();
+}
+
+$("#typed-check").addEventListener("click", checkTyped);
+$("#typed-answer").addEventListener("keydown", (e) => {
+  if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); e.stopPropagation(); checkTyped(); }
+});
+
+function rateCard(rating) {
+  const s = state.session;
+  const item = s?.items[s.index];
+  if (!item || item.kind !== "card" || !s.revealed) return;
+  const { card } = item;
+  s.results.push({ kind: "card", item, rating, given: s.checked?.given || "" });
+  api(`/api/courses/${item.course_id}/cards/${card.id}/review`, jsonBody("POST", { rating }))
+    .then((updated) => {
+      Object.assign(card, updated);
+      const own = state.deck?.course_id === item.course_id && state.deck.cards.find((c) => c.id === card.id);
+      if (own && own !== card) Object.assign(own, updated);
+    })
+    .catch(() => {});
+  nextItem();
+}
+$("#ratings").addEventListener("click", (e) => {
+  const button = e.target.closest("[data-rating]");
+  if (button) rateCard(button.dataset.rating);
+});
+
+function nextItem() {
+  const s = state.session;
+  s.index += 1;
+  if (s.index < s.items.length) showItem();
+  else finishSession();
+}
+
+// ---- Questions de quiz dans la séance ----
+function showSessionQuestion(item) {
+  const q = item.question;
+  $("#sq-type").textContent = (TYPE_LABELS[q.type] || q.type) + (q.kind === "cours" ? " · Question de cours" : "");
+  $("#sq-text").textContent = q.question;
+  $("#sq-feedback").hidden = true;
+  $("#sq-validate").hidden = false;
+  $("#sq-next").hidden = true;
+  const area = $("#sq-answers");
+  if (q.type === "texte_a_trous") {
+    $("#sq-text").innerHTML = clozeHtml(q, "sq-short");
+    area.innerHTML = "";
+    $("#sq-short").focus();
+  } else if (!q.choices?.length) {
+    area.innerHTML = `<textarea id="sq-short" rows="2" placeholder="Ta réponse…"></textarea>`;
+    $("#sq-short").focus();
+  } else {
+    area.innerHTML = q.choices.map((c, i) => `
+      <label class="choice"><input type="radio" name="sq-choice" value="${i}"><span>${escapeHtml(c)}</span></label>`).join("");
+  }
+}
+
+function recordSessionAnswer(item, given, correct) {
+  state.session.results.push({ kind: "question", item, given, correct });
+  api(`/api/quizzes/${item.quiz_id}/answers`, jsonBody("POST", { answers: [{ index: item.index, correct }] })).catch(() => {});
+}
+
+const SQ_DELETE = `<p class="question-tools"><button class="link-button danger" type="button" data-sq-delete>Supprimer cette question (hors sujet)</button></p>`;
+
+$("#sq-feedback").addEventListener("click", async (e) => {
+  if (!e.target.closest("[data-sq-delete]")) return;
+  const s = state.session;
+  const item = s.items[s.index];
+  if (!(await deleteQuestion(item.quiz_id, item.index))) return;
+  // Sa réponse ne compte pas ; les questions suivantes du même quiz remontent d'un rang.
+  if (s.results.at(-1)?.item === item) s.results.pop();
+  s.items.forEach((other) => { if (other.kind === "question" && other.quiz_id === item.quiz_id && other.index > item.index) other.index -= 1; });
+  nextItem();
+});
+
+function sessionFeedback(q, correct, verdict = "") {
+  const fb = $("#sq-feedback");
+  fb.className = `feedback ${correct ? "ok" : "ko"}`;
+  fb.innerHTML = `${verdict}${q.explanation ? `<p>${escapeHtml(q.explanation)}</p>` : ""}${sourceHtml(q)}${keyTermsHtml(q)}${SQ_DELETE}`;
+  fb.hidden = false;
+  $("#sq-validate").hidden = true;
+  $("#sq-next").hidden = false;
+  $("#sq-next").focus();
+}
+
+function validateSessionQuestion() {
+  const s = state.session;
+  const item = s.items[s.index];
+  const q = item.question;
+  if (!q.choices?.length) {
+    const input = $("#sq-short");
+    const given = input.value.trim();
+    if (!given) return;
+    input.disabled = true;
+    if (typedIsRight(given, q.answer)) {
+      recordSessionAnswer(item, given, true);
+      return sessionFeedback(q, true, `<p><strong>Bonne réponse !</strong></p>`);
+    }
+    const fb = $("#sq-feedback");
+    fb.className = "feedback neutral";
+    fb.innerHTML = `<p><strong>Réponse attendue :</strong> ${escapeHtml(q.answer)}</p>
+      ${q.explanation ? `<p>${escapeHtml(q.explanation)}</p>` : ""}${sourceHtml(q)}
+      <div class="actions"><button class="primary" id="sq-right">J'avais bon</button><button class="ghost" id="sq-wrong">J'avais faux</button></div>${SQ_DELETE}`;
+    fb.hidden = false;
+    $("#sq-validate").hidden = true;
+    const grade = (correct) => { recordSessionAnswer(item, given, correct); nextItem(); };
+    $("#sq-right").onclick = () => grade(true);
+    $("#sq-wrong").onclick = () => grade(false);
+    return;
+  }
+  const picked = document.querySelector("input[name=sq-choice]:checked");
+  if (!picked) return;
+  const given = q.choices[Number(picked.value)];
+  const correct = given === q.answer;
+  document.querySelectorAll("#sq-answers .choice").forEach((label, i) => {
+    label.querySelector("input").disabled = true;
+    if (q.choices[i] === q.answer) label.classList.add("right");
+    else if (i === Number(picked.value)) label.classList.add("wrong");
+  });
+  recordSessionAnswer(item, given, correct);
+  sessionFeedback(q, correct);
+}
+$("#sq-validate").addEventListener("click", validateSessionQuestion);
+$("#sq-next").addEventListener("click", nextItem);
+
+const RATING_NAMES = { again: "Je ne savais pas", hard: "À moitié", good: "Je savais", easy: "Je savais" };
+const isMistake = (r) => (r.kind === "card" ? r.rating !== "good" && r.rating !== "easy" : !r.correct);
+
+function finishSession() {
+  const s = state.session;
+  const cards = s.results.filter((r) => r.kind === "card");
+  const questions = s.results.filter((r) => r.kind === "question");
+  const count = (rating) => cards.filter((r) => r.rating === rating).length;
+  const good = questions.filter((r) => r.correct).length;
+  const parts = [];
+  if (cards.length) {
+    parts.push([`<span class="ok-text">${plural(count("good") + count("easy"), "carte sue", "cartes sues")}</span>`,
+      count("hard") ? `${count("hard")} à moitié` : "",
+      count("again") ? `<span class="ko-text">${plural(count("again"), "pas sue", "pas sues")}</span>` : ""].filter(Boolean).join(" · "));
+  }
+  if (questions.length) parts.push(`${plural(good, "bonne réponse", "bonnes réponses")} sur ${questions.length}`);
+  $("#cards-bar").style.width = "100%";
+  $("#cards-summary").innerHTML = parts.join("<br>");
+  $("#session-correction-btn").hidden = !s.results.length;
+  $("#card-stage").hidden = $("#question-stage").hidden = $("#session-mode").hidden = true;
+  $("#session-correction").hidden = true;
+  $("#session-origin").textContent = "";
+  $("#cards-done").hidden = false;
+}
+
+// Correction de la séance : tout, ou seulement les erreurs (cartes pas ou à moitié sues, questions ratées).
+function showSessionCorrection(filter = "all") {
+  const s = state.session;
+  s.correctionFilter = filter;
+  document.querySelectorAll("[data-correction]").forEach((b) => b.classList.toggle("active", b.dataset.correction === filter));
+  const shown = s.results.filter((r) => filter === "all" || isMistake(r));
+  $("#session-review").innerHTML = shown.length ? shown.map((r) => {
+    const ok = !isMistake(r);
+    if (r.kind === "card") {
+      const { card } = r.item;
+      return `<li class="${ok ? "ok" : r.rating === "hard" ? "half" : "ko"}">
+        <p class="q">${escapeHtml(card.front)}</p>
+        ${r.given ? `<p class="${ok ? "given-ok" : "given-ko"}">Ta réponse : ${escapeHtml(r.given)}</p>` : ""}
+        <p>Réponse : <strong>${escapeHtml(card.back)}</strong></p>
+        <p class="muted small-text">${RATING_NAMES[r.rating]}</p>
+        <p class="question-tools">${explainButton({ course_id: r.item.course_id, question: card.front, expected: card.back, given: r.given, source: card.source })}</p>
+      </li>`;
+    }
+    const q = r.item.question;
+    return `<li class="${ok ? "ok" : "ko"}">
+      <p class="q">${escapeHtml(q.question)}</p>
+      <p class="${ok ? "given-ok" : "given-ko"}">${ok ? "✓" : "✗"} Ta réponse : ${escapeHtml(r.given || "")}</p>
+      ${ok ? "" : `<p>Bonne réponse : <strong>${escapeHtml(q.answer)}</strong></p>`}
+      ${q.explanation ? `<p class="muted">${escapeHtml(q.explanation)}</p>` : ""}
+      ${sourceHtml(q)}
+      <p class="question-tools">${explainButton({ course_id: r.item.course_id, question: q.question, expected: q.answer, given: r.given, source: q.source })}</p>
+    </li>`;
+  }).join("") : `<li class="empty muted">Aucune erreur : tout était juste.</li>`;
+  $("#session-redo").hidden = !s.results.some(isMistake);
+  $("#cards-done").hidden = true;
+  $("#session-correction").hidden = false;
+  window.scrollTo(0, 0);
+}
+
+$("#session-correction-btn").addEventListener("click", () => showSessionCorrection("all"));
+document.querySelectorAll("[data-correction]").forEach((b) => b.addEventListener("click", () => showSessionCorrection(b.dataset.correction)));
+$("#session-redo").addEventListener("click", () => {
+  const s = state.session;
+  const items = s.results.filter(isMistake).map((r) => r.item);
+  runSession(shuffle(items), { title: `${s.title} · mes erreurs`, back: s.back });
+});
+$("#session-correction-done").addEventListener("click", (e) => { state.sessionBack = state.session?.back; leaveSession(e); });
+
+const leaveSession = (e) => {
+  e?.preventDefault();
+  state.session = null;
+  state.deck = null;  // les cartes ont changé : relues depuis le serveur
+  go(state.sessionBack || "#/reviser");
+};
+// Fil d'Ariane d'une séance : depuis un cours (Mes cours › Cours › Flashcards › …), l'accueil ou Réviser.
+function sessionCrumbs(back, title) {
+  const inCourse = back.match(/^#\/cours\/([0-9a-f]{12})(?:\/([a-z]+))?/);
+  if (inCourse && state.course?.id === inCourse[1]) {
+    return courseCrumbs(state.course, TABS.includes(inCourse[2]) ? inCourse[2] : null, title);
+  }
+  if (back.startsWith("#/reviser/") && state.reviewScope) {
+    return [{ label: "Réviser", href: "#/reviser" }, { label: state.reviewScope.name, href: back }, { label: title }];
+  }
+  return [back === "#/" ? { label: "Accueil", href: "#/" } : { label: "Réviser", href: "#/reviser" }, { label: title }];
+}
+$("#session-done-back").addEventListener("click", (e) => { state.sessionBack = state.session?.back; leaveSession(e); });
+
+$("#flashcard").addEventListener("click", () => {
+  if (!window.getSelection().toString()) flipCard();
+});
+$("#card-edit-current").addEventListener("click", () => {
+  const s = state.session;
+  const item = s.items[s.index];
+  state.course = state.course?.id === item.course_id ? state.course : { id: item.course_id, cards: { total: 0, known: 0, review: 0 } };
+  openCardDialog(item.card, { onSaved: () => {
+    $("#card-front").textContent = $("#card-back-question").textContent = item.card.front;
+    $("#card-back").textContent = item.card.back;
+  } });
+});
+
+// Depuis un cours : « Réviser une par une » (cartes du filtre choisi), « Réviser ce cours », « Mes points faibles ».
+$("#cards-study").addEventListener("click", () => startSession(
+  { mode: "cards", course: state.course.id, filter: state.cardFilter },
+  { title: `Flashcards · ${state.course.name}`, back: courseHash("cartes") }));
+document.addEventListener("click", (e) => {
+  const mode = e.target.closest("[data-course-session]")?.dataset.courseSession;
+  if (!mode) return;
+  startSession({ mode, course: state.course.id },
+    { title: `${mode === "weak" ? "Points faibles" : "Révision"} · ${state.course.name}`, back: courseHash(state.tab) });
+});
+
+function renderCourseRevise(course) {
+  const { today, weak } = course.revision;
+  $("#course-revise").hidden = !course.cards.total && !course.quizzes.length;
+  $("#course-revise-text").innerHTML = `<b>${today}</b> carte${today > 1 ? "s" : ""} du jour · <b>${weak}</b> point${weak > 1 ? "s" : ""} faible${weak > 1 ? "s" : ""}`;
+  $("#course-weak-btn").disabled = !weak;
+}
+
+// ---------- Réviser : révision du jour, points faibles et suivi ----------
+// Page Réviser : d'abord quoi réviser (tout, un dossier, un cours)…
+async function openReview() {
+  state.course = null;
+  state.newCards = null;
+  const [data, folders] = await Promise.all([api("/api/progress"), api("/api/folders")]);
+  const courses = data.courses;
+  const counts = (list) => ({ today: list.reduce((n, c) => n + c.today, 0), weak: list.reduce((n, c) => n + c.weak, 0) });
+  const card = (href, name, { today, weak }, extra = "") => `
+    <a class="pick-card${extra}" href="${href}">
+      <strong>${escapeHtml(name)}</strong>
+      <small>${today || weak ? `${today ? `<b>${today}</b> carte${today > 1 ? "s" : ""} du jour` : ""}${today && weak ? " · " : ""}${
+        weak ? `${weak} point${weak > 1 ? "s" : ""} faible${weak > 1 ? "s" : ""}` : ""}` : "À jour ✓"}</small>
+    </a>`;
+  const archived = new Set(folders.filter((f) => f.archived).map((f) => f.id));
+  const active = courses.filter((c) => !archived.has(c.folder_id));
+  const known = new Set(folders.map((f) => f.id));
+  const group = (title, list, folderId = null) => list.length ? `
+    <div class="pick-group"><h2>${escapeHtml(title)}</h2>
+      <div class="pick-grid">${folderId && list.length > 1 ? card(`#/reviser/dossier/${folderId}`, "Tout le dossier", counts(list), " whole") : ""}${
+        list.map((c) => card(`#/reviser/cours/${c.id}`, c.name, c)).join("")}</div></div>` : "";
+  $("#review-pick").innerHTML = !courses.length
+    ? `<p class="empty-state muted">Pas encore de cours à réviser : crée un cours dans « Mes cours ».</p>`
+    : `<div class="pick-grid">${card("#/reviser/tout", "Tous mes cours", counts(active), " main")}</div>`
+      + folders.filter((f) => !f.archived).map((f) => group(f.name, courses.filter((c) => c.folder_id === f.id), f.id)).join("")
+      + group(folders.length ? "Sans dossier" : "Un cours", courses.filter((c) => !known.has(c.folder_id)))
+      + (archived.size ? `<details class="pick-archived"><summary>Archivés</summary>${
+        folders.filter((f) => f.archived).map((f) => group(f.name, courses.filter((c) => c.folder_id === f.id), f.id)).join("")}</details>` : "");
+  setCrumbs();
+  show("review");
+}
+
+// … puis, pour ce choix : révision du jour, points faibles, et le suivi (replié).
+async function openReviewScope(kind, id = "", sub = "") {
+  if (kind === "cours" && sub === "partiel") return openPartielPrep(id);
+  state.course = null;
+  let params = {}, name = "Tous mes cours";
+  if (kind === "dossier") {
+    params = { folder: id };
+    name = (await api("/api/folders")).find((f) => f.id === id)?.name || "Dossier";
+  } else if (kind === "cours") {
+    params = { course: id };
+    name = (await api(`/api/courses/${id}`)).name;
+  }
+  state.reviewScope = { params, name, hash: location.hash, single: kind === "cours" };
+  $("#review-scope-title").textContent = name;
+  setCardMode(cardMode());
+  $("#mix-questions").checked = mixQuestions();
+  setCrumbs([{ label: "Réviser", href: "#/reviser" }, { label: name }]);
+  show("review-scope");
+  await renderProgress();
+}
+
+const reviewScope = () => state.reviewScope?.params || {};
+
+async function renderProgress() {
+  const data = await api(`/api/progress?${new URLSearchParams(reviewScope())}`);
+  const { today, weak, week } = data;
+  $("#today-summary").innerHTML = today.cards || today.questions
+    ? `<b>${today.cards}</b> carte${today.cards > 1 ? "s" : ""}${today.questions ? ` · <b>${today.questions}</b> question${today.questions > 1 ? "s" : ""} de quiz` : ""}`
+    : "Tout est à jour";
+  $("#start-today").disabled = !today.cards && !(today.questions && mixQuestions());
+  $("#weak-summary").innerHTML = weak.cards || weak.questions
+    ? `<b>${weak.cards}</b> carte${weak.cards > 1 ? "s" : ""} · <b>${weak.questions}</b> question${weak.questions > 1 ? "s" : ""}`
+    : "Aucun pour l'instant";
+  $("#start-weak").disabled = !weak.cards && !(weak.questions && mixQuestions());
+
+  // Mode partiel : sur un cours. Depuis « Tous mes cours » ou un dossier, on choisit le cours.
+  const scoped = data.courses.filter((c) => (reviewScope().course ? c.id === reviewScope().course
+    : reviewScope().folder ? c.folder_id === reviewScope().folder : true));
+  const single = Boolean(state.reviewScope?.single);
+  $("#partiel-pick").hidden = single;
+  if (!single) {
+    const pick = $("#partiel-course");
+    const previous = pick.value;
+    pick.innerHTML = scoped.map((c) => `<option value="${c.id}">${escapeHtml(c.name)}</option>`).join("");
+    if (scoped.some((c) => c.id === previous)) pick.value = previous;
+  }
+  $("#start-partiel").disabled = !single && !scoped.length;
+
+  const pctText = (v) => (v === null ? "—" : `${v} %`);
+  $("#review-exam").hidden = !data.exam || data.exam.days <= -7;
+  if (data.exam) $("#review-exam").innerHTML = examSentence(data.exam);
+  $("#dash-mini").innerHTML = `<span><b>${week.cards}</b> carte${week.cards > 1 ? "s" : ""} cette semaine</span>`
+    + `<span><b>${pctText(week.cards_success)}</b> sues</span>`
+    + `<span><b>${data.active_days}</b> jour${data.active_days > 1 ? "s" : ""} actif${data.active_days > 1 ? "s" : ""}</span>`
+    + (weak.cards + weak.questions ? `<span><b>${weak.cards + weak.questions}</b> point${weak.cards + weak.questions > 1 ? "s" : ""} faible${weak.cards + weak.questions > 1 ? "s" : ""}</span>` : "");
+  $("#pg-cards").textContent = week.cards;
+  $("#pg-cards-success").textContent = pctText(week.cards_success);
+  $("#pg-questions-success").textContent = pctText(week.questions_success);
+  $("#progress-note").textContent = `· ${plural(data.active_days, "jour", "jours")} de révision`;
+
+  // Calendrier : une colonne par semaine (lundi en haut), plus foncé = plus de révisions.
+  const first = new Date(data.days[0].date);
+  const pad = (first.getDay() + 6) % 7;
+  const max = Math.max(1, ...data.days.map((d) => d.cards + d.questions));
+  const level = (n) => (!n ? 0 : Math.min(4, Math.ceil((4 * n) / max)));
+  $("#heatmap").innerHTML = Array(pad).fill(`<span class="heat off"></span>`).join("") + data.days.map((d) => {
+    const n = d.cards + d.questions;
+    const label = `${new Date(d.date).toLocaleDateString("fr-FR", { weekday: "short", day: "numeric", month: "short" })} : `
+      + (n ? `${plural(d.cards, "carte", "cartes")}, ${plural(d.questions, "question", "questions")}` : "rien");
+    return `<span class="heat l${level(n)}" title="${label}"></span>`;
+  }).join("");
+
+  const top = Math.max(1, ...data.forecast);
+  const dayName = (i) => (i === 0 ? "Auj." : i === 1 ? "Dem." : new Date(Date.now() + i * 86400000).toLocaleDateString("fr-FR", { weekday: "short" }));
+  $("#forecast").innerHTML = data.forecast.map((n, i) => `
+    <div class="fc-col" title="${plural(n, "carte", "cartes")}"><span class="fc-num">${n || ""}</span>
+      <span class="fc-bar" style="height:${Math.round((n / top) * 100)}%"></span><small>${dayName(i)}</small></div>`).join("");
+
+  const pct = (v) => (v === null ? `<span class="muted">—</span>` : `${v} %`);
+  const scope = reviewScope();
+  const rows = data.courses.filter((c) => (scope.course ? c.id === scope.course : scope.folder ? c.folder_id === scope.folder : true));
+  $("#course-progress-box").hidden = Boolean(state.reviewScope?.single);
+  $("#course-progress").innerHTML = rows.length ? rows.map((c) => `
+    <tr><td><a href="#/cours/${c.id}">${escapeHtml(c.name)}</a></td>
+      <td>${c.cards ? `${c.known} / ${c.cards}` : `<span class="muted">—</span>`}</td>
+      <td>${c.today || `<span class="muted">0</span>`}</td>
+      <td>${c.weak ? `<b class="ko-text">${c.weak}</b>` : `<span class="muted">0</span>`}</td>
+      <td>${pct(c.cards_success)}</td><td>${pct(c.questions_success)}</td>
+      <td>${c.last ? formatDay(c.last) : `<span class="muted">jamais</span>`}</td></tr>`).join("")
+    : `<tr><td colspan="7" class="muted">Aucun cours.</td></tr>`;
+}
+
+$("#mix-questions").addEventListener("change", (e) => {
+  try { localStorage.setItem("pirouette.mixQuestions", e.target.checked ? "1" : "0"); } catch {}
+  renderProgress();
+});
+$("#start-today").addEventListener("click", () => startSession({ mode: "today", ...reviewScope() },
+  { title: "Révision du jour", back: state.reviewScope.hash }));
+$("#start-partiel").addEventListener("click", () => {
+  const id = reviewScope().course || $("#partiel-course").value;
+  if (id) go(`#/reviser/cours/${id}/partiel`);
+});
+$("#start-weak").addEventListener("click", () => startSession({ mode: "weak", ...reviewScope() },
+  { title: "Points faibles", back: state.reviewScope.hash }));
+
+// ---------- Déroulé du quiz ----------
+function startQuiz(quiz, questions = quiz.questions) {
+  state.quiz = quiz;
+  state.questions = questions;
+  state.fullRun = questions.length === quiz.questions.length;
+  state.index = 0;
+  state.results = [];
+  $("#quiz-title").textContent = quiz.title;
+  // Tes questions dont la réponse n'est pas dans le cours : signalées au premier passage.
+  const note = $("#quiz-note");
+  note.hidden = !(quiz.dropped?.length && !quiz.attempts?.length);
+  note.textContent = quiz.dropped?.length
+    ? `Réponse introuvable dans le cours, question écartée : ${quiz.dropped.map((q) => `« ${q} »`).join(", ")}.` : "";
+  const inCourse = quiz.course_id && state.course?.id === quiz.course_id;
+  setCrumbs(inCourse ? courseCrumbs(state.course, "quiz", quiz.title)
+    : quiz.course_id ? [COURSES_CRUMB, { label: quiz.course_name || "Cours", href: `#/cours/${quiz.course_id}/quiz` }, { label: quiz.title }]
+    : [COURSES_CRUMB, { label: quiz.title }]);
+  $("#back-course-btn").textContent = quiz.course_id ? "Retour au cours" : "Mes cours";
+  show("quiz");
+  renderQuestion();
+}
+
+function backToCourse() {
+  go(state.quiz?.course_id ? `#/cours/${state.quiz.course_id}/quiz` : "#/cours");
+}
+$("#back-course-btn").addEventListener("click", backToCourse);
+
+function renderQuestion() {
+  const q = state.questions[state.index];
+  const total = state.questions.length;
+  state.answered = false;
+  $("#question-tools").hidden = true;
+  $("#quiz-counter").textContent = `${state.index + 1} / ${total}`;
+  if (state.index > 0) $("#quiz-note").hidden = true;
+  $("#progress-bar").style.width = `${(state.index / total) * 100}%`;
+  $("#question-type").textContent = (TYPE_LABELS[q.type] || q.type) + (q.kind === "cours" ? " · Question de cours" : "")
+    + (q.manual ? " · Ta question" : "");
+  $("#question-text").textContent = q.question;
+  $("#feedback").hidden = true;
+  $("#validate-btn").hidden = false;
+  $("#next-btn").hidden = true;
+
+  const area = $("#answer-area");
+  if (q.type === "texte_a_trous") {
+    $("#question-text").innerHTML = clozeHtml(q, "short-answer");
+    area.innerHTML = "";
+    $("#short-answer").focus();
+  } else if (q.type === "reponse_courte") {
+    area.innerHTML = `<textarea id="short-answer" rows="2" placeholder="Ta réponse…"></textarea>`;
+    $("#short-answer").focus();
+  } else {
+    area.innerHTML = q.choices.map((c, i) => `
+      <label class="choice"><input type="radio" name="choice" value="${i}">
+      <span>${escapeHtml(c)}</span></label>`).join("");
+  }
+}
+
+function sessionKeys(e) {
+  const s = state.session;
+  const item = s?.items[s.index];
+  if (!item || !$("#cards-done").hidden || e.metaKey || e.ctrlKey) return;
+  if (item.kind === "card") {
+    if (e.target.id === "typed-answer") return;
+    if ((e.key === " " || (e.key === "Enter" && !s.revealed)) && !e.target.closest?.("button")) { e.preventDefault(); flipCard(); }
+    else if (s.revealed && /^[1-3]$/.test(e.key)) { e.preventDefault(); rateCard(["again", "hard", "good"][e.key - 1]); }
+    return;
+  }
+  if (/^[1-9]$/.test(e.key) && e.target.tagName !== "TEXTAREA" && !$("#sq-validate").hidden) {
+    document.querySelectorAll("input[name=sq-choice]")[e.key - 1]?.click();
+  } else if (e.key === "Enter" && !e.shiftKey && !e.target.closest?.("button")) {
+    e.preventDefault();
+    if (!$("#sq-validate").hidden) validateSessionQuestion();
+    else if (!$("#sq-next").hidden) nextItem();
+  }
+}
+
+$("#validate-btn").addEventListener("click", validate);
+$("#next-btn").addEventListener("click", next);
+document.addEventListener("keydown", (e) => {
+  if (document.querySelector("dialog[open]")) return;  // on écrit dans une fenêtre (carte, signalement…)
+  if (!$("#view-cards").hidden) return sessionKeys(e);
+  if ($("#view-quiz").hidden || e.key !== "Enter" || e.shiftKey) return;
+  e.preventDefault();
+  if (!$("#validate-btn").hidden) validate();
+  else if (!$("#next-btn").hidden) next();
+});
+
+// Texte à trous : la phrase du cours avec un champ à la place du trou.
+function clozeHtml(q, inputId) {
+  const [before, after = ""] = q.question.split(BLANK);
+  const width = Math.max(6, Math.min(28, q.answer.length + 3));
+  return `<span class="cloze">${escapeHtml(before)}<input type="text" id="${inputId}" class="cloze-input" style="width:${width}ch"
+    autocomplete="off" spellcheck="false" aria-label="Mot manquant">${escapeHtml(after)}</span>`;
+}
+
+// Réponse tapée juste : identique à quelques détails près (accents, articles, majuscules, faute de frappe).
+function typedIsRight(given, expected) {
+  if (looselyEqual(given, expected)) return true;
+  const a = normalize(given), b = normalize(expected);
+  return b.length >= 5 && editDistance(a, b) <= Math.floor(b.length / 6);
+}
+function editDistance(a, b) {
+  let row = Array.from({ length: b.length + 1 }, (_, i) => i);
+  for (let i = 1; i <= a.length; i++) {
+    const next = [i];
+    for (let j = 1; j <= b.length; j++) next[j] = Math.min(row[j] + 1, next[j - 1] + 1, row[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+    row = next;
+  }
+  return row[b.length];
+}
+
+function validate() {
+  const q = state.questions[state.index];
+  if (q.type === "reponse_courte" || q.type === "texte_a_trous") return validateShort(q);
+
+  const picked = document.querySelector("input[name=choice]:checked");
+  if (!picked) return;
+  const given = q.choices[Number(picked.value)];
+  const correct = given === q.answer;
+  document.querySelectorAll(".choice").forEach((label, i) => {
+    label.querySelector("input").disabled = true;
+    if (q.choices[i] === q.answer) label.classList.add("right");
+    else if (i === Number(picked.value)) label.classList.add("wrong");
+  });
+  record(q, given, correct);
+}
+
+function validateShort(q) {
+  const input = $("#short-answer");
+  const given = input.value.trim();
+  if (!given) return;
+  input.disabled = true;
+  if (typedIsRight(given, q.answer)) return record(q, given, true);
+
+  // Réponse libre : on montre la réponse attendue et l'utilisateur s'auto-évalue.
+  state.answered = true;
+  showReportButton(q, given);
+  const fb = $("#feedback");
+  fb.className = "feedback neutral";
+  fb.innerHTML = `<p><strong>Réponse attendue :</strong> ${escapeHtml(q.answer)}</p>
+    ${q.explanation ? `<p>${escapeHtml(q.explanation)}</p>` : ""}
+    ${sourceHtml(q)}
+    ${keyTermsHtml(q)}
+    <div class="actions"><button class="primary" id="self-right">J'avais bon</button>
+    <button class="ghost" id="self-wrong">J'avais faux</button></div>
+`;
+  fb.hidden = false;
+  $("#validate-btn").hidden = true;
+  // La réponse attendue et l'explication sont déjà affichées : on passe directement à la suite.
+  const selfGrade = (correct) => { saveAnswer(q, correct); state.results.push({ question: q, given, correct }); next(); };
+  $("#self-right").onclick = () => selfGrade(true);
+  $("#self-wrong").onclick = () => selfGrade(false);
+}
+
+// Chaque réponse compte pour le suivi et les points faibles (même si on ne va pas au bout du quiz).
+function saveAnswer(q, correct) {
+  const index = state.quiz.questions.indexOf(q);
+  if (index >= 0) api(`/api/quizzes/${state.quiz.id}/answers`, jsonBody("POST", { answers: [{ index, correct }] })).catch(() => {});
+}
+
+function record(q, given, correct) {
+  saveAnswer(q, correct);
+  state.answered = true;
+  showReportButton(q, given);
+  state.results.push({ question: q, given, correct });
+  const fb = $("#feedback");
+  fb.className = `feedback ${correct ? "ok" : "ko"}`;
+  // QCM et vrai/faux : la bonne réponse est déjà surlignée en vert, inutile de la répéter.
+  const verdict = q.type === "reponse_courte" || q.type === "texte_a_trous"
+    ? `<p><strong>Bonne réponse !</strong>${q.type === "texte_a_trous" && given !== q.answer ? ` (${escapeHtml(q.answer)})` : ""}</p>` : "";
+  fb.innerHTML = `${verdict}
+    ${q.explanation ? `<p>${escapeHtml(q.explanation)}</p>` : ""}
+    ${sourceHtml(q)}
+    ${keyTermsHtml(q)}
+`;
+  fb.hidden = false;
+  $("#validate-btn").hidden = true;
+  $("#next-btn").hidden = false;
+  $("#next-btn").textContent = state.index + 1 < state.questions.length ? "Question suivante" : "Voir le résultat";
+  $("#next-btn").focus();
+}
+
+// La phrase du cours d'où vient la question (vérifiée à la création du quiz).
+function sourceHtml(item) {
+  return item.source ? `<p class="source"><span>Dans ton cours</span>« ${escapeHtml(item.source)} »</p>` : "";
+}
+
+function keyTermsHtml(q) {
+  if (!q.key_terms?.length) return "";
+  return `<details class="key-terms"><summary>Mots-clés (${q.key_terms.length})</summary><dl>
+    ${q.key_terms.map((t) => `<dt>${escapeHtml(t.term)}</dt><dd>${escapeHtml(t.definition)}</dd>`).join("")}
+  </dl></details>`;
+}
+
+function next() {
+  state.index += 1;
+  if (state.index < state.questions.length) renderQuestion();
+  else showResults();
+}
+
+// ---------- Résultats ----------
+function showResults() {
+  state.resultsFilter = "all";
+  renderResults();
+  show("results");
+  // Seules les sessions complètes comptent dans les scores du quiz.
+  const good = state.results.filter((r) => r.correct).length;
+  if (state.fullRun && state.results.length) {
+    api(`/api/quizzes/${state.quiz.id}/attempts`, jsonBody("POST", { score: good, total: state.results.length })).catch(() => {});
+  }
+}
+
+// Correction : toutes les questions, ou seulement les erreurs.
+function renderResults() {
+  const good = state.results.filter((r) => r.correct).length;
+  const total = state.results.length;
+  $("#score").textContent = total ? `${good} / ${total} (${Math.round((good / total) * 100)} %)` : "—";
+  $("#retry-wrong-btn").hidden = good === total;
+  const filter = state.resultsFilter || "all";
+  document.querySelectorAll("[data-results]").forEach((b) => b.classList.toggle("active", b.dataset.results === filter));
+  const shown = state.results.filter((r) => filter === "all" || !r.correct);
+  $("#review").innerHTML = shown.length ? shown.map((r) => `
+    <li class="${r.correct ? "ok" : "ko"}">
+      <p class="q">${escapeHtml(r.question.question)}</p>
+      <p class="${r.correct ? "given-ok" : "given-ko"}">${r.correct ? "✓" : "✗"} Ta réponse : ${escapeHtml(r.given)}</p>
+      ${r.correct ? "" : `<p>Bonne réponse : <strong>${escapeHtml(r.question.answer)}</strong></p>`}
+      ${r.question.explanation ? `<p class="muted">${escapeHtml(r.question.explanation)}</p>` : ""}
+      ${sourceHtml(r.question)}
+      ${keyTermsHtml(r.question)}
+      <p class="question-tools">
+        ${explainButton({ course_id: state.quiz.course_id, question: r.question.question, expected: r.question.answer, given: r.given, source: r.question.source })}
+        <button class="link-button" data-report="${state.results.indexOf(r)}">Signaler un problème</button>
+        <button class="link-button danger" data-delete-result="${state.results.indexOf(r)}">Supprimer cette question</button>
+      </p>
+    </li>`).join("") : `<li class="empty muted">Aucune erreur : tout était juste.</li>`;
+}
+
+document.querySelectorAll("[data-results]").forEach((b) => b.addEventListener("click", () => {
+  state.resultsFilter = b.dataset.results;
+  renderResults();
+}));
+
+// Supprimer une question jugée hors sujet (dans le quiz, la correction ou une séance de révision).
+async function deleteQuestion(quizId, index) {
+  if (!confirm("Supprimer cette question du quiz ? Elle ne sera plus jamais posée.")) return false;
+  await api(`/api/quizzes/${quizId}/questions/${index}`, { method: "DELETE" });
+  return true;
+}
+
+$("#review").addEventListener("click", async (e) => {
+  const at = e.target.closest("[data-delete-result]")?.dataset.deleteResult;
+  if (at === undefined) return;
+  const result = state.results[at];
+  const index = state.quiz.questions.indexOf(result.question);
+  if (!(await deleteQuestion(state.quiz.id, index))) return;
+  state.quiz.questions.splice(index, 1);
+  state.results.splice(at, 1);
+  renderResults();
+});
+
+$("#delete-q-btn").addEventListener("click", async () => {
+  const q = state.questions[state.index];
+  const index = state.quiz.questions.indexOf(q);
+  if (!(await deleteQuestion(state.quiz.id, index))) return;
+  state.quiz.questions.splice(index, 1);
+  // (La séance peut utiliser la liste du quiz elle-même : ne pas retirer deux fois.)
+  if (state.questions !== state.quiz.questions) state.questions.splice(state.index, 1);
+  // La réponse à cette question ne compte pas.
+  if (state.results.at(-1)?.question === q) state.results.pop();
+  if (state.index < state.questions.length) renderQuestion();
+  else if (state.results.length) showResults();
+  else backToCourse();
+});
+
+$("#retry-btn").addEventListener("click", () => startQuiz(state.quiz, shuffle(state.quiz.questions)));
+$("#retry-wrong-btn").addEventListener("click", () =>
+  startQuiz(state.quiz, state.results.filter((r) => !r.correct).map((r) => r.question)));
+
+// ---------- Définitions repérées dans un fichier ----------
+document.addEventListener("click", async (e) => {
+  const id = e.target.closest("[data-show-defs]")?.dataset.showDefs;
+  if (!id) return;
+  const file = state.course.files.find((f) => f.id === id);
+  const definitions = await api(`/api/courses/${state.course.id}/files/${id}/definitions`);
+  $("#defs-title").textContent = `Définitions repérées · ${file?.name || ""}`;
+  $("#defs-dialog-list").innerHTML = definitions.map((d) => `<li><strong>${escapeHtml(d.term)}</strong>
+    <span class="muted">${escapeHtml(d.definition)}</span></li>`).join("");
+  $("#defs-dialog").showModal();
+});
+$("#defs-close").addEventListener("click", () => $("#defs-dialog").close());
+
+// ---------- Signaler une question incorrecte ----------
+// Le signalement est gardé dans l'app, puis Pirouette ouvre l'app Mail avec le message prêt à partir.
+function showReportButton(q, given) {
+  state.reporting = { question: q, given };
+  $("#question-tools").hidden = false;
+}
+
+function openReport(question, given) {
+  state.reporting = { question, given };
+  const q = question;
+  $("#report-question").textContent = q.question;
+  $("#report-choices").innerHTML = (q.choices?.length ? q.choices : [q.answer]).map((c) => `
+    <li class="${c === q.answer ? "is-answer" : ""}">${c === q.answer ? "✓ " : ""}${escapeHtml(c)}${
+      c === given && c !== q.answer ? ` <span class="muted">(ta réponse)</span>` : ""}</li>`).join("");
+  $("#report-given").textContent = given && !q.choices?.length ? `Ta réponse : ${given}` : "";
+  $("#report-message").value = "";
+  $("#report-status").hidden = true;
+  $("#report-send").disabled = false;
+  $("#report-dialog").showModal();
+  $("#report-message").focus();
+}
+
+$("#report-btn").addEventListener("click", () => openReport(state.reporting.question, state.reporting.given));
+$("#review").addEventListener("click", (e) => {
+  const index = e.target.closest("[data-report]")?.dataset.report;
+  if (index !== undefined) openReport(state.results[index].question, state.results[index].given);
+});
+$("#report-cancel").addEventListener("click", () => $("#report-dialog").close());
+
+$("#report-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const { question, given } = state.reporting;
+  $("#report-send").disabled = true;
+  try {
+    const result = await api("/api/feedback", jsonBody("POST", {
+      quiz_id: state.quiz.id, index: state.quiz.questions.indexOf(question), given, message: $("#report-message").value,
+    }));
+    if (!result.opened) window.location.href = result.mailto;  // navigateur : ouvre l'app de mail
+    setStatus("#report-status", "Merci ! Ton app Mail s'ouvre avec le message prêt : il ne reste qu'à cliquer sur Envoyer.", true);
+    setTimeout(() => $("#report-dialog").close(), 4000);
+  } catch (err) {
+    setStatus("#report-status", err.message, false);
+    $("#report-send").disabled = false;
+  }
+});
+
+// ---------- Utilitaires ----------
+function escapeHtml(s) {
+  return String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+function normalize(s) {
+  return s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\b(le|la|les|l|un|une|des|du|de|d|the|a|an)\b/g, " ")
+    .replace(/\s+/g, " ").trim();
+}
+function looselyEqual(a, b) {
+  return normalize(a) === normalize(b);
+}
+function shuffle(list) {
+  const copy = [...list];
+  for (let i = copy.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [copy[i], copy[j]] = [copy[j], copy[i]];
+  }
+  return copy;
+}
+function formatSize(bytes) {
+  return bytes > 1e6 ? `${(bytes / 1e6).toFixed(1)} Mo` : `${Math.ceil(bytes / 1e3)} Ko`;
+}
+function formatDate(iso) {
+  if (!iso) return "";
+  return new Date(iso).toLocaleDateString("fr-FR", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+}
+
+// « aujourd'hui », « hier », « il y a 3 j », sinon la date courte.
+function formatDay(iso) {
+  if (!iso) return "";
+  const day = new Date(iso);
+  const days = Math.round((new Date().setHours(0, 0, 0, 0) - new Date(iso).setHours(0, 0, 0, 0)) / 86400000);
+  if (days <= 0) return "aujourd'hui";
+  if (days === 1) return "hier";
+  if (days < 7) return `il y a ${days} j`;
+  return day.toLocaleDateString("fr-FR", { day: "numeric", month: "short" });
+}
+
+route();
+
+// ---------- Menus déroulants aux couleurs de l'app ----------
+// Chaque <select> est doublé d'un bouton et d'une liste stylés ; le <select> (caché) garde la valeur, les
+// options et l'événement « change » : le reste du code n'a rien à changer. Les nouveaux <select> sont pris en
+// charge automatiquement.
+const CHEVRON = `<svg class="dd-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>`;
+const DD_ICONS = { folder: FOLDER_ICON.replace('class="folder-ico"', 'class="dd-icon"') };
+const valueProp = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value");
+const indexProp = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "selectedIndex");
+
+function enhanceSelect(select) {
+  if (select.dataset.dd) return;
+  select.dataset.dd = "1";
+  const box = document.createElement("div");
+  box.className = `dd ${select.className}`.trim();
+  box.innerHTML = `<button type="button" class="dd-btn" aria-haspopup="listbox" aria-expanded="false">
+      ${DD_ICONS[select.dataset.icon] || ""}<span class="dd-label"></span>${CHEVRON}</button>
+    <div class="dd-list" role="listbox" hidden></div>`;
+  select.after(box);
+  box.prepend(select);
+  select.hidden = true;
+  select.tabIndex = -1;
+  const button = box.querySelector(".dd-btn");
+  const list = box.querySelector(".dd-list");
+  if (select.getAttribute("aria-label")) button.setAttribute("aria-label", select.getAttribute("aria-label"));
+  if (select.id) document.querySelectorAll(`label[for="${select.id}"]`).forEach((l) => l.addEventListener("click", (e) => { e.preventDefault(); button.focus(); }));
+
+  const update = () => {
+    const option = select.options[select.selectedIndex];
+    box.querySelector(".dd-label").textContent = option ? option.textContent : "";
+    button.disabled = select.disabled;
+  };
+  // Valeur changée par le code (select.value = …) : le bouton suit.
+  Object.defineProperty(select, "value", { get() { return valueProp.get.call(this); }, set(v) { valueProp.set.call(this, v); update(); } });
+  Object.defineProperty(select, "selectedIndex", { get() { return indexProp.get.call(this); }, set(v) { indexProp.set.call(this, v); update(); } });
+  new MutationObserver(update).observe(select, { childList: true, subtree: true, attributes: true, attributeFilter: ["disabled"] });
+
+  let active = -1;
+  const items = () => [...list.querySelectorAll(".dd-option:not([aria-disabled=true])")];
+  const setActive = (i) => {
+    const all = items();
+    active = Math.max(0, Math.min(all.length - 1, i));
+    all.forEach((el, k) => el.classList.toggle("active", k === active));
+    all[active]?.scrollIntoView({ block: "nearest" });
+  };
+  const open = () => {
+    closeAllDropdowns(box);
+    list.innerHTML = [...select.children].map((node) => node.tagName === "OPTGROUP"
+      ? `<div class="dd-group">${escapeHtml(node.label)}</div>${[...node.children].map(optionHtml).join("")}`
+      : optionHtml(node)).join("");
+    list.hidden = false;
+    button.setAttribute("aria-expanded", "true");
+    box.classList.add("open");
+    // Pas la place en dessous : la liste s'ouvre vers le haut.
+    const rect = button.getBoundingClientRect();
+    box.classList.toggle("up", window.innerHeight - rect.bottom < Math.min(320, list.scrollHeight) + 16 && rect.top > window.innerHeight - rect.bottom);
+    setActive(items().findIndex((el) => el.dataset.index === String(select.selectedIndex)));
+  };
+  const close = () => {
+    list.hidden = true;
+    button.setAttribute("aria-expanded", "false");
+    box.classList.remove("open", "up");
+  };
+  const choose = (index) => {
+    close();
+    button.focus();
+    if (Number(index) === select.selectedIndex) return;
+    indexProp.set.call(select, Number(index));
+    update();
+    select.dispatchEvent(new Event("change", { bubbles: true }));
+  };
+  box.closeDropdown = close;
+  button.addEventListener("click", () => (list.hidden ? open() : close()));
+  list.addEventListener("click", (e) => {
+    const option = e.target.closest(".dd-option");
+    if (option && option.getAttribute("aria-disabled") !== "true") choose(option.dataset.index);
+  });
+  box.addEventListener("keydown", (e) => {
+    if (list.hidden) {
+      if (["ArrowDown", "ArrowUp", "Enter", " "].includes(e.key) && e.target === button) { e.preventDefault(); open(); }
+      return;
+    }
+    if (e.key === "ArrowDown") { e.preventDefault(); setActive(active + 1); }
+    else if (e.key === "ArrowUp") { e.preventDefault(); setActive(active - 1); }
+    else if (e.key === "Enter" || e.key === " ") { e.preventDefault(); const el = items()[active]; if (el) choose(el.dataset.index); }
+    else if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); close(); button.focus(); }
+    else if (e.key === "Tab") close();
+    else if (e.key.length === 1) {
+      const next = items().findIndex((el, k) => k > active && normalize(el.textContent).startsWith(normalize(e.key)));
+      if (next >= 0) setActive(next);
+    }
+  });
+  update();
+
+  function optionHtml(option) {
+    const index = [...select.options].indexOf(option);
+    const selected = index === select.selectedIndex;
+    return `<div class="dd-option${selected ? " selected" : ""}" role="option" data-index="${index}" aria-selected="${selected}"
+      ${option.disabled ? 'aria-disabled="true"' : ""}>${escapeHtml(option.textContent)}</div>`;
+  }
+}
+
+function closeAllDropdowns(except = null) {
+  document.querySelectorAll(".dd.open").forEach((box) => box !== except && box.closeDropdown());
+}
+document.addEventListener("click", (e) => { if (!e.target.closest(".dd")) closeAllDropdowns(); });
+document.querySelectorAll("select").forEach(enhanceSelect);
+new MutationObserver((changes) => {
+  for (const change of changes) {
+    change.addedNodes.forEach((node) => {
+      if (node.nodeType !== 1) return;
+      if (node.tagName === "SELECT") enhanceSelect(node);
+      else node.querySelectorAll?.("select").forEach(enhanceSelect);
+    });
+  }
+}).observe(document.body, { childList: true, subtree: true });
+
+// ---------- Feedback : une idée, un bug… ----------
+$("#feedback-btn").addEventListener("click", () => {
+  $("#feedback-message").value = "";
+  $("#feedback-status").hidden = true;
+  $("#feedback-send").disabled = false;
+  $("#feedback-dialog").showModal();
+  $("#feedback-message").focus();
+});
+$("#feedback-cancel").addEventListener("click", () => $("#feedback-dialog").close());
+$("#feedback-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const where = [...$("#crumbs").querySelectorAll("a, .here")].map((el) => el.textContent).join(" › ")
+    || document.querySelector("[data-nav].on")?.textContent || "";
+  $("#feedback-send").disabled = true;
+  try {
+    const result = await api("/api/feedback/general", jsonBody("POST", {
+      kind: $("#feedback-kind").value, message: $("#feedback-message").value, page: where,
+    }));
+    if (!result.opened) window.location.href = result.mailto;
+    setStatus("#feedback-status", "Merci ! Ton app Mail s'ouvre avec le message prêt : il ne reste qu'à cliquer sur Envoyer.", true);
+    setTimeout(() => $("#feedback-dialog").close(), 4000);
+  } catch (err) {
+    setStatus("#feedback-status", err.message, false);
+    $("#feedback-send").disabled = false;
+  }
+});
+
+// ---------- Mode partiel ----------
+// Préparation (nombre de questions et de flashcards, chronomètre), puis l'épreuve en conditions d'examen :
+// rien n'est corrigé avant « Rendre ma copie ». Les réponses écrites se corrigent à la main ou par l'IA, puis note /20.
+const PARTIEL_DEFAULTS = { questions: 20, cards: 10 };
+
+async function openPartielPrep(courseId) {
+  const [course, info] = await Promise.all([api(`/api/courses/${courseId}`),
+    api(`/api/courses/${courseId}/partiel?questions=0&cards=0`)]);
+  state.partielCourse = course;
+  state.course = null;
+  $("#partiel-course-name").textContent = course.name;
+  const { questions, cards } = info.available;
+  $("#partiel-questions").value = Math.min(PARTIEL_DEFAULTS.questions, questions);
+  $("#partiel-cards").value = Math.min(PARTIEL_DEFAULTS.cards, cards);
+  $("#partiel-questions-max").textContent = `(${questions} disponible${questions > 1 ? "s" : ""})`;
+  $("#partiel-cards-max").textContent = `(${cards} disponible${cards > 1 ? "s" : ""})`;
+  $("#partiel-questions").max = questions;
+  $("#partiel-cards").max = cards;
+  $("#partiel-timer").value = "none";
+  $("#partiel-minutes-field").hidden = true;
+  showError("#partiel-error", questions + cards ? "" : "Ce cours n'a encore ni quiz ni flashcards : crée-en d'abord.");
+  $("#partiel-go").disabled = !(questions + cards);
+  const history = info.history.slice().reverse();
+  $("#partiel-history").hidden = !history.length;
+  $("#partiel-history-list").innerHTML = history.map((h) => `<li><strong>${formatScore(h.score)} / 20</strong>
+    <span class="muted">${formatDay(h.date)} · ${plural(h.total, "question", "questions")}${h.duration ? ` · ${formatDuration(h.duration)}` : ""}</span></li>`).join("");
+  setCrumbs([{ label: "Réviser", href: "#/reviser" }, { label: course.name, href: `#/reviser/cours/${course.id}` }, { label: "Partiel" }]);
+  show("partiel");
+  updatePartielMinutes();
+}
+
+const formatScore = (n) => String(Math.round(n * 10) / 10).replace(".", ",");
+function formatDuration(seconds) {
+  const m = Math.floor(seconds / 60), sec = seconds % 60;
+  return m >= 60 ? `${Math.floor(m / 60)} h ${String(m % 60).padStart(2, "0")}` : `${m} min ${String(sec).padStart(2, "0")}`;
+}
+const clock = (seconds) => `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
+
+// Durée proposée pour le compte à rebours : environ une minute par élément.
+function updatePartielMinutes() {
+  if (!$("#partiel-minutes").dataset.touched) {
+    $("#partiel-minutes").value = Math.max(5, (Number($("#partiel-questions").value) || 0) + (Number($("#partiel-cards").value) || 0));
+  }
+}
+document.querySelectorAll("[data-count-for]").forEach((chips) => chips.addEventListener("click", (e) => {
+  const button = e.target.closest("button");
+  if (!button) return;
+  const input = $(`#${chips.dataset.countFor}`);
+  input.value = Math.min(Number(button.textContent), Number(input.max) || 200);
+  updatePartielMinutes();
+}));
+["#partiel-questions", "#partiel-cards"].forEach((id) => $(id).addEventListener("input", updatePartielMinutes));
+$("#partiel-minutes").addEventListener("input", (e) => { e.target.dataset.touched = "1"; });
+$("#partiel-timer").addEventListener("change", (e) => { $("#partiel-minutes-field").hidden = e.target.value !== "down"; });
+
+$("#partiel-go").addEventListener("click", async () => {
+  const course = state.partielCourse;
+  const questions = Number($("#partiel-questions").value) || 0;
+  const cards = Number($("#partiel-cards").value) || 0;
+  if (!questions && !cards) return showError("#partiel-error", "Choisis au moins une question ou une flashcard.");
+  const data = await api(`/api/courses/${course.id}/partiel?questions=${questions}&cards=${cards}`);
+  if (!data.items.length) return showError("#partiel-error", "Rien à mettre dans ce partiel pour l'instant.");
+  startExam(course, data.items, { timer: $("#partiel-timer").value, minutes: Number($("#partiel-minutes").value) || 30 });
+});
+
+function startExam(course, items, { timer, minutes }) {
+  clearInterval(state.exam?.tick);
+  state.exam = { course, items, answers: items.map(() => ""), doubts: items.map(() => false), index: 0,
+                 timer, limit: timer === "down" ? minutes * 60 : null, started: Date.now(), running: true, hideClock: false };
+  $("#exam-title").textContent = `Partiel · ${course.name}`;
+  $("#exam-run").hidden = false;
+  $("#exam-grading").hidden = $("#exam-result").hidden = true;
+  $("#exam-timer").hidden = timer === "none";
+  $("#exam-clock").hidden = false;
+  $("#exam-timer-toggle").textContent = "Masquer";
+  if (timer !== "none") {
+    state.exam.tick = setInterval(updateExamClock, 1000);
+    updateExamClock();
+  }
+  setCrumbs([{ label: "Réviser", href: "#/reviser" }, { label: course.name, href: `#/reviser/cours/${course.id}` },
+    { label: "Partiel", href: `#/reviser/cours/${course.id}/partiel` }, { label: "Épreuve" }]);
+  show("exam");
+  showExamItem();
+}
+
+const examElapsed = () => Math.round((Date.now() - state.exam.started) / 1000);
+function updateExamClock() {
+  const exam = state.exam;
+  if (!exam?.running) return;
+  const elapsed = examElapsed();
+  if (exam.limit) {
+    const left = Math.max(0, exam.limit - elapsed);
+    $("#exam-clock").textContent = `Il reste ${clock(left)}`;
+    $("#exam-timer").classList.toggle("urgent", left <= 60);
+    if (!left) submitExam(true);
+  } else {
+    $("#exam-clock").textContent = clock(elapsed);
+  }
+}
+$("#exam-timer-toggle").addEventListener("click", () => {
+  const hidden = !$("#exam-clock").hidden;
+  $("#exam-clock").hidden = hidden;
+  $("#exam-timer-toggle").textContent = hidden ? "Afficher le chrono" : "Masquer";
+});
+
+function renderExamNav() {
+  const exam = state.exam;
+  $("#exam-nav").innerHTML = exam.items.map((_, i) => {
+    const classes = [i === exam.index ? "current" : "", exam.answers[i] !== "" ? "done" : "", exam.doubts[i] ? "doubt" : ""].join(" ");
+    return `<button type="button" class="${classes.trim()}" data-exam-go="${i}" aria-label="Question ${i + 1}${exam.doubts[i] ? " (je doute)" : ""}">${i + 1}</button>`;
+  }).join("");
+}
+$("#exam-nav").addEventListener("click", (e) => {
+  const i = e.target.closest("[data-exam-go]")?.dataset.examGo;
+  if (i !== undefined) { state.exam.index = Number(i); showExamItem(); }
+});
+
+function showExamItem() {
+  const exam = state.exam;
+  const item = exam.items[exam.index];
+  const saved = exam.answers[exam.index];
+  const total = exam.items.length;
+  const area = $("#exam-answer");
+  if (item.kind === "card") {
+    $("#exam-tag").textContent = `${exam.index + 1} / ${total} · Flashcard`;
+    $("#exam-text").textContent = item.card.front;
+    area.innerHTML = `<textarea id="exam-input" rows="3" placeholder="Ta réponse…"></textarea>`;
+  } else {
+    const q = item.question;
+    $("#exam-tag").textContent = `${exam.index + 1} / ${total} · ${TYPE_LABELS[q.type] || q.type}`;
+    if (q.type === "texte_a_trous") {
+      $("#exam-text").innerHTML = clozeHtml(q, "exam-input");
+      area.innerHTML = "";
+    } else if (!q.choices?.length) {
+      $("#exam-text").textContent = q.question;
+      area.innerHTML = `<textarea id="exam-input" rows="2" placeholder="Ta réponse…"></textarea>`;
+    } else {
+      $("#exam-text").textContent = q.question;
+      area.innerHTML = q.choices.map((c, i) => `<label class="choice"><input type="radio" name="exam-choice" value="${i}"
+        ${saved === c ? "checked" : ""}><span>${escapeHtml(c)}</span></label>`).join("");
+    }
+  }
+  const input = $("#exam-input");
+  if (input) {
+    input.value = saved;
+    input.addEventListener("input", () => { exam.answers[exam.index] = input.value; renderExamNav(); });
+    input.focus();
+  }
+  $("#exam-doubt").classList.toggle("active", exam.doubts[exam.index]);
+  $("#exam-doubt").setAttribute("aria-pressed", exam.doubts[exam.index]);
+  $("#exam-prev").disabled = exam.index === 0;
+  $("#exam-next").disabled = exam.index === total - 1;
+  renderExamNav();
+}
+$("#exam-answer").addEventListener("change", (e) => {
+  if (e.target.name !== "exam-choice") return;
+  const exam = state.exam;
+  exam.answers[exam.index] = exam.items[exam.index].question.choices[Number(e.target.value)];
+  renderExamNav();
+});
+$("#exam-prev").addEventListener("click", () => { state.exam.index -= 1; showExamItem(); });
+$("#exam-next").addEventListener("click", () => { state.exam.index += 1; showExamItem(); });
+$("#exam-doubt").addEventListener("click", () => {
+  const exam = state.exam;
+  exam.doubts[exam.index] = !exam.doubts[exam.index];
+  showExamItem();
+});
+$("#exam-submit").addEventListener("click", () => submitExam(false));
+
+// On quitte l'épreuve en cours (menu, fil d'Ariane) : on demande d'abord.
+document.addEventListener("click", (e) => {
+  const link = e.target.closest("a[href^='#/']");
+  if (link && state.exam?.running && !$("#view-exam").hidden
+      && !confirm("Quitter le partiel ? Tes réponses seront perdues.")) e.preventDefault();
+}, true);
+
+// ---- Rendre la copie : correction automatique, puis réponses écrites ----
+function submitExam(timeUp) {
+  const exam = state.exam;
+  if (!exam.running) return;
+  if (!timeUp) {
+    const empty = exam.answers.filter((a) => !String(a).trim()).length;
+    const doubts = exam.doubts.filter(Boolean).length;
+    const warn = [empty ? plural(empty, "question sans réponse", "questions sans réponse") : "",
+      doubts ? plural(doubts, "question marquée « Je doute »", "questions marquées « Je doute »") : ""].filter(Boolean).join(" et ");
+    if (!confirm(`Rendre ta copie ?${warn ? ` Il reste ${warn}.` : ""}`)) return;
+  }
+  exam.running = false;
+  exam.duration = examElapsed();
+  clearInterval(exam.tick);
+  exam.results = exam.items.map((item, i) => {
+    const given = String(exam.answers[i] || "").trim();
+    if (!given) return { verdict: "faux", by: "auto" };
+    if (item.kind === "question") {
+      const q = item.question;
+      if (q.choices?.length) return { verdict: given === q.answer ? "juste" : "faux", by: "auto" };
+      if (typedIsRight(given, q.answer)) return { verdict: "juste", by: "auto" };
+    }
+    return { verdict: null, by: null };  // réponse écrite : à corriger
+  });
+  const written = exam.results.filter((r) => r.verdict === null).length;
+  $("#exam-run").hidden = true;
+  if (!written) return showExamResult();
+  $("#exam-grading-text").textContent = `${timeUp ? "Temps écoulé. " : ""}${plural(written, "réponse écrite", "réponses écrites")} à corriger (flashcards et réponses courtes). `
+    + "L'IA juge l'idée, pas la formulation ; tu pourras contester chaque verdict. Ou corrige toi-même en comparant avec la réponse attendue.";
+  $("#exam-grading-choice").hidden = false;
+  $("#exam-grading-status").hidden = $("#exam-manual").hidden = $("#exam-manual-done").hidden = true;
+  $("#exam-grading").hidden = false;
+  window.scrollTo(0, 0);
+}
+
+const examPrompt = (item) => (item.kind === "card" ? item.card.front : item.question.question);
+const examExpected = (item) => (item.kind === "card" ? item.card.back : item.question.answer);
+const examSource = (item) => (item.kind === "card" ? item.card.source : item.question.source) || "";
+
+$("#exam-grade-ai").addEventListener("click", async () => {
+  const exam = state.exam;
+  const pending = exam.results.map((r, i) => (r.verdict === null ? i : -1)).filter((i) => i >= 0);
+  $("#exam-grading-choice").hidden = true;
+  setStatus("#exam-grading-status", `L'IA corrige ${plural(pending.length, "réponse", "réponses")}… (quelques secondes par réponse)`, true);
+  try {
+    const { grades } = await api("/api/partiel/grade", jsonBody("POST", {
+      provider: "local", model: state.config?.local?.default_model || "",
+      items: pending.map((i) => ({ question: examPrompt(exam.items[i]), expected: examExpected(exam.items[i]),
+        given: exam.answers[i], source: examSource(exam.items[i]) })),
+    }));
+    pending.forEach((i, k) => { if (grades[k]) exam.results[i] = { verdict: grades[k].verdict, reason: grades[k].reason, by: "ai" }; });
+  } catch (err) {
+    setStatus("#exam-grading-status", `L'IA n'a pas pu corriger (${err.message}). Corrige toi-même ci-dessous.`, false);
+  }
+  if (exam.results.some((r) => r.verdict === null)) return showManualGrading();
+  showExamResult();
+});
+$("#exam-grade-self").addEventListener("click", showManualGrading);
+
+// Correction à la main : réponse écrite et réponse attendue côte à côte.
+function showManualGrading() {
+  const exam = state.exam;
+  $("#exam-grading-choice").hidden = true;
+  const pending = exam.results.map((r, i) => (r.verdict === null ? i : -1)).filter((i) => i >= 0);
+  $("#exam-manual").innerHTML = pending.map((i) => `
+    <li data-grade-item="${i}">
+      <p class="q">${escapeHtml(examPrompt(exam.items[i]))}</p>
+      <p>Ta réponse : <strong>${escapeHtml(exam.answers[i])}</strong></p>
+      <p class="muted">Réponse attendue : ${escapeHtml(examExpected(exam.items[i]))}</p>
+      <div class="filters verdicts">
+        <button type="button" data-verdict="juste">Juste</button>
+        <button type="button" data-verdict="partiel">À moitié</button>
+        <button type="button" data-verdict="faux">Faux</button>
+      </div>
+    </li>`).join("");
+  $("#exam-manual").hidden = false;
+  $("#exam-manual-done").hidden = false;
+  updateManualDone();
+}
+$("#exam-manual").addEventListener("click", (e) => {
+  const button = e.target.closest("[data-verdict]");
+  if (!button) return;
+  const li = button.closest("[data-grade-item]");
+  state.exam.results[li.dataset.gradeItem] = { verdict: button.dataset.verdict, by: "you" };
+  li.querySelectorAll("[data-verdict]").forEach((b) => b.classList.toggle("active", b === button));
+  updateManualDone();
+});
+function updateManualDone() {
+  const left = state.exam.results.filter((r) => r.verdict === null).length;
+  $("#exam-manual-done").disabled = left > 0;
+  $("#exam-manual-done").textContent = left ? `Encore ${left} à corriger` : "Voir ma note";
+}
+$("#exam-manual-done").addEventListener("click", showExamResult);
+
+// ---- La note sur 20 et la correction ----
+const VERDICT_POINTS = { juste: 1, partiel: 0.5, faux: 0 };
+const VERDICT_NAMES = { juste: "Juste", partiel: "À moitié", faux: "Faux" };
+
+function examScore() {
+  const exam = state.exam;
+  const points = exam.results.reduce((n, r) => n + VERDICT_POINTS[r.verdict], 0);
+  return { points, total: exam.items.length, score: Math.round((points / exam.items.length) * 200) / 10 };
+}
+
+async function showExamResult() {
+  const exam = state.exam;
+  $("#exam-grading").hidden = true;
+  $("#exam-result").hidden = false;
+  exam.filter = "all";
+  renderExamResult();
+  window.scrollTo(0, 0);
+  if (exam.recorded) return;
+  exam.recorded = true;
+  // Le suivi : réponses aux questions de quiz, et les flashcards (juste = sue, à moitié, faux = à revoir).
+  const byQuiz = {};
+  exam.items.forEach((item, i) => {
+    const verdict = exam.results[i].verdict;
+    if (item.kind === "question") (byQuiz[item.quiz_id] ||= []).push({ index: item.index, correct: verdict === "juste" });
+    else api(`/api/courses/${item.course_id}/cards/${item.card.id}/review`,
+      jsonBody("POST", { rating: { juste: "good", partiel: "hard", faux: "again" }[verdict] })).catch(() => {});
+  });
+  Object.entries(byQuiz).forEach(([quizId, answers]) => api(`/api/quizzes/${quizId}/answers`, jsonBody("POST", { answers })).catch(() => {}));
+  const { score, points, total } = examScore();
+  try {
+    exam.saved = await api(`/api/courses/${exam.course.id}/partiels`, jsonBody("POST", { score, points, total, duration: exam.duration }));
+  } catch {}
+}
+
+function renderExamResult() {
+  const exam = state.exam;
+  const { score } = examScore();
+  const count = (v) => exam.results.filter((r) => r.verdict === v).length;
+  $("#exam-score").textContent = `${formatScore(score)} / 20`;
+  $("#exam-summary").innerHTML = [`<span class="ok-text">${count("juste")} juste${count("juste") > 1 ? "s" : ""}</span>`,
+    count("partiel") ? `${count("partiel")} à moitié` : "", `<span class="ko-text">${count("faux")} faux</span>`,
+    `<span class="muted">en ${formatDuration(exam.duration)}</span>`].filter(Boolean).join(" · ");
+  document.querySelectorAll("[data-exam-filter]").forEach((b) => b.classList.toggle("active", b.dataset.examFilter === exam.filter));
+  const rows = exam.items.map((item, i) => ({ item, i, r: exam.results[i] }))
+    .filter(({ r }) => exam.filter === "all" || r.verdict !== "juste");
+  $("#exam-review").innerHTML = rows.length ? rows.map(({ item, i, r }) => {
+    const given = String(exam.answers[i] || "").trim();
+    const q = item.kind === "question" ? item.question : null;
+    const contestable = r.by === "ai" || r.by === "you";
+    return `<li class="${r.verdict === "juste" ? "ok" : r.verdict === "partiel" ? "half" : "ko"}" value="${i + 1}">
+      <p class="q">${escapeHtml(examPrompt(item))}${item.kind === "card" ? ` <span class="muted small-text">· flashcard</span>` : ""}</p>
+      <p class="${r.verdict === "juste" ? "given-ok" : "given-ko"}">${VERDICT_NAMES[r.verdict]} · Ta réponse : ${given ? escapeHtml(given) : "<em>pas de réponse</em>"}</p>
+      ${r.verdict === "juste" && q?.choices?.length ? "" : `<p>Réponse attendue : <strong>${escapeHtml(examExpected(item))}</strong></p>`}
+      ${r.reason ? `<p class="ai-reason"><span>Correction de l'IA</span>${escapeHtml(r.reason)}</p>` : ""}
+      ${q?.explanation ? `<p class="muted">${escapeHtml(q.explanation)}</p>` : ""}
+      ${sourceHtml(q || item.card)}
+      <p class="question-tools">${explainButton({ course_id: exam.course.id, question: examPrompt(item), expected: examExpected(item), given, source: examSource(item) })}</p>
+      ${contestable ? `<div class="contest"><span class="muted small-text">${r.by === "ai" ? "Pas d'accord ?" : "Changer :"}</span>
+        <div class="filters verdicts">${["juste", "partiel", "faux"].map((v) =>
+          `<button type="button" data-contest="${i}" data-verdict="${v}" class="${r.verdict === v ? "active" : ""}">${VERDICT_NAMES[v]}</button>`).join("")}</div></div>` : ""}
+    </li>`;
+  }).join("") : `<li class="empty muted">Aucune erreur : tout était juste.</li>`;
+  $("#exam-redo").hidden = !exam.results.some((r) => r.verdict !== "juste");
+}
+
+document.querySelectorAll("[data-exam-filter]").forEach((b) => b.addEventListener("click", () => {
+  state.exam.filter = b.dataset.examFilter;
+  renderExamResult();
+}));
+$("#exam-review").addEventListener("click", (e) => {
+  const button = e.target.closest("[data-contest]");
+  if (!button) return;
+  const exam = state.exam;
+  const result = exam.results[button.dataset.contest];
+  if (result.verdict === button.dataset.verdict) return;
+  result.verdict = button.dataset.verdict;
+  result.contested = true;
+  renderExamResult();
+  const { score, points, total } = examScore();
+  if (exam.saved) api(`/api/courses/${exam.course.id}/partiels`, jsonBody("POST", { id: exam.saved.id, score, points, total })).catch(() => {});
+});
+$("#exam-redo").addEventListener("click", () => {
+  const exam = state.exam;
+  const items = exam.items.filter((_, i) => exam.results[i].verdict !== "juste");
+  runSession(shuffle(items), { title: "Mes erreurs du partiel", back: `#/reviser/cours/${exam.course.id}` });
+});
+$("#exam-done").addEventListener("click", () => go(`#/reviser/cours/${state.exam.course.id}`));
+
+// Clavier pendant l'épreuve : ← / → pour changer de question, 1 à 4 pour choisir une proposition.
+document.addEventListener("keydown", (e) => {
+  if ($("#view-exam").hidden || $("#exam-run").hidden || !state.exam?.running || document.querySelector("dialog[open]")) return;
+  if (["TEXTAREA", "INPUT"].includes(e.target.tagName) && e.target.type !== "radio") return;
+  if (e.key === "ArrowRight" && !$("#exam-next").disabled) { e.preventDefault(); $("#exam-next").click(); }
+  else if (e.key === "ArrowLeft" && !$("#exam-prev").disabled) { e.preventDefault(); $("#exam-prev").click(); }
+  else if (/^[1-9]$/.test(e.key)) document.querySelectorAll("input[name=exam-choice]")[e.key - 1]?.click();
+});
+
+// ---------- Explique-moi : l'IA réexplique à partir du passage du cours ----------
+const explainPayloads = new Map();
+let explainCounter = 0;
+function explainButton(payload) {
+  const id = String(++explainCounter);
+  explainPayloads.set(id, payload);
+  return `<button class="link-button explain-btn" type="button" data-explain="${id}">Explique-moi</button>`;
+}
+
+document.addEventListener("click", async (e) => {
+  const button = e.target.closest("[data-explain]");
+  if (!button) return;
+  const payload = explainPayloads.get(button.dataset.explain);
+  const holder = button.closest("li, .question-tools") || button.parentElement;
+  let box = holder.querySelector(".ai-explain");
+  if (box && !box.classList.contains("loading")) return box.scrollIntoView({ block: "nearest" });
+  if (!box) {
+    box = document.createElement("div");
+    box.className = "ai-explain loading";
+    (button.closest(".question-tools") || button).after(box);
+  }
+  box.innerHTML = `<span>L'IA explique</span><p class="muted">Pirouette relit le passage du cours…</p>`;
+  button.disabled = true;
+  try {
+    const { explanation } = await api("/api/explain", jsonBody("POST", {
+      ...payload, model: state.config?.local?.default_model || "",
+    }));
+    box.innerHTML = `<span>L'IA explique</span><p>${escapeHtml(explanation)}</p>`;
+    box.classList.remove("loading");
+  } catch (err) {
+    box.innerHTML = `<span>L'IA explique</span><p class="error-text">${escapeHtml(err.message)}</p>`;
+    box.classList.remove("loading");
+    button.disabled = false;
+    box.remove();
+    alert(err.message);
+  }
+});
+
+// ---------- Cours mis à jour : questions et cartes qui ne correspondent plus ----------
+async function openOutdated() {
+  const data = await api(`/api/courses/${state.course.id}/outdated`);
+  state.outdated = data;
+  const row = (key, title, sub) => `<li><label><input type="checkbox" data-outdated="${escapeHtml(key)}" checked>
+    <span><strong>${escapeHtml(title)}</strong><small class="muted">${escapeHtml(sub)}</small></span></label></li>`;
+  $("#outdated-list").innerHTML = data.questions.map((q) => row(q.key, q.question, `Question · ${q.quiz_title}`)).join("")
+    + data.cards.map((c) => row(c.key, c.front, "Flashcard")).join("");
+  $("#outdated-dialog").showModal();
+}
+$("#outdated-open").addEventListener("click", openOutdated);
+$("#outdated-cancel").addEventListener("click", () => $("#outdated-dialog").close());
+
+async function resolveOutdated(removeChecked) {
+  const { questions, cards } = state.outdated;
+  const checked = new Set([...document.querySelectorAll("[data-outdated]")].filter((c) => removeChecked && c.checked).map((c) => c.dataset.outdated));
+  const body = {
+    questions: questions.filter((q) => checked.has(q.key)).map((q) => ({ quiz_id: q.quiz_id, index: q.index })),
+    cards: cards.filter((c) => checked.has(c.key)).map((c) => c.id),
+    keep: [...questions, ...cards].filter((x) => !checked.has(x.key)).map((x) => x.key),
+  };
+  await api(`/api/courses/${state.course.id}/outdated`, jsonBody("POST", body));
+  $("#outdated-dialog").close();
+  state.deck = null;
+  refreshCourse();
+}
+$("#outdated-form").addEventListener("submit", (e) => { e.preventDefault(); resolveOutdated(true); });
+$("#outdated-keep").addEventListener("click", () => resolveOutdated(false));
+
+// ---------- Semaine des partiels ----------
+const dayLong = (iso) => new Date(`${iso}T00:00`).toLocaleDateString("fr-FR", { day: "numeric", month: "long" });
+function daysUntil(iso) {
+  return Math.round((new Date(`${iso}T00:00`) - new Date().setHours(0, 0, 0, 0)) / 86400000);
+}
+// « Partiels le 15 décembre · J-23 »
+function examLabel(iso) {
+  const days = daysUntil(iso);
+  if (days <= 0 && days > -7) return "Partiels cette semaine";
+  if (days <= -7) return `Partiels passés (${dayLong(iso)})`;
+  return `Partiels le ${dayLong(iso)} · J-${days}`;
+}
+function examSentence(exam, name = "") {
+  const who = name ? ` <span class="muted">(${escapeHtml(name)})</span>` : "";
+  if (exam.days <= 0) return `<b>Semaine de partiels en cours</b>${who} : les cartes reviennent chaque jour.`;
+  return `<b>Partiels dans ${plural(exam.days, "jour", "jours")}</b>, le ${dayLong(exam.date)}${who}. Les révisions s'organisent pour que tout soit revu avant.`;
+}
+
+function openExamDialog({ folder = null, course = null }) {
+  state.examTarget = { folder, course };
+  const own = folder ? folder.exam_week : course.exam_week;
+  $("#exam-date").value = own || "";
+  const inherited = course && !own && course.exam?.from === "dossier" ? course.exam.date : null;
+  $("#exam-inherit").hidden = !inherited;
+  if (inherited) $("#exam-inherit").textContent = `Pour l'instant, ce cours suit la date de son dossier : ${dayLong(inherited)}. Une date ici la remplace pour ce cours seulement.`;
+  $("#exam-dialog-text").textContent = (folder
+    ? `Premier jour de la semaine de partiels pour tous les cours du dossier « ${folder.name} ». `
+    : "Indique le premier jour de ta semaine de partiels. ")
+    + "Les révisions s'organisent pour que tout soit revu avant, de plus en plus souvent à l'approche, puis chaque jour pendant la semaine.";
+  $("#exam-clear").hidden = !own;
+  $("#exam-status").hidden = true;
+  $("#exam-dialog").showModal();
+}
+
+async function saveExam(day) {
+  const { folder, course } = state.examTarget;
+  try {
+    if (folder) await api(`/api/folders/${folder.id}`, jsonBody("PATCH", { exam_week: day }));
+    else await api(`/api/courses/${course.id}/exam`, jsonBody("PUT", { date: day }));
+    $("#exam-dialog").close();
+    if (folder) loadCourses();
+    else refreshCourse();
+  } catch (err) {
+    setStatus("#exam-status", err.message, false);
+  }
+}
+$("#exam-form").addEventListener("submit", (e) => {
+  e.preventDefault();
+  if (!$("#exam-date").value) return setStatus("#exam-status", "Choisis une date.", false);
+  saveExam($("#exam-date").value);
+});
+$("#exam-clear").addEventListener("click", () => saveExam(""));
+$("#exam-cancel").addEventListener("click", () => $("#exam-dialog").close());
+$("#course-exam").addEventListener("click", () => {
+  $("#course-more-menu").hidden = true;
+  openExamDialog({ course: state.course });
+});
+$("#course-exam-chip").addEventListener("click", () => openExamDialog({ course: state.course }));
+
+// ---------- Mises à jour de l'app ----------
+// Au lancement : s'il existe une version plus récente, une petite fenêtre propose de l'installer en un clic.
+const UPDATE_ERRORS = {
+  offline: "Impossible de vérifier : pas de connexion à Internet ?",
+  private: "Les versions sont publiées sur un dépôt GitHub privé : Pirouette ne peut pas les voir toute seule. "
+    + "Rends le dépôt public (ou publie les versions ailleurs) pour activer les mises à jour automatiques.",
+  unavailable: "GitHub ne répond pas pour l'instant. Réessaie plus tard.",
+};
+
+async function checkUpdate({ quiet = false } = {}) {
+  let info;
+  try {
+    info = await api("/api/update");
+  } catch (err) {
+    if (!quiet) setStatus("#update-status", err.message, false);
+    return;
+  }
+  state.update = info;
+  if (!quiet) {
+    if (info.error) setStatus("#update-status", UPDATE_ERRORS[info.error] || info.error, false);
+    else setStatus("#update-status", info.available ? `La version ${info.latest} est disponible.` : "Tu as la dernière version.", true);
+  }
+  if (info.available) showUpdateToast(info);
+}
+
+function showUpdateToast(info) {
+  let dismissed = null;
+  try { dismissed = sessionStorage.getItem("pirouette.updateLater"); } catch {}
+  if (dismissed === info.latest && $("#view-settings").hidden) return;
+  $("#update-text").innerHTML = `<b>Pirouette ${escapeHtml(info.latest)}</b> est disponible.`
+    + (info.can_install ? " Tes cours et tes cartes sont gardés." : "");
+  $("#update-go").textContent = info.can_install ? "Mettre à jour" : "Télécharger";
+  $("#update-go").disabled = false;
+  $("#update-later").hidden = false;
+  $("#update-progress").hidden = true;
+  $("#update-toast").hidden = false;
+}
+
+$("#update-later").addEventListener("click", () => {
+  try { sessionStorage.setItem("pirouette.updateLater", state.update?.latest || ""); } catch {}
+  $("#update-toast").hidden = true;
+});
+
+$("#update-go").addEventListener("click", async () => {
+  const info = state.update;
+  if (!info.can_install) {
+    window.open(info.page, "_blank");
+    return;
+  }
+  $("#update-go").disabled = true;
+  $("#update-later").hidden = true;
+  $("#update-progress").hidden = false;
+  $("#update-text").textContent = "Téléchargement de la nouvelle version…";
+  try {
+    const response = await fetch("/api/update/install", jsonBody("POST", { url: info.url }));
+    if (!response.ok) throw new Error((await response.json().catch(() => ({}))).detail || `Erreur ${response.status}`);
+    for await (const event of ndjson(response)) {
+      if (event.type === "progress") $("#update-bar").style.width = `${event.percent}%`;
+      if (event.type === "status") $("#update-text").textContent = event.message;
+      if (event.type === "error") throw new Error(event.message);
+      if (event.type === "done") {
+        $("#update-text").textContent = "C'est prêt : Pirouette se ferme et se relance à jour.";
+        setTimeout(() => window.pywebview?.api?.quit(), 1200);
+        return;
+      }
+    }
+  } catch (err) {
+    $("#update-text").textContent = err.message;
+    $("#update-go").disabled = false;
+    $("#update-go").textContent = "Réessayer";
+    $("#update-later").hidden = false;
+  }
+});
+
+$("#update-check").addEventListener("click", () => checkUpdate());
+setTimeout(() => checkUpdate({ quiet: true }), 2500);

@@ -1,0 +1,387 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pirouette : pistes de design</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,300..800&display=swap" rel="stylesheet">
+<style>
+  @font-face { font-family: "Bricolage Grotesque"; font-weight: 200 800; src: url("../app/static/fonts/BricolageGrotesque-latin.woff2") format("woff2"); }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #EDE9E2; color: #171512; font: 15px/1.5 "Bricolage Grotesque", -apple-system, system-ui, sans-serif; }
+  .page { max-width: 1120px; margin: 0 auto; padding: 32px 16px 80px; }
+  .page > h1 { font-size: 32px; letter-spacing: -.02em; margin: 0 0 6px; }
+  .intro { color: #6E685E; margin: 0 0 20px; max-width: 780px; }
+
+  /* Barre de choix */
+  .controls { position: sticky; top: 0; z-index: 10; display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: center;
+              padding: 10px 0; background: #EDE9E2; }
+  .seg { display: inline-flex; gap: 3px; padding: 3px; background: #DDD7CD; border-radius: 12px; }
+  .seg button { font: inherit; font-size: 14px; border: 0; background: transparent; padding: 7px 14px; border-radius: 9px; cursor: pointer; color: #4A443C; }
+  .seg button.on { background: #fff; color: #171512; font-weight: 600; box-shadow: 0 1px 3px rgba(0,0,0,.12); }
+  .dir-note { margin: 6px 0 20px; padding: 14px 16px; background: #fff; border-radius: 12px; max-width: 820px; }
+  .dir-note strong { font-size: 17px; }
+  .dir-note p { margin: 4px 0 0; color: #5C564D; font-size: 14px; }
+  .dir-note .chips { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
+  .chip { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: #5C564D; }
+  .chip i { width: 16px; height: 16px; border-radius: 5px; display: inline-block; border: 1px solid rgba(0,0,0,.1); }
+  .screen-title { font-size: 13px; text-transform: uppercase; letter-spacing: .1em; color: #7A7368; margin: 30px 0 8px; }
+
+  /* Fenêtre d'app */
+  .window { border-radius: 14px; overflow: hidden; box-shadow: 0 20px 50px -24px rgba(40,25,10,.45), 0 0 0 1px rgba(0,0,0,.08); }
+  .titlebar { height: 30px; display: flex; align-items: center; gap: 7px; padding: 0 12px; background: var(--chrome); }
+  .titlebar i { width: 11px; height: 11px; border-radius: 50%; background: #E5645A; }
+  .titlebar i:nth-child(2) { background: #E3B341; } .titlebar i:nth-child(3) { background: #5DBB63; }
+
+  /* ---------- Jetons de couleur par direction et par thème ---------- */
+  .mock { --r: 14px; --btn-r: 999px;
+          background: var(--bg); color: var(--text); font-size: 15px; }
+  /* A · Cozy */
+  .mock[data-dir=a][data-theme=light] { --bg:#F6F0E6; --surface:#FFFBF4; --sunken:#EEE5D8; --text:#231A14; --muted:#7B6C5F; --border:#E6DACB;
+      --accent:#5B3A29; --ink:#5B3A29; --soft:#EADCCD; --primary:#231A14; --on-primary:#F6F0E6; --chrome:#E9E0D2;
+      --ok:#2F7D4F; --ok-soft:#E3EFE3; --ko:#B42318; --ko-soft:#F8E4DF; --icon-bg:#FFFBF4; --icon-fg:#5B3A29; }
+  .mock[data-dir=a][data-theme=dark] { --bg:#1B1411; --surface:#241C18; --sunken:#15100D; --text:#F3EADC; --muted:#B2A392; --border:#3A2E27;
+      --accent:#C8A27F; --ink:#D8B795; --soft:#33271F; --primary:#F3EADC; --on-primary:#1B1411; --chrome:#120D0B;
+      --ok:#7BC896; --ok-soft:#1F2E23; --ko:#EF8577; --ko-soft:#3A201B; --icon-bg:#F3EADC; --icon-fg:#1B1411; }
+  /* B · Carnet */
+  .mock[data-dir=b][data-theme=light] { --bg:#FAF8F3; --surface:#FFFEFB; --sunken:#F2EEE6; --text:#171512; --muted:#6E685E; --border:#E6E0D4;
+      --accent:#A0612D; --ink:#8A5226; --soft:#F3E6D7; --primary:#171512; --on-primary:#FAF8F3; --chrome:#ECE7DE;
+      --ok:#2F7D4F; --ok-soft:#E7F2EA; --ko:#B42318; --ko-soft:#FBEAE7; --icon-bg:#A0612D; --icon-fg:#FAF8F3; }
+  .mock[data-dir=b][data-theme=dark] { --bg:#17120F; --surface:#201915; --sunken:#130F0C; --text:#F1E9DE; --muted:#A99C8E; --border:#352B25;
+      --accent:#D9A06B; --ink:#E2B287; --soft:#33251B; --primary:#F1E9DE; --on-primary:#17120F; --chrome:#100C0A;
+      --ok:#7BC896; --ok-soft:#1D2C21; --ko:#EF8577; --ko-soft:#3A201B; --icon-bg:#D9A06B; --icon-fg:#17120F; }
+  /* C · Atelier */
+  .mock[data-dir=c][data-theme=light] { --bg:#F8F4EE; --surface:#FFFFFF; --sunken:#F1EAE1; --text:#1F1712; --muted:#7A6A5E; --border:#EADFD3;
+      --accent:#B4532A; --ink:#A1461F; --soft:#F7E2D6; --primary:#B4532A; --on-primary:#FFFFFF; --chrome:#EDE5DB;
+      --ok:#2F7D4F; --ok-soft:#E4F1E6; --ko:#B42318; --ko-soft:#FBE7E2; --icon-bg:#B4532A; --icon-fg:#FFF6EE;
+      --t1:#F4DCCB; --t2:#E9E0CC; --t3:#DCE6DA; --t4:#E6DDEB; }
+  .mock[data-dir=c][data-theme=dark] { --bg:#1D1512; --surface:#271E1A; --sunken:#171110; --text:#F5EBE1; --muted:#B5A394; --border:#3B2E28;
+      --accent:#E0875C; --ink:#EE9C74; --soft:#3A241A; --primary:#E0875C; --on-primary:#1D1512; --chrome:#130E0C;
+      --ok:#7BC896; --ok-soft:#1E2E22; --ko:#EF8577; --ko-soft:#3C211C; --icon-bg:#E0875C; --icon-fg:#1D1512;
+      --t1:#3F2A20; --t2:#38301F; --t3:#25332A; --t4:#342A38; }
+  .window .titlebar { --chrome: inherit; }
+
+  /* ---------- Éléments communs ---------- */
+  .inner { max-width: 880px; margin: 0 auto; padding: 26px 28px 34px; }
+  .btn { display: inline-flex; align-items: center; gap: 6px; padding: 10px 18px; border-radius: var(--btn-r); background: var(--primary);
+         color: var(--on-primary); font-weight: 600; font-size: 14.5px; text-decoration: none; white-space: nowrap; }
+  .btn.ghost { background: transparent; color: var(--text); box-shadow: inset 0 0 0 1px var(--border); }
+  .btn.sm { padding: 7px 13px; font-size: 13.5px; }
+  .lnk { color: var(--text); font-weight: 600; text-decoration: none; }
+  .muted { color: var(--muted); }
+  svg.cat { width: 100%; height: 100%; display: block; }
+
+  /* Menu du haut */
+  .nav { display: flex; align-items: center; gap: 18px; padding: 14px 28px; }
+  .brand { display: flex; align-items: center; gap: 10px; font: 700 19px/1 inherit; color: var(--text); text-decoration: none; }
+  .app-icon { width: 34px; height: 34px; border-radius: 9px; background: var(--icon-bg); color: var(--icon-fg); padding: 6px;
+              box-shadow: 0 0 0 1px rgba(0,0,0,.06), 0 2px 6px rgba(0,0,0,.12); }
+  .links { display: flex; gap: 22px; }
+  .links a { color: var(--muted); text-decoration: none; font-size: 15px; }
+  .links a.on { color: var(--text); }
+  .nav .cta { margin-left: auto; }
+
+  /* Accueil */
+  .hero h1 { margin: 0; letter-spacing: -.03em; font-weight: 600; }
+  .h-date { margin: 0 0 6px; font-size: 12.5px; letter-spacing: .12em; text-transform: uppercase; color: var(--ink); font-weight: 600; }
+  .h-sub { color: var(--muted); margin: 10px 0 0; font-size: 17px; }
+  .h-actions { display: flex; gap: 18px; align-items: center; margin-top: 20px; flex-wrap: wrap; }
+  .today { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-top: 22px; }
+  .stat { background: var(--surface); border-radius: var(--r); padding: 14px 16px; }
+  .stat b { display: block; font-size: 28px; line-height: 1.1; letter-spacing: -.02em; }
+  .stat span { color: var(--muted); font-size: 13.5px; }
+  .sec-title { display: flex; justify-content: space-between; align-items: baseline; margin: 30px 0 12px; }
+  .sec-title h2 { margin: 0; font-size: 20px; letter-spacing: -.01em; }
+  .courses { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
+  .course { display: flex; align-items: center; gap: 12px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r);
+            padding: 14px 16px; color: var(--text); text-decoration: none; position: relative; }
+  .c-badge { width: 40px; height: 40px; border-radius: 11px; display: grid; place-items: center; font-weight: 700; font-size: 17px; flex: none; }
+  .c-body { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+  .c-body strong { font-size: 16px; }
+  .c-body small { color: var(--muted); font-size: 13px; }
+  .c-meta { font-size: 13px; color: var(--muted); white-space: nowrap; }
+  .c-bar { position: absolute; left: 16px; right: 16px; bottom: 9px; height: 3px; border-radius: 3px; background: var(--sunken); overflow: hidden; display: none; }
+  .c-bar i { display: block; height: 100%; background: var(--accent); }
+
+  /* Page du cours */
+  .back { color: var(--muted); font-size: 14px; text-decoration: none; }
+  .c-head { display: flex; justify-content: space-between; align-items: center; margin: 8px 0 18px; gap: 12px; }
+  .c-head h1 { margin: 0; font-size: 34px; letter-spacing: -.02em; font-weight: 600; }
+  .tiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+  .tile { position: relative; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r); padding: 16px 18px; }
+  .tile.on { box-shadow: inset 0 0 0 1.5px var(--text); border-color: var(--text); }
+  .tile b { display: block; font-size: 32px; line-height: 1.05; letter-spacing: -.02em; color: var(--ink); }
+  .tile strong { display: block; font-size: 17px; margin-top: 2px; }
+  .tile small { color: var(--muted); font-size: 13px; }
+  .tile .plus { position: absolute; top: 14px; right: 14px; width: 30px; height: 30px; border-radius: 999px; display: grid; place-items: center;
+                background: var(--primary); color: var(--on-primary); font-weight: 600; font-size: 19px; line-height: 1; }
+  .t-ico { display: none; width: 22px; height: 22px; color: var(--ink); margin-bottom: 8px; }
+  .qlist { display: grid; gap: 8px; margin-top: 8px; }
+  .qitem { display: flex; justify-content: space-between; align-items: center; gap: 10px; background: var(--surface); border: 1px solid var(--border);
+           border-radius: 12px; padding: 12px 16px; }
+  .qitem strong { display: block; }
+  .qitem small { color: var(--muted); font-size: 13px; }
+  .score { font-size: 13px; font-weight: 600; padding: 3px 10px; border-radius: 999px; background: var(--soft); color: var(--ink); white-space: nowrap; }
+
+  /* Flashcards */
+  .filters { display: inline-flex; gap: 3px; padding: 3px; background: var(--sunken); border-radius: 999px; }
+  .filters span { padding: 6px 14px; border-radius: 999px; font-size: 13.5px; color: var(--muted); }
+  .filters span.on { background: var(--surface); color: var(--text); box-shadow: 0 1px 3px rgba(0,0,0,.12); }
+  .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-top: 14px; }
+  .fc { position: relative; height: 150px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r); padding: 16px;
+        display: flex; flex-direction: column; justify-content: center; text-align: center; gap: 6px; }
+  .fc p { margin: 0; font-weight: 600; font-size: 15.5px; line-height: 1.35; }
+  .fc.back { background: var(--sunken); }
+  .fc.back small { color: var(--muted); font-size: 12px; }
+  .fc.back p { font-weight: 400; font-size: 14px; }
+  .fc.known { background: var(--ok-soft); border-color: transparent; }
+  .fc .mark { position: absolute; top: 9px; left: 12px; font-size: 11.5px; font-weight: 700; color: var(--ink); }
+  .fc.known .mark { color: var(--ok); }
+  .fc .cursor { position: absolute; right: 22px; bottom: 16px; width: 18px; }
+
+  /* Quiz */
+  .progress { height: 5px; border-radius: 9px; background: var(--sunken); margin: 10px 0 18px; overflow: hidden; }
+  .progress i { display: block; height: 100%; width: 40%; background: var(--accent); }
+  .qcard { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r); padding: 22px; }
+  .qtype { font-size: 12px; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+  .qcard h2 { margin: 6px 0 14px; font-size: 21px; letter-spacing: -.01em; }
+  .choice { display: flex; align-items: center; gap: 12px; padding: 11px 14px; border-radius: 11px; border: 1px solid var(--border); margin-bottom: 7px; background: var(--bg); }
+  .choice i { width: 15px; height: 15px; border-radius: 50%; border: 1.5px solid var(--muted); flex: none; }
+  .choice.right { background: var(--ok-soft); border-color: transparent; }
+  .choice.right i { background: var(--ok); border-color: var(--ok); }
+  .choice.wrong { background: var(--ko-soft); border-color: transparent; }
+  .choice.wrong i { background: var(--ko); border-color: var(--ko); }
+  .explain { margin-top: 12px; padding: 12px 14px; border-radius: 11px; background: var(--sunken); font-size: 14.5px; }
+  .explain small { display: block; color: var(--muted); margin-top: 4px; }
+  .q-actions { display: flex; gap: 14px; align-items: center; margin-top: 16px; }
+
+  /* ---------- A · Cozy : fidèle à ta référence ---------- */
+  [data-dir=a] { --btn-r: 10px; }
+  [data-dir=a] .nav { padding: 16px 28px; }
+  [data-dir=a] .links { position: absolute; left: 50%; transform: translateX(-50%); }
+  [data-dir=a] .nav { position: relative; }
+  [data-dir=a] .hero { text-align: center; padding: 34px 0 6px; }
+  [data-dir=a] .hero h1 { font-size: 54px; line-height: 1.05; }
+  [data-dir=a] .h-sub { max-width: 520px; margin-left: auto; margin-right: auto; }
+  [data-dir=a] .h-actions { justify-content: center; }
+  [data-dir=a] .h-date, [data-dir=a] .today, [data-dir=a] .c-badge { display: none; }
+  [data-dir=a] .h-foot { display: block; text-align: center; color: var(--muted); font-size: 13px; margin-top: 14px; }
+
+  /* ---------- B · Carnet : éditorial, en lignes ---------- */
+  [data-dir=b] .links { margin-left: auto; gap: 20px; }
+  [data-dir=b] .links a.on { box-shadow: inset 0 -2px 0 var(--accent); padding-bottom: 4px; }
+  [data-dir=b] .nav { border-bottom: 1px solid var(--border); }
+  [data-dir=b] .nav .cta { margin-left: 0; }
+  [data-dir=b] .hero { padding: 22px 0 0; }
+  [data-dir=b] .hero h1 { font-size: 46px; line-height: 1.08; }
+  [data-dir=b] .h-sub { font-size: 16px; }
+  [data-dir=b] .h-sub b { color: var(--ink); }
+  [data-dir=b] .today, [data-dir=b] .h-actions .btn { display: none; }
+  [data-dir=b] .courses { grid-template-columns: 1fr; gap: 0; counter-reset: c; border-top: 1px solid var(--text); }
+  [data-dir=b] .course { border: 0; border-bottom: 1px solid var(--border); border-radius: 0; background: transparent; padding: 14px 4px; }
+  [data-dir=b] .course::before { counter-increment: c; content: counter(c, decimal-leading-zero); font-size: 13px; color: var(--muted); width: 26px; font-variant-numeric: tabular-nums; }
+  [data-dir=b] .c-badge { display: none; }
+  [data-dir=b] .c-body { flex-direction: row; align-items: baseline; gap: 12px; }
+  [data-dir=b] .c-body strong { font-size: 18px; }
+  [data-dir=b] .tiles { gap: 0; border-top: 1px solid var(--text); border-bottom: 1px solid var(--border); }
+  [data-dir=b] .tile { border: 0; border-radius: 0; background: transparent; padding: 16px 18px 16px 0; }
+  [data-dir=b] .tile + .tile { border-left: 1px solid var(--border); padding-left: 18px; }
+  [data-dir=b] .tile.on { box-shadow: inset 0 -3px 0 var(--accent); border-color: var(--border); }
+  [data-dir=b] .tile .plus { background: transparent; color: var(--ink); box-shadow: inset 0 0 0 1px var(--border); }
+  [data-dir=b] .qlist { gap: 0; }
+  [data-dir=b] .qitem { border: 0; border-bottom: 1px solid var(--border); border-radius: 0; background: transparent; padding: 12px 2px; }
+
+  /* ---------- C · Atelier : chaleureux et ludique ---------- */
+  [data-dir=c] { --r: 18px; }
+  [data-dir=c] .links { margin: 0 auto; background: var(--surface); padding: 5px; border-radius: 999px; gap: 2px; box-shadow: 0 0 0 1px var(--border); }
+  [data-dir=c] .links a { padding: 6px 14px; border-radius: 999px; font-size: 14px; }
+  [data-dir=c] .links a.on { background: var(--soft); color: var(--ink); font-weight: 600; }
+  [data-dir=c] .nav .cta { margin-left: 0; }
+  [data-dir=c] .hero { padding: 16px 0 0; }
+  [data-dir=c] .hero h1 { font-size: 40px; line-height: 1.1; }
+  [data-dir=c] .h-date, [data-dir=c] .h-actions { display: none; }
+  [data-dir=c] .stat { border: 1px solid var(--border); }
+  [data-dir=c] .stat:first-child { background: var(--accent); color: var(--on-primary); border-color: transparent; }
+  [data-dir=c] .stat:first-child span { color: var(--on-primary); opacity: .85; }
+  [data-dir=c] .course { border: 0; padding-bottom: 22px; box-shadow: 0 1px 0 var(--border), 0 8px 20px -16px rgba(60,30,10,.4); }
+  [data-dir=c] .c-bar { display: block; }
+  [data-dir=c] .courses .course:nth-child(1) .c-badge { background: var(--t1); }
+  [data-dir=c] .courses .course:nth-child(2) .c-badge { background: var(--t2); }
+  [data-dir=c] .courses .course:nth-child(3) .c-badge { background: var(--t3); }
+  [data-dir=c] .courses .course:nth-child(4) .c-badge { background: var(--t4); }
+  [data-dir=c] .tile { border: 0; box-shadow: 0 1px 0 var(--border), 0 8px 20px -16px rgba(60,30,10,.4); }
+  [data-dir=c] .tile.on { box-shadow: inset 0 0 0 2px var(--accent); }
+  [data-dir=c] .t-ico { display: block; }
+  [data-dir=c] .fc { border: 0; box-shadow: 0 1px 0 var(--border), 0 8px 20px -16px rgba(60,30,10,.4); }
+  [data-dir=c] .fc.known { box-shadow: none; }
+  [data-dir=c] .qcard { border: 0; box-shadow: 0 1px 0 var(--border), 0 10px 26px -18px rgba(60,30,10,.45); }
+
+  .h-foot { display: none; }
+  @media (max-width: 760px) {
+    .links { display: none !important; }
+    .courses, .tiles, .grid, .today { grid-template-columns: 1fr; }
+    [data-dir=a] .hero h1 { font-size: 38px; }
+    .inner { padding: 20px 16px; }
+  }
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute"><symbol id="logo" viewBox="0 0 100 100"><path fill="currentColor" d="M17 47 C15 36 15 22 18.5 11.5 C19.5 10 21 10 22.5 11 C29 15.5 36 21 41.5 26.5 C47 25.2 53 25.2 58.5 26.5 C64 21 71 15.5 77.5 11 C79 10 80.5 10 81.5 11.5 C85 22 85 36 83 47 C87 55 87.5 63 84 71 C78 83 65 89 50 89 C35 89 22 83 16 71 C12.5 63 13 55 17 47 Z"/></symbol></svg>
+
+<div class="page">
+  <h1>Pirouette : trois pistes de design</h1>
+  <p class="intro">Même police (Bricolage Grotesque), mêmes arrondis qu'aujourd'hui, et du marron à la place du vert pétrole.
+    Choisis une piste et le thème en haut ; les quatre écrans suivent. Tu peux aussi me dire « A pour le menu, C pour les cartes »…</p>
+
+  <div class="controls">
+    <div class="seg" id="dir-seg">
+      <button data-dir="a" class="on">A · Cozy</button>
+      <button data-dir="b">B · Carnet</button>
+      <button data-dir="c">C · Atelier</button>
+    </div>
+    <div class="seg" id="theme-seg">
+      <button data-theme="light" class="on">Clair</button>
+      <button data-theme="dark">Sombre</button>
+    </div>
+  </div>
+
+  <div class="dir-note" id="note"></div>
+
+  <p class="screen-title">1 · Accueil</p>
+  <div class="window"><div class="mock" data-screen>
+    <div class="titlebar"><i></i><i></i><i></i></div>
+    <nav class="nav">
+      <a class="brand"><span class="app-icon"><svg class="cat"><use href="#logo"/></svg></span>Pirouette</a>
+      <div class="links"><a class="on">Mes cours</a><a>Réviser</a><a>Lexique</a><a>Réglages</a></div>
+      <a class="btn sm cta">+ Nouveau cours</a>
+    </nav>
+    <div class="inner">
+      <div class="hero">
+        <p class="h-date">Samedi 26 septembre</p>
+        <h1>On révise, Pierre-Louis&nbsp;?</h1>
+        <p class="h-sub"><b>14 cartes</b> t'attendent aujourd'hui, et ton dernier quiz de Psychanalyse date d'hier.</p>
+        <div class="h-actions"><a class="btn">Reprendre les cartes</a><a class="lnk">Voir mes cours →</a></div>
+        <p class="h-foot">4 cours · 12 quiz faits · 86 cartes sues</p>
+        <div class="today">
+          <div class="stat"><b>14</b><span>cartes à revoir aujourd'hui</span></div>
+          <div class="stat"><b>5 jours</b><span>de révision d'affilée</span></div>
+          <div class="stat"><b>82 %</b><span>de réussite cette semaine</span></div>
+        </div>
+      </div>
+      <div class="sec-title"><h2>Mes cours</h2><span class="muted">4 cours</span></div>
+      <div class="courses">
+        <a class="course"><span class="c-badge">Ps</span><span class="c-body"><strong>Psychanalyse</strong><small>2 fichiers · 4 quiz · 32 cartes</small></span><span class="c-meta">hier</span><span class="c-bar"><i style="width:56%"></i></span></a>
+        <a class="course"><span class="c-badge">Ne</span><span class="c-body"><strong>Neurosciences, L2</strong><small>3 fichiers · 6 quiz · 40 cartes</small></span><span class="c-meta">il y a 3 j</span><span class="c-bar"><i style="width:72%"></i></span></a>
+        <a class="course"><span class="c-badge">Hi</span><span class="c-body"><strong>Histoire de l'art</strong><small>1 fichier · 1 quiz · 12 cartes</small></span><span class="c-meta">12 sept.</span><span class="c-bar"><i style="width:25%"></i></span></a>
+        <a class="course"><span class="c-badge">Bi</span><span class="c-body"><strong>Biologie cellulaire</strong><small>2 fichiers · 1 quiz · 2 cartes</small></span><span class="c-meta">3 sept.</span><span class="c-bar"><i style="width:90%"></i></span></a>
+      </div>
+    </div>
+  </div></div>
+
+  <p class="screen-title">2 · Page d'un cours</p>
+  <div class="window"><div class="mock" data-screen>
+    <div class="titlebar"><i></i><i></i><i></i></div>
+    <nav class="nav">
+      <a class="brand"><span class="app-icon"><svg class="cat"><use href="#logo"/></svg></span>Pirouette</a>
+      <div class="links"><a class="on">Mes cours</a><a>Réviser</a><a>Lexique</a><a>Réglages</a></div>
+      <a class="btn sm cta">+ Nouveau cours</a>
+    </nav>
+    <div class="inner">
+      <a class="back">← Mes cours</a>
+      <div class="c-head"><h1>Psychanalyse</h1><a class="btn ghost sm">Renommer</a></div>
+      <div class="tiles">
+        <div class="tile on"><svg class="t-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .8-1 1.5v.4M12 17h.01"/></svg><span class="plus">+</span><b>4</b><strong>Quiz</strong><small>Meilleur score 90 %</small></div>
+        <div class="tile"><svg class="t-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><rect x="3" y="6" width="13" height="15" rx="2"/><path d="M8 3h11a2 2 0 0 1 2 2v12"/></svg><span class="plus">+</span><b>32</b><strong>Flashcards</strong><small>18 sues · 14 à revoir</small></div>
+        <div class="tile"><svg class="t-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M6 3h8l5 5v13H6z"/><path d="M14 3v5h5"/></svg><span class="plus">+</span><b>2</b><strong>Fichiers</strong><small>7 chapitres</small></div>
+      </div>
+      <div class="sec-title"><h2>Quiz</h2><a class="btn sm">+ Nouveau quiz</a></div>
+      <div class="qlist">
+        <div class="qitem"><span><strong>Quiz 4 · Le moi et le ça</strong><small>15 questions · difficile · Chapitres 2 et 3</small></span><span class="score">9 / 10</span></div>
+        <div class="qitem"><span><strong>Quiz 3 · Les stades du développement</strong><small>10 questions · moyen · tout le cours</small></span><span class="score">7 / 10</span></div>
+        <div class="qitem"><span><strong>Quiz 2 · Freud et ses héritiers</strong><small>10 questions · facile · Chapitre 1</small></span><span class="score">Pas encore fait</span></div>
+      </div>
+    </div>
+  </div></div>
+
+  <p class="screen-title">3 · Flashcards</p>
+  <div class="window"><div class="mock" data-screen>
+    <div class="titlebar"><i></i><i></i><i></i></div>
+    <nav class="nav">
+      <a class="brand"><span class="app-icon"><svg class="cat"><use href="#logo"/></svg></span>Pirouette</a>
+      <div class="links"><a class="on">Mes cours</a><a>Réviser</a><a>Lexique</a><a>Réglages</a></div>
+      <a class="btn sm cta">+ Nouveau cours</a>
+    </nav>
+    <div class="inner">
+      <a class="back">← Psychanalyse</a>
+      <div class="sec-title" style="margin-top:10px"><h2 style="font-size:26px">Flashcards</h2><span style="display:flex;gap:10px"><a class="btn ghost sm">Réviser une par une</a><a class="btn sm">+ Ajouter</a></span></div>
+      <div class="filters"><span class="on">À revoir 14</span><span>Sues 18</span><span>Toutes 32</span></div>
+      <div class="grid">
+        <div class="fc"><span class="mark">Nouvelle</span><p>Qu'est-ce que la plasticité cérébrale ?</p></div>
+        <div class="fc back"><small>Que désigne le « ça » chez Freud ?</small><p>L'instance inconsciente des pulsions, régie par le principe de plaisir.</p>
+          <svg class="cursor" viewBox="0 0 24 24"><path d="M5 3l13 8-6 1.5L9 19z" fill="#fff" stroke="#000" stroke-width="1.4" stroke-linejoin="round"/></svg></div>
+        <div class="fc"><p>Quel est le rôle du surmoi ?</p></div>
+        <div class="fc known"><span class="mark">✓ Sue</span><p>Qu'est-ce que le complexe d'Œdipe ?</p></div>
+        <div class="fc"><p>Définis le refoulement.</p></div>
+        <div class="fc"><p>Qui a introduit la notion de stade du miroir ?</p></div>
+      </div>
+    </div>
+  </div></div>
+
+  <p class="screen-title">4 · Question de quiz</p>
+  <div class="window"><div class="mock" data-screen>
+    <div class="titlebar"><i></i><i></i><i></i></div>
+    <nav class="nav">
+      <a class="brand"><span class="app-icon"><svg class="cat"><use href="#logo"/></svg></span>Pirouette</a>
+      <div class="links"><a class="on">Mes cours</a><a>Réviser</a><a>Lexique</a><a>Réglages</a></div>
+      <a class="btn sm cta">+ Nouveau cours</a>
+    </nav>
+    <div class="inner">
+      <a class="back">← Psychanalyse</a>
+      <div class="c-head" style="margin-bottom:0"><h1 style="font-size:26px">Le moi et le ça</h1><span class="score">4 / 10</span></div>
+      <div class="progress"><i></i></div>
+      <div class="qcard">
+        <span class="qtype">QCM</span>
+        <h2>Selon Freud, quelle instance est régie par le principe de réalité ?</h2>
+        <div class="choice right"><i></i>Le moi</div>
+        <div class="choice wrong"><i></i>Le ça</div>
+        <div class="choice"><i></i>Le surmoi</div>
+        <div class="choice"><i></i>L'idéal du moi</div>
+        <div class="explain">Le moi arbitre entre les pulsions du ça, les exigences du surmoi et la réalité extérieure.
+          <small>💡 Un mot inconnu ? Sélectionne-le pour voir sa définition.</small></div>
+      </div>
+      <div class="q-actions"><a class="btn">Question suivante</a><a class="lnk">Quitter le quiz</a></div>
+    </div>
+  </div></div>
+</div>
+
+<script>
+  const NOTES = {
+    a: { title: "A · Cozy : au plus près de ta référence",
+         text: "Menu centré avec un seul bouton à droite, icône du chat dans un carré crème, grand titre centré, bouton plein + lien fléché. En sombre, le fond brun presque noir et le texte crème de Cozy. Accent : brun chocolat, discret.",
+         colors: [["#5B3A29", "chocolat (clair)"], ["#1B1411", "fond sombre"], ["#F3EADC", "crème"]] },
+    b: { title: "B · Carnet : ma proposition, façon agenda / magazine",
+         text: "Accueil aligné à gauche avec la date du jour, cours en liste numérotée (comme un sommaire) plutôt qu'en cartes, filets fins, menu à droite souligné. Plus sobre et plus « papier ». Accent : caramel.",
+         colors: [["#A0612D", "caramel (clair)"], ["#D9A06B", "caramel (sombre)"], ["#17120F", "fond sombre"]] },
+    c: { title: "C · Atelier : ma proposition, plus chaleureuse et ludique",
+         text: "Menu en pilule au centre, un tableau « aujourd'hui » (cartes à revoir, jours d'affilée, réussite), une pastille de couleur par cours et sa barre de progression, cartes sans contour avec une ombre douce. Accent : terre cuite.",
+         colors: [["#B4532A", "terre cuite (clair)"], ["#E0875C", "terre cuite (sombre)"], ["#1D1512", "fond sombre"]] },
+  };
+  let dir = "a", theme = "light";
+  function apply() {
+    document.querySelectorAll("[data-screen]").forEach((m) => { m.dataset.dir = dir; m.dataset.theme = theme; });
+    document.querySelectorAll("#dir-seg button").forEach((b) => b.classList.toggle("on", b.dataset.dir === dir));
+    document.querySelectorAll("#theme-seg button").forEach((b) => b.classList.toggle("on", b.dataset.theme === theme));
+    const n = NOTES[dir];
+    document.getElementById("note").innerHTML = `<strong>${n.title}</strong><p>${n.text}</p><div class="chips">${
+      n.colors.map(([c, l]) => `<span class="chip"><i style="background:${c}"></i>${l} ${c}</span>`).join("")}</div>`;
+  }
+  document.querySelectorAll("#dir-seg button").forEach((b) => b.onclick = () => { dir = b.dataset.dir; apply(); });
+  document.querySelectorAll("#theme-seg button").forEach((b) => b.onclick = () => { theme = b.dataset.theme; apply(); });
+  const params = new URLSearchParams(location.search);
+  dir = params.get("dir") || dir; theme = params.get("theme") || theme;
+  apply();
+</script>
+</body>
+</html>

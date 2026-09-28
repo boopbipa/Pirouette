@@ -1,0 +1,25 @@
+PIROUETTE — installation
+========================
+
+1. Glisse l'icône Pirouette sur le dossier Applications.
+
+2. Premier lancement (une seule fois) :
+   Pirouette n'est pas signée avec un certificat Apple payant, donc macOS
+   affiche « Pirouette ne peut pas être ouverte » ou « … Apple ne peut pas vérifier… ».
+   → Clique sur « OK » (ou « Terminé »), puis ouvre :
+     Réglages Système → Confidentialité et sécurité
+   → Tout en bas, à côté de « Pirouette a été bloquée », clique sur « Ouvrir quand même »,
+     puis confirme avec ton mot de passe.
+   Ensuite, Pirouette s'ouvre normalement, comme n'importe quelle app.
+
+   Si macOS dit que l'app « est endommagée », ouvre le Terminal et tape :
+     xattr -dr com.apple.quarantine /Applications/Pirouette.app
+   puis relance Pirouette.
+
+3. Pour générer les quiz, ouvre Pirouette → Réglages :
+   - IA locale (gratuite, hors ligne) : suis l'assistant. Il t'aide à installer
+     l'app Ollama puis télécharge le modèle adapté à ton Mac, sans Terminal.
+   - ou Claude : colle ta clé API.
+
+Tes cours et quiz sont enregistrés dans :
+  ~/Bibliothèque/Application Support/Pirouette

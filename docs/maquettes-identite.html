@@ -1,0 +1,210 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pirouette : pistes d'identité</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,700&family=DM+Sans:wght@400;600&family=DM+Serif+Display&family=Fraunces:opsz,wght@9..144,400;9..144,600&family=Instrument+Sans:wght@400;600&family=Instrument+Serif&family=Inter:wght@400;600&family=Space+Grotesk:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+  :root { --paper: #FAF8F3; --ink: #171512; --muted: #6E685E; --line: #E6E0D4; --card: #FFFEFB; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--paper); color: var(--ink); font: 15px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; }
+  main { max-width: 1080px; margin: 0 auto; padding: 36px 16px 80px; }
+  h1 { font: 600 30px/1.2 Georgia, serif; margin: 0 0 6px; }
+  .intro { color: var(--muted); margin: 0 0 8px; max-width: 760px; }
+  section { margin-top: 48px; }
+  .section-head { display: flex; align-items: baseline; gap: 12px; border-bottom: 1px solid var(--line); padding-bottom: 8px; margin-bottom: 18px; }
+  .section-head span { background: var(--ink); color: var(--paper); border-radius: 6px; padding: 1px 9px; font-weight: 700; }
+  .section-head h2 { margin: 0; font: 600 22px/1.2 Georgia, serif; }
+  .note { color: var(--muted); font-size: 14px; margin: -8px 0 18px; }
+  .grid { display: grid; gap: 14px; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 16px; }
+  .card h3 { margin: 0 0 2px; font-size: 16px; }
+  .card p { margin: 4px 0 0; color: var(--muted); font-size: 13.5px; }
+
+  /* Logos */
+  .logo-row { display: flex; align-items: flex-end; gap: 14px; margin: 6px 0 12px; }
+  .logo-row .icon { width: 64px; height: 64px; border-radius: 15px; display: grid; place-items: center; }
+  .logo-row svg { display: block; }
+
+  /* Couleurs */
+  .swatch { height: 64px; border-radius: 10px; margin-bottom: 10px; display: flex; align-items: flex-end; padding: 8px; color: #fff; font: 600 12px/1 ui-monospace, Menlo, monospace; }
+  .mini { border: 1px solid var(--line); border-radius: 10px; padding: 12px; background: var(--paper); margin-top: 10px; }
+  .mini .g { font: 400 21px/1.2 Georgia, serif; display: flex; align-items: center; gap: 8px; }
+  .mini .row { display: flex; align-items: center; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+  .btn { background: var(--ink); color: var(--paper); border-radius: 999px; padding: 6px 12px; font-weight: 600; font-size: 13px; }
+  .pill { border-radius: 999px; padding: 2px 9px; font-weight: 700; font-size: 12px; }
+  .bar { height: 4px; border-radius: 99px; background: var(--line); margin-top: 10px; overflow: hidden; }
+  .bar i { display: block; height: 100%; width: 62%; }
+  .stat b { font-weight: 700; }
+
+  /* Typos */
+  .type-card { padding: 20px; }
+  .type-card .name { font: 600 12px/1 -apple-system, sans-serif; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); }
+  .type-card .big { font-size: 38px; line-height: 1.1; margin: 10px 0 6px; letter-spacing: -.015em; }
+  .type-card .h { font-size: 20px; margin: 10px 0 2px; }
+  .type-card .body { font-size: 15px; color: #3b3732; margin: 0; }
+  .type-card .choice { border: 1px solid var(--line); border-radius: 10px; padding: 8px 12px; margin-top: 10px; font-size: 15px; }
+
+  /* Combinaisons */
+  .combo { border-radius: 16px; overflow: hidden; border: 1px solid var(--line); background: var(--paper); }
+  .combo-top { display: flex; justify-content: space-between; align-items: center; padding: 10px 16px; border-bottom: 1px solid var(--line); font-size: 14px; }
+  .combo-top .brand { display: flex; align-items: center; gap: 8px; font-size: 18px; }
+  .combo-body { padding: 34px 18px 22px; text-align: center; }
+  .combo-body .greet { display: inline-flex; align-items: center; gap: 12px; font-size: 38px; line-height: 1.1; letter-spacing: -.02em; }
+  .combo-body .stats { color: var(--muted); font-size: 14px; margin-top: 10px; }
+  .composer { display: flex; align-items: center; gap: 8px; max-width: 460px; margin: 18px auto 0; padding: 6px 6px 6px 16px; border: 1px solid var(--line); background: var(--card); border-radius: 18px; text-align: left; color: var(--muted); font-size: 14px; }
+  .composer span { flex: 1; }
+  .courses { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 10px; max-width: 520px; margin: 22px auto 0; text-align: left; }
+  .course { position: relative; background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 16px 12px 12px; font-size: 13px; color: var(--muted); }
+  .course::before { content: ""; position: absolute; top: 0; left: 12px; width: 24px; height: 3px; border-radius: 0 0 3px 3px; background: var(--accent); }
+  .course b { display: block; color: var(--ink); font-size: 15px; margin-bottom: 2px; }
+  .combo-caption { padding: 12px 16px; border-top: 1px solid var(--line); background: var(--card); font-size: 14px; }
+  .combo-caption b { font-size: 15px; }
+  .combos { display: grid; gap: 18px; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); }
+  .footer { margin-top: 48px; padding: 16px 20px; border-radius: 12px; background: var(--card); border: 1px solid var(--line); }
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+  <path id="L-head" d="M17 47 C15 36 15 22 18.5 11.5 C19.5 10 21 10 22.5 11 C29 15.5 36 21 41.5 26.5 C47 25.2 53 25.2 58.5 26.5 C64 21 71 15.5 77.5 11 C79 10 80.5 10 81.5 11.5 C85 22 85 36 83 47 C87 55 87.5 63 84 71 C78 83 65 89 50 89 C35 89 22 83 16 71 C12.5 63 13 55 17 47 Z"/>
+  <path id="L-blaze" d="M48.6 30 C49.5 29.5 50.5 29.5 51.4 30 C52.5 40 54.5 50 57.5 58 C65 59 71 62.5 72.5 68.5 C71 79 61 85.5 50 85.5 C39 85.5 29 79 27.5 68.5 C29 62.5 35 59 42.5 58 C45.5 50 47.5 40 48.6 30 Z"/>
+  <g id="L-sit">
+    <path d="M32.5 27 L32.5 5 L46 17 Z M47 17 L60.5 5 L60.5 27 Z"/>
+    <ellipse cx="46.5" cy="27.5" rx="13.5" ry="12"/>
+    <path d="M35.5 35 C26 48 24 72 30 90 L63 90 C69 72 67 48 57.5 35 Z"/>
+    <path d="M62 88 C80 90 88 76 82 66 C77 58 67 61 69 69" fill="none" stroke="currentColor" stroke-width="6.5" stroke-linecap="round"/>
+  </g>
+  <g id="L-curl">
+    <path d="M71 38 A28 28 0 1 1 42 23" fill="none" stroke="currentColor" stroke-width="15" stroke-linecap="round"/>
+    <path d="M55.5 25 L57.5 5.5 L69 17 Z M71 17 L83 6.5 L84.5 26 Z"/>
+    <ellipse cx="70" cy="28.5" rx="15.5" ry="13.5"/>
+  </g>
+  <path id="L-line" fill="none" stroke="currentColor" stroke-width="6.5" stroke-linejoin="round" d="M20 48 C18 37 18 25 21 15 C28 19.5 35 24.5 41 30 C47 28.7 53 28.7 59 30 C65 24.5 72 19.5 79 15 C82 25 82 37 80 48 C84 55 84.5 62 81.5 69 C76 80 64 86 50 86 C36 86 24 80 18.5 69 C15.5 62 16 55 20 48 Z"/>
+  <g id="L-peek">
+    <path d="M14 72 C14 55 15.5 38 19 20 C20.5 18.5 22 18.5 23.5 19.5 L41.5 33 C47 31.8 53 31.8 58.5 33 L76.5 19.5 C78 18.5 79.5 18.5 81 20 C84.5 38 86 55 86 72 Z"/>
+    <rect x="6" y="70" width="88" height="8" rx="4"/>
+  </g>
+</defs></svg>
+
+<main>
+  <h1>Pirouette : pistes d'identité</h1>
+  <p class="intro">Logos plus simples (silhouettes, sans les yeux ni les détails), autres couleurs d'accent et autres polices. Tu peux mélanger librement : un logo, une couleur et une police. Tout en bas, je te propose 3 combinaisons montrées sur l'écran d'accueil.</p>
+
+  <section>
+    <div class="section-head"><span>1</span><h2>Logos</h2></div>
+    <p class="note">Chaque logo en noir sur papier, puis en icône d'app (ici avec la couleur « Sapin », juste pour l'exemple) et en petit, comme dans la barre du haut.</p>
+    <div class="grid" id="logos"></div>
+  </section>
+
+  <section>
+    <div class="section-head"><span>2</span><h2>Couleurs d'accent</h2></div>
+    <p class="note">Le papier et l'encre noire ne bougent pas. Seule la couleur des repères change (icône, chiffres, barres de progression, haut des cartes).</p>
+    <div class="grid" id="colors"></div>
+  </section>
+
+  <section>
+    <div class="section-head"><span>3</span><h2>Typographies</h2></div>
+    <p class="note">Polices libres (licence SIL OFL). Celle que tu choisis sera intégrée à l'app pour fonctionner aussi hors ligne.</p>
+    <div class="grid" id="types"></div>
+  </section>
+
+  <section>
+    <div class="section-head"><span>4</span><h2>Mes 3 combinaisons</h2></div>
+    <div class="combos" id="combos"></div>
+  </section>
+
+  <div class="footer"><b>Pour choisir :</b> dis-moi par exemple « logo 2, couleur Sapin, police Fraunces », ou le nom d'une combinaison. Tu peux aussi garder un élément actuel (le chat détaillé, l'orange, la police actuelle).</div>
+</main>
+
+<script>
+  const LOGOS = [
+    { id: "L-head", name: "1 · Tête pleine", text: "La silhouette la plus simple : deux oreilles, une tête ronde. Se reconnaît même en tout petit." },
+    { id: "L-head", blaze: true, name: "2 · Tête + liste", text: "La silhouette, plus la tache blanche de ton chat. Il garde son identité de chat « tuxedo »." },
+    { id: "L-sit", name: "3 · Assis, queue en spirale", text: "Le chat entier, avec la queue qui fait une pirouette. Joue sur le nom." },
+    { id: "L-curl", name: "4 · Enroulé", text: "Le chat roulé en boule, comme un tour sur lui-même. Forme ronde, bien équilibrée en icône." },
+    { id: "L-line", name: "5 · Trait", text: "Le contour seul, en trait épais. Très léger, s'accorde bien avec une police élégante." },
+    { id: "L-peek", name: "6 · Coucou", text: "Le chat qui dépasse de la table : ludique, avec un côté « révisions à la maison »." },
+  ];
+  const COLORS = [
+    { name: "Orange (actuel)", accent: "#F2541B", ink: "#C2410C", soft: "#FDEDE4", text: "Énergique, graphique." },
+    { name: "Cobalt", accent: "#2F4BE0", ink: "#2F4BE0", soft: "#E8ECFD", text: "Bleu stylo à bille. Net et studieux." },
+    { name: "Sapin", accent: "#1E6B52", ink: "#1E6B52", soft: "#E3F0EA", text: "Vert tableau d'école, calme et sérieux." },
+    { name: "Moutarde", accent: "#E0A100", ink: "#8A6100", soft: "#FBF1D6", text: "Surligneur jaune, très « fiche de révision »." },
+    { name: "Framboise", accent: "#D12F62", ink: "#B8234F", soft: "#FBE6ED", text: "Vif et joyeux, sans faire « appli d'IA »." },
+    { name: "Pétrole", accent: "#0E6E7E", ink: "#0E6E7E", soft: "#E1F0F2", text: "Bleu-vert profond, élégant et doux pour les yeux." },
+  ];
+  const TYPES = [
+    { name: "Actuelle : New York + système", head: 'ui-serif, \'New York\', Georgia, serif', body: '-apple-system, system-ui, sans-serif', text: "Police du Mac. Classique, déjà en place." },
+    { name: "Fraunces + Inter", head: '\'Fraunces\', serif', body: '\'Inter\', sans-serif', text: "Serif chaleureuse et arrondie : côté cahier, avec une touche de fantaisie." },
+    { name: "Instrument Serif + Instrument Sans", head: '\'Instrument Serif\', serif', body: '\'Instrument Sans\', sans-serif', text: "Éditoriale et fine, très chic. Idéale avec le logo « Trait »." },
+    { name: "DM Serif Display + DM Sans", head: '\'DM Serif Display\', serif', body: '\'DM Sans\', sans-serif', text: "Serif contrastée, style magazine. Très lisible." },
+    { name: "Bricolage Grotesque", head: '\'Bricolage Grotesque\', sans-serif', body: '\'Bricolage Grotesque\', sans-serif', text: "Sans empattements pleine de caractère : jeune et graphique." },
+    { name: "Space Grotesk", head: '\'Space Grotesk\', sans-serif', body: '\'Space Grotesk\', sans-serif', text: "Géométrique, un peu technique. Moderne et net." },
+  ];
+  const COMBOS = [
+    { name: "Cahier", logo: 1, color: 2, type: 1, text: "Tête + liste · Sapin · Fraunces + Inter. Chaleureux et studieux, le plus proche de l'esprit « papier de révision »." },
+    { name: "Graphique", logo: 0, color: 1, type: 4, text: "Tête pleine · Cobalt · Bricolage Grotesque. Moderne et affirmé, très lisible en petit." },
+    { name: "Élégant", logo: 4, color: 5, type: 2, text: "Trait · Pétrole · Instrument Serif. Sobre et raffiné, le plus « minimaliste »." },
+  ];
+
+  const svg = (logo, size, color, paper = "#FAF8F3") =>
+    `<svg width="${size}" height="${size}" viewBox="0 0 100 100" style="color:${color}"><use href="#${logo.id}" fill="${logo.id === "L-line" ? "none" : color}"/>${logo.blaze ? `<use href="#L-blaze" fill="${paper}"/>` : ""}</svg>`;
+
+  document.getElementById("logos").innerHTML = LOGOS.map((l) => `
+    <div class="card">
+      <div class="logo-row">
+        ${svg(l, 88, "#171512")}
+        <div class="icon" style="background:#1E6B52">${svg(l, 46, "#FAF8F3", "#1E6B52")}</div>
+        ${svg(l, 24, "#171512")}
+      </div>
+      <h3>${l.name}</h3><p>${l.text}</p>
+    </div>`).join("");
+
+  document.getElementById("colors").innerHTML = COLORS.map((c) => `
+    <div class="card">
+      <div class="swatch" style="background:${c.accent}">${c.accent}</div>
+      <h3>${c.name}</h3><p>${c.text}</p>
+      <div class="mini">
+        <div class="g"><span style="display:inline-grid;place-items:center;width:28px;height:28px;border-radius:8px;background:${c.accent}">${svg(LOGOS[1], 20, "#171512", c.accent)}</span>On révise ?</div>
+        <div class="row"><span class="btn">Générer un quiz</span><span class="pill" style="background:${c.soft};color:${c.ink}">3 / 10</span></div>
+        <div class="row stat" style="font-size:13px;color:#6E685E"><span><b style="color:${c.ink}">4</b> cours · <b style="color:${c.ink}">12</b> quiz faits</span></div>
+        <div class="bar"><i style="background:${c.accent}"></i></div>
+      </div>
+    </div>`).join("");
+
+  document.getElementById("types").innerHTML = TYPES.map((t) => `
+    <div class="card type-card">
+      <div class="name">${t.name}</div>
+      <div class="big" style="font-family:${t.head}">On révise ?</div>
+      <div class="h" style="font-family:${t.head}">La photosynthèse</div>
+      <p class="body" style="font-family:${t.body}">La chlorophylle capte l'énergie lumineuse dans les chloroplastes.</p>
+      <div class="choice" style="font-family:${t.body}">Dans le stroma du chloroplaste</div>
+      <p style="font-family:-apple-system,sans-serif">${t.text}</p>
+    </div>`).join("");
+
+  document.getElementById("combos").innerHTML = COMBOS.map((k) => {
+    const logo = LOGOS[k.logo], c = COLORS[k.color], t = TYPES[k.type];
+    return `
+    <div class="combo" style="--accent:${c.accent}">
+      <div class="combo-top" style="font-family:${t.body}">
+        <span class="brand" style="font-family:${t.head}">${svg(logo, 24, "#171512")}Pirouette</span>
+        <span>Mes cours · Réglages</span>
+      </div>
+      <div class="combo-body" style="font-family:${t.body}">
+        <div class="greet" style="font-family:${t.head}">${svg(logo, 46, "#171512")}On révise ?</div>
+        <div class="stats"><b style="color:${c.ink}">4</b> cours · <b style="color:${c.ink}">12</b> quiz faits · <b style="color:${c.ink}">3</b> fiches</div>
+        <div class="composer"><span>Nom d'un nouveau cours…</span><span class="btn" style="flex:none">Créer →</span></div>
+        <div class="courses">
+          <div class="course"><b style="font-family:${t.head}">Biologie, chap. 4</b>2 fichiers · 3 quiz</div>
+          <div class="course"><b style="font-family:${t.head}">Histoire moderne</b>1 fichier · 1 quiz</div>
+        </div>
+      </div>
+      <div class="combo-caption"><b>${k.name}</b> — ${k.text}</div>
+    </div>`;
+  }).join("");
+</script>
+</body>
+</html>

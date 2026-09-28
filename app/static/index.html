@@ -1,0 +1,917 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Pirouette</title>
+  <meta name="description" content="Tes cours deviennent des quiz et des flashcards.">
+  <meta name="theme-color" content="#FAF8F3">
+  <meta name="apple-mobile-web-app-title" content="Pirouette">
+  <link rel="icon" href="/static/brand/pirouette.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="/static/brand/apple-touch-icon.png">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="stylesheet" href="/static/style.css">
+  <!-- Couleur d'accent choisie dans Réglages (remplie par le serveur) -->
+  <style id="appearance-style">/*APPEARANCE*/</style>
+</head>
+<body>
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <symbol id="logo" viewBox="0 0 100 100"><path fill="currentColor" d="M17 47 C15 36 15 22 18.5 11.5 C19.5 10 21 10 22.5 11 C29 15.5 36 21 41.5 26.5 C47 25.2 53 25.2 58.5 26.5 C64 21 71 15.5 77.5 11 C79 10 80.5 10 81.5 11.5 C85 22 85 36 83 47 C87 55 87.5 63 84 71 C78 83 65 89 50 89 C35 89 22 83 16 71 C12.5 63 13 55 17 47 Z"/></symbol>
+  </svg>
+  <header class="topbar">
+    <a href="#/" class="brand"><span class="app-icon"><svg aria-hidden="true"><use href="#logo"/></svg></span>Pirouette</a>
+    <nav class="nav-pill" aria-label="Menu">
+      <a href="#/" data-nav="accueil">Accueil</a>
+      <a href="#/cours" data-nav="cours">Mes cours</a>
+      <a href="#/reviser" data-nav="reviser">Réviser</a>
+      <a href="#/reglages" data-nav="reglages">Réglages</a>
+      <button type="button" class="nav-feedback" id="feedback-btn" title="Une idée, un bug ? Écris-moi">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="M4 5h16v11H9l-5 4z"/></svg>Feedback</button>
+    </nav>
+  </header>
+
+  <main>
+    <nav class="crumbs" id="crumbs" aria-label="Où je suis" hidden></nav>
+
+    <!-- Accueil : phrase du jour, compteurs, la révision du jour -->
+    <section id="view-home" class="view home">
+      <div class="hero">
+        <h1 class="greeting" id="greeting">On révise ?</h1>
+        <p class="hero-sub" id="hero-sub"></p>
+        <p class="setup-banner" id="setup-banner" hidden>Pour créer des quiz, il faut l'IA locale : <a href="#/reglages">installe-la en quelques clics dans Réglages</a>.</p>
+        <form class="name-prompt" id="name-prompt" hidden>
+          <label for="name-input">Comment tu t'appelles ?</label>
+          <input type="text" id="name-input" placeholder="Ton prénom" maxlength="40">
+          <button class="ghost small" type="submit">OK</button>
+          <button class="link-button" type="button" id="name-skip">Plus tard</button>
+        </form>
+        <div class="today" id="today" hidden>
+          <a class="stat stat-main" href="#/reviser"><b id="stat-review">0</b><span id="stat-review-label">cartes du jour</span></a>
+          <div class="stat"><b id="stat-streak">0</b><span id="stat-streak-label">de révision d'affilée</span></div>
+          <div class="stat"><b id="stat-week">—</b><span id="stat-week-label">de réussite aux quiz (7 jours)</span></div>
+        </div>
+      </div>
+      <p class="exam-countdown" id="home-exam" hidden></p>
+      <div class="home-actions">
+        <button class="primary" type="button" id="home-start"></button>
+        <a class="button ghost" href="#/cours" id="home-courses">Mes cours →</a>
+      </div>
+    </section>
+
+    <!-- Mes cours : cours et dossiers -->
+    <section id="view-courses" class="view" hidden>
+      <div class="page-head">
+        <h1>Mes cours <span class="muted count" id="course-count"></span></h1>
+        <div class="head-actions">
+          <button class="ghost small" type="button" id="new-folder">+ Dossier</button>
+          <button class="primary small" type="button" id="new-course-btn">+ Nouveau cours</button>
+        </div>
+      </div>
+      <p class="muted small-text" id="folders-help" hidden>Glisse un cours sur un dossier pour l'y ranger (ou choisis son dossier depuis la page du cours).</p>
+      <div class="course-grid drop-zone" data-drop-folder="">
+        <div id="course-list" class="contents"></div>
+      </div>
+      <p class="empty-state muted" id="courses-empty" hidden>Pas encore de cours : clique sur « + Nouveau cours » et dépose ton premier fichier.</p>
+      <div id="folder-list"></div>
+      <div id="archived" hidden>
+        <div class="section-title"><h2>Archivés</h2><span class="muted small-text">Les semestres passés, rangés à part</span></div>
+        <div id="archived-list"></div>
+      </div>
+      <div id="orphans" hidden>
+        <div class="section-title"><h2>Anciens quiz (sans cours)</h2></div>
+        <ul id="orphan-list" class="quiz-list"></ul>
+      </div>
+    </section>
+
+    <!-- Réviser : d'abord quoi réviser, puis la révision du jour, les points faibles et le suivi -->
+    <section id="view-review" class="view" hidden>
+      <h1>Réviser</h1>
+      <p class="muted">Choisis ce que tu veux réviser.</p>
+      <div class="review-pick" id="review-pick"></div>
+    </section>
+
+    <section id="view-review-scope" class="view" hidden>
+      <h1 id="review-scope-title"></h1>
+      <p class="exam-countdown" id="review-exam" hidden></p>
+
+      <div class="revise-grid">
+        <div class="card revise-card">
+          <h2>Révision du jour</h2>
+          <p class="revise-count" id="today-summary"></p>
+          <p class="muted small-text">Les cartes reviennent au bon moment, avec quelques questions de tes quiz.</p>
+          <button class="primary" id="start-today">Commencer</button>
+        </div>
+        <div class="card revise-card">
+          <h2>Mode partiel</h2>
+          <p class="revise-count" id="partiel-summary">Un partiel blanc</p>
+          <p class="muted small-text">Tes quiz et tes flashcards mélangés, corrigés à la fin, avec une note sur 20.</p>
+          <div class="partiel-pick" id="partiel-pick" hidden>
+            <select id="partiel-course" aria-label="Cours du partiel"></select>
+          </div>
+          <button class="ghost" id="start-partiel">Préparer un partiel</button>
+        </div>
+      </div>
+
+      <div class="revise-options">
+        <div class="option-row">
+          <span class="muted">Les cartes :</span>
+          <div class="filters mini" role="radiogroup" aria-label="Façon de réviser les cartes">
+            <button type="button" role="radio" data-card-mode="flip">Je retourne la carte</button>
+            <button type="button" role="radio" data-card-mode="type">J'écris la réponse</button>
+          </div>
+        </div>
+        <label class="option-row"><input type="checkbox" id="mix-questions" checked> Mélanger avec des questions de mes quiz</label>
+      </div>
+
+      <details class="card dashboard" id="dashboard">
+        <summary>
+          <span class="dash-title">Suivi</span>
+          <span class="dash-mini" id="dash-mini"></span>
+          <span class="dash-toggle muted small-text">Détails</span>
+        </summary>
+        <div class="dash-body">
+          <div class="weak-row">
+            <div><strong>Mes points faibles</strong>
+              <span class="muted small-text">Les cartes souvent oubliées et les questions ratées la dernière fois.</span>
+              <span id="weak-summary"></span></div>
+            <button class="ghost small" id="start-weak">Réviser mes points faibles</button>
+          </div>
+          <div class="today progress-stats">
+            <div class="stat"><b id="pg-cards">0</b><span>cartes révisées (7 jours)</span></div>
+            <div class="stat"><b id="pg-cards-success">—</b><span>de cartes sues (7 jours)</span></div>
+            <div class="stat"><b id="pg-questions-success">—</b><span>de bonnes réponses aux questions (7 jours)</span></div>
+          </div>
+          <div class="progress-grid">
+            <div>
+              <h3>12 dernières semaines <span class="muted small-text" id="progress-note"></span></h3>
+              <div class="heatmap" id="heatmap" aria-label="Jours de révision"></div>
+              <p class="muted small-text heat-legend">Moins <span class="heat l1"></span><span class="heat l2"></span><span class="heat l3"></span><span class="heat l4"></span> Plus</p>
+            </div>
+            <div>
+              <h3>Cartes à revoir ces prochains jours</h3>
+              <div class="forecast" id="forecast"></div>
+            </div>
+          </div>
+          <div class="course-progress" id="course-progress-box">
+            <h3>Par cours</h3>
+            <div class="table-wrap"><table>
+              <thead><tr><th>Cours</th><th>Cartes sues</th><th>Du jour</th><th>Points faibles</th><th>Cartes (30 j)</th><th>Quiz (30 j)</th><th>Dernière révision</th></tr></thead>
+              <tbody id="course-progress"></tbody>
+            </table></div>
+          </div>
+        </div>
+      </details>
+    </section>
+
+    <!-- Mode partiel : préparation -->
+    <section id="view-partiel" class="view" hidden>
+      <h1>Mode partiel</h1>
+      <p class="muted">Un partiel blanc sur <strong id="partiel-course-name"></strong> : pas de correction avant la fin, une note sur 20.</p>
+      <div class="card">
+        <div class="field">
+          <label for="partiel-questions">Questions de quiz <span class="muted small-text" id="partiel-questions-max"></span></label>
+          <div class="count-row">
+            <input type="number" id="partiel-questions" min="0" max="200" value="20">
+            <div class="chips" data-count-for="partiel-questions"><button type="button">10</button><button type="button">20</button><button type="button">30</button><button type="button">40</button></div>
+          </div>
+        </div>
+        <div class="field">
+          <label for="partiel-cards">Flashcards <span class="muted small-text" id="partiel-cards-max"></span></label>
+          <div class="count-row">
+            <input type="number" id="partiel-cards" min="0" max="200" value="10">
+            <div class="chips" data-count-for="partiel-cards"><button type="button">5</button><button type="button">10</button><button type="button">20</button></div>
+          </div>
+          <small class="muted">Pour les flashcards, tu écris ta réponse ; à la fin, tu choisis de corriger toi-même ou avec l'IA.</small>
+        </div>
+        <div class="grid">
+          <div class="field">
+            <label for="partiel-timer">Chronomètre</label>
+            <select id="partiel-timer">
+              <option value="none">Aucun</option>
+              <option value="up">Chrono qui défile</option>
+              <option value="down">Compte à rebours</option>
+            </select>
+          </div>
+          <div class="field" id="partiel-minutes-field" hidden>
+            <label for="partiel-minutes">Durée (minutes)</label>
+            <input type="number" id="partiel-minutes" min="1" max="600" value="30">
+          </div>
+        </div>
+        <p class="muted small-text exam-rules">Conditions d'examen : les réponses ne sont corrigées qu'à la fin. Tu peux passer une question,
+          marquer « Je doute » et revenir sur n'importe quelle question avant de rendre ta copie.</p>
+        <p class="error" id="partiel-error" hidden></p>
+        <button class="primary" id="partiel-go">Commencer le partiel</button>
+      </div>
+      <div class="partiel-history" id="partiel-history" hidden>
+        <h2>Tes derniers partiels</h2>
+        <ul id="partiel-history-list"></ul>
+      </div>
+    </section>
+
+    <!-- Mode partiel : l'épreuve, la correction, la note -->
+    <section id="view-exam" class="view" hidden>
+      <div id="exam-run">
+        <div class="exam-head">
+          <h1 id="exam-title">Partiel</h1>
+          <div class="exam-timer" id="exam-timer" hidden>
+            <span id="exam-clock"></span>
+            <button class="link-button" type="button" id="exam-timer-toggle">Masquer</button>
+          </div>
+        </div>
+        <div class="exam-nav" id="exam-nav" aria-label="Questions"></div>
+        <div class="card question-card">
+          <span class="tag" id="exam-tag"></span>
+          <h2 id="exam-text"></h2>
+          <div id="exam-answer"></div>
+        </div>
+        <div class="exam-actions">
+          <button class="ghost" type="button" id="exam-prev">Précédente</button>
+          <button class="ghost doubt" type="button" id="exam-doubt" aria-pressed="false">Je doute</button>
+          <button class="ghost" type="button" id="exam-next">Suivante</button>
+          <button class="primary" type="button" id="exam-submit">Rendre ma copie</button>
+        </div>
+      </div>
+
+      <div id="exam-grading" class="card" hidden>
+        <h2>Réponses écrites à corriger</h2>
+        <p class="muted" id="exam-grading-text"></p>
+        <div class="actions" id="exam-grading-choice">
+          <button class="primary" type="button" id="exam-grade-ai">Corriger avec l'IA</button>
+          <button class="ghost" type="button" id="exam-grade-self">Je corrige moi-même</button>
+        </div>
+        <p class="status" id="exam-grading-status" hidden></p>
+        <ol class="review manual-grading" id="exam-manual" hidden></ol>
+        <button class="primary" type="button" id="exam-manual-done" hidden>Voir ma note</button>
+      </div>
+
+      <div id="exam-result" hidden>
+        <div class="card center exam-score">
+          <p class="muted">Ta note</p>
+          <p class="score" id="exam-score"></p>
+          <p id="exam-summary"></p>
+        </div>
+        <div class="panel-head">
+          <h2>Correction</h2>
+          <div class="filters" role="tablist" aria-label="Éléments affichés">
+            <button role="tab" data-exam-filter="all">Tout</button>
+            <button role="tab" data-exam-filter="errors">Mes erreurs seulement</button>
+          </div>
+        </div>
+        <ol class="review" id="exam-review"></ol>
+        <div class="actions">
+          <button class="primary" type="button" id="exam-redo">Refaire mes erreurs</button>
+          <button class="ghost" type="button" id="exam-done">Terminer</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- Réglages -->
+    <section id="view-settings" class="view" hidden>
+      <h1>Réglages</h1>
+
+      <form class="card" id="settings-name-form">
+        <h2>Ton prénom</h2>
+        <p class="muted small-text">Affiché sur l'accueil (« À toi de jouer, … »).</p>
+        <div class="inline-row">
+          <input type="text" id="settings-name" maxlength="40" placeholder="Ton prénom">
+          <button class="primary" type="submit">Enregistrer</button>
+        </div>
+        <p class="status" id="settings-name-status" hidden></p>
+      </form>
+
+      <div class="card" id="version-card">
+        <h2>Version</h2>
+        <div class="inline-row version-row">
+          <span>Pirouette <b id="app-version"></b></span>
+          <button class="ghost small" type="button" id="update-check">Vérifier les mises à jour</button>
+        </div>
+        <p class="status" id="update-status" hidden></p>
+      </div>
+
+      <div class="card" id="revision-card">
+        <h2>Révisions</h2>
+        <label class="toggle-row first" id="reminder-row">
+          <input type="checkbox" id="reminder-on">
+          <span><strong>Me rappeler de réviser chaque jour</strong>
+            <small class="muted" id="reminder-help">Une notification du Mac, même app fermée, s'il y a des cartes du jour.</small></span>
+        </label>
+        <div class="inline-row reminder-time" id="reminder-time-row" hidden>
+          <label for="reminder-time">À</label>
+          <input type="time" id="reminder-time" value="19:00">
+          <button class="ghost small" type="button" id="reminder-test">Essayer maintenant</button>
+        </div>
+        <div class="field inline-field">
+          <label for="new-per-day">Nouvelles cartes par jour dans la révision du jour</label>
+          <input type="number" id="new-per-day" min="0" max="200" value="20">
+        </div>
+        <p class="status" id="revision-status" hidden></p>
+      </div>
+
+      <div class="card" id="appearance-card">
+        <h2>Couleur de l'app</h2>
+        <p class="muted small-text">Choisis la couleur des repères (icônes, chiffres, barres de progression…). L'aperçu montre le résultat avant d'enregistrer.</p>
+        <div class="appearance">
+          <div class="picker">
+            <div class="wheel-wrap">
+              <canvas id="color-wheel" width="220" height="220" aria-label="Roue chromatique"></canvas>
+              <span class="wheel-handle" id="wheel-handle"></span>
+            </div>
+            <label class="field">Luminosité
+              <input type="range" id="color-value" min="30" max="100" value="100">
+            </label>
+            <div class="hex-row">
+              <span class="hex-swatch" id="hex-swatch"></span>
+              <input type="text" id="color-hex" maxlength="7" spellcheck="false" aria-label="Code couleur">
+            </div>
+            <div class="presets" id="color-presets"></div>
+          </div>
+          <div class="previews">
+            <div class="accent-preview" id="preview-light"><span class="pv-label">Clair</span>
+              <div class="pv-top"><svg class="pv-logo" aria-hidden="true"><use href="#logo"/></svg>Pirouette</div>
+              <div class="pv-greet"><span class="pv-icon"><svg aria-hidden="true"><use href="#logo"/></svg></span>On révise ?</div>
+              <p class="stats-line"><strong>4</strong> cours · <strong>12</strong> quiz faits</p>
+              <div class="course-card"><strong>Biologie, chap. 4</strong><span class="muted">2 fichiers · 3 quiz</span></div>
+              <div class="pv-row"><span class="pill">3 / 10</span><span class="badge">Meilleur score 8/10</span></div>
+              <div class="progress"><div class="pv-bar"></div></div>
+            </div>
+            <div class="accent-preview pv-dark" id="preview-dark"><span class="pv-label">Sombre</span>
+              <div class="pv-top"><svg class="pv-logo" aria-hidden="true"><use href="#logo"/></svg>Pirouette</div>
+              <div class="pv-greet"><span class="pv-icon"><svg aria-hidden="true"><use href="#logo"/></svg></span>On révise ?</div>
+              <p class="stats-line"><strong>4</strong> cours · <strong>12</strong> quiz faits</p>
+              <div class="course-card"><strong>Biologie, chap. 4</strong><span class="muted">2 fichiers · 3 quiz</span></div>
+              <div class="pv-row"><span class="pill">3 / 10</span><span class="badge">Meilleur score 8/10</span></div>
+              <div class="progress"><div class="pv-bar"></div></div>
+            </div>
+          </div>
+        </div>
+        <div class="actions">
+          <button class="primary" type="button" id="color-save">Appliquer à toute l'app</button>
+          <button class="ghost" type="button" id="color-reset">Revenir à la terre cuite</button>
+        </div>
+        <p class="status" id="color-status" hidden></p>
+      </div>
+
+      <form class="card" id="settings-key-form" hidden>
+        <h2>Claude (API)</h2>
+        <p class="muted small-text">Pour générer avec Claude, colle ta clé API. Tu peux en créer une sur
+          <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">console.anthropic.com</a>.
+          Elle reste sur cet ordinateur.</p>
+        <p id="settings-key-state" class="key-state"></p>
+        <div class="inline-row">
+          <input type="password" id="settings-key" placeholder="sk-ant-…" autocomplete="off" spellcheck="false">
+          <button class="primary" type="submit">Enregistrer</button>
+        </div>
+        <div class="actions">
+          <button class="ghost small" type="button" id="settings-key-test">Tester la clé</button>
+          <button class="ghost small danger" type="button" id="settings-key-remove">Supprimer la clé</button>
+        </div>
+        <p class="status" id="settings-key-status" hidden></p>
+      </form>
+
+      <div class="card" id="local-ai">
+        <h2>IA locale</h2>
+        <p class="muted small-text">Gratuite et hors ligne : l'IA tourne directement sur ton ordinateur, grâce à l'app Ollama.</p>
+        <ol class="steps">
+          <li class="step" id="step-install">
+            <div class="step-head"><span class="step-dot">1</span><strong>Installer et ouvrir Ollama</strong></div>
+            <div class="step-body" id="step-install-body"></div>
+          </li>
+          <li class="step" id="step-model">
+            <div class="step-head"><span class="step-dot">2</span><strong>Télécharger un modèle d'IA</strong></div>
+            <div class="step-body" id="step-model-body"></div>
+          </li>
+          <li class="step" id="step-context">
+            <div class="step-head"><span class="step-dot">3</span><strong>Régler la mémoire de lecture</strong></div>
+            <div class="step-body" id="step-context-body"></div>
+          </li>
+          <li class="step" id="step-ready">
+            <div class="step-head"><span class="step-dot">4</span><strong>C'est prêt</strong></div>
+            <div class="step-body" id="step-ready-body"></div>
+          </li>
+        </ol>
+        <label class="toggle-row">
+          <input type="checkbox" id="local-thinking">
+          <span><strong>Laisser le modèle réfléchir avant de répondre</strong>
+            <small class="muted">Pour les modèles qui « réfléchissent » (qwen3.5, qwen3, deepseek-r1…). Désactivé : quiz et cartes
+              bien plus rapides, et le Mac chauffe moins. Activé : un peu plus soigné, mais nettement plus long.
+              Sans effet sur les autres modèles (qwen2.5…).</small></span>
+        </label>
+        <p class="status" id="local-thinking-status" hidden></p>
+      </div>
+
+      <div class="card" id="definitions-card">
+        <h2>Tes définitions</h2>
+        <p class="muted small-text">Montre à Pirouette comment tu mets en forme tes définitions (par exemple : le terme
+          centré en gras et italique, puis sa définition). Elle s'en servira pour les questions de cours et les flashcards.
+          Importe un bout de cours, ou colle un passage ci-dessous : le gras et l'italique sont gardés.</p>
+        <p class="key-state" id="definitions-current"></p>
+        <div class="inline-row">
+          <label class="button ghost small" for="calib-file">Importer un bout de cours…</label>
+          <input type="file" id="calib-file" accept=".pdf,.docx,.pptx,.pages,.key,.txt,.md,.markdown" hidden>
+        </div>
+        <div id="calib-paste" class="paste-area" contenteditable="true" role="textbox" aria-multiline="true"
+             data-placeholder="…ou colle ici un passage de ton cours (copié depuis Pages ou Word)"></div>
+        <button class="ghost small" type="button" id="calib-analyse">Analyser le passage collé</button>
+        <div id="calib-result" hidden>
+          <label class="field" for="calib-rule">Ce que Pirouette a repéré</label>
+          <select id="calib-rule"></select>
+          <ol id="calib-list" class="defs-list"></ol>
+          <div class="actions">
+            <button class="primary small" type="button" id="calib-save">Oui, ce sont bien mes définitions</button>
+          </div>
+        </div>
+        <p class="status" id="calib-status" hidden></p>
+        <button class="link-button" type="button" id="calib-auto">Revenir au repérage automatique</button>
+      </div>
+
+      <div class="card">
+        <h2>Tes données</h2>
+        <p class="muted small-text">Cours, quiz et cartes sont enregistrés ici, sur cet ordinateur :</p>
+        <p><code id="settings-data-dir"></code></p>
+        <div id="settings-import" hidden>
+          <p class="muted small-text">Tu utilisais la version précédente (lancée avec <code>run.sh</code> ou <code>.command</code>) ?
+            Choisis son dossier <code>data</code> pour récupérer tes cours.</p>
+          <button class="ghost" type="button" id="settings-import-btn">Récupérer mes anciens cours</button>
+          <p class="status" id="settings-import-status" hidden></p>
+        </div>
+      </div>
+    </section>
+
+    <!-- Un cours : trois entrées (quiz, flashcards, fichiers) -->
+    <section id="view-course" class="view" hidden>
+      <div id="course-overview">
+      <div class="course-head">
+        <div class="course-title">
+          <h1 id="course-name"></h1>
+          <div class="title-chips">
+            <select id="course-folder" class="chip" data-icon="folder" aria-label="Dossier du cours"></select>
+            <button type="button" class="exam-chip" id="course-exam-chip" hidden></button>
+          </div>
+        </div>
+        <div class="more">
+          <button class="icon more-btn" type="button" id="course-more" aria-label="Plus d'actions" aria-haspopup="menu">•••</button>
+          <div class="plus-menu more-menu" id="course-more-menu" role="menu" hidden>
+            <button type="button" role="menuitem" id="rename-course"><strong>Renommer le cours</strong></button>
+            <button type="button" role="menuitem" id="course-exam"><strong>Semaine des partiels</strong></button>
+            <button type="button" role="menuitem" id="delete-course" class="danger"><strong>Supprimer le cours</strong></button>
+          </div>
+        </div>
+      </div>
+
+      <nav class="course-tiles" aria-label="Sections du cours">
+        <div class="course-tile" data-tab="quiz">
+          <a class="tile-link" data-tab-link="quiz"><svg class="tile-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .8-1 1.5v.4M12 17h.01"/></svg><span class="tile-num" id="tile-quiz-num">0</span><strong>Quiz</strong><small id="tile-quiz-sub"></small></a>
+          <button class="tile-plus" data-create="quiz" title="Nouveau quiz" aria-label="Nouveau quiz">+</button>
+        </div>
+        <div class="course-tile" data-tab="cartes">
+          <a class="tile-link" data-tab-link="cartes"><svg class="tile-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="6" width="13" height="15" rx="2"/><path d="M8 3h11a2 2 0 0 1 2 2v12"/></svg><span class="tile-num" id="tile-cards-num">0</span><strong>Flashcards</strong><small id="tile-cards-sub"></small></a>
+          <button class="tile-plus" data-create="cartes" title="Ajouter des flashcards" aria-label="Ajouter des flashcards">+</button>
+        </div>
+        <div class="course-tile" data-tab="fichiers">
+          <a class="tile-link" data-tab-link="fichiers"><svg class="tile-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="M6 3h8l5 5v13H6z"/><path d="M14 3v5h5"/></svg><span class="tile-num" id="tile-files-num">0</span><strong>Fichiers</strong><small id="tile-files-sub"></small></a>
+          <label class="tile-plus" for="file-input" title="Ajouter un fichier" aria-label="Ajouter un fichier">+</label>
+        </div>
+      </nav>
+
+      <div class="revise-strip" id="course-revise">
+        <span id="course-revise-text"></span>
+        <span class="head-actions">
+          <button class="ghost small" data-course-session="weak" id="course-weak-btn">Mes points faibles</button>
+          <button class="primary small" data-course-session="today">Réviser ce cours</button>
+        </span>
+      </div>
+      </div>
+
+      <div class="outdated-note" id="outdated-note" hidden>
+        <span id="outdated-text"></span>
+        <button class="ghost small" type="button" id="outdated-open">Vérifier</button>
+      </div>
+
+      <section class="panel" id="panel-quiz" hidden>
+        <div class="panel-head">
+          <h1>Quiz</h1>
+          <button class="primary small" data-create="quiz">+ Nouveau quiz</button>
+        </div>
+        <ul id="quiz-list" class="quiz-list"></ul>
+      </section>
+
+      <section class="panel" id="panel-cartes" hidden>
+        <div class="panel-head">
+          <h1>Flashcards</h1>
+          <div class="head-actions">
+            <button class="ghost small" id="cards-study">Réviser une par une</button>
+            <button class="ghost small" id="card-write">Écrire une carte</button>
+            <button class="primary small" data-create="cartes">+ Ajouter des cartes</button>
+          </div>
+        </div>
+        <div class="filters" id="card-filters" role="tablist" aria-label="Cartes à afficher">
+          <button role="tab" data-filter="review">À revoir <span></span></button>
+          <button role="tab" data-filter="known">Apprises <span></span></button>
+          <button role="tab" data-filter="all">Toutes <span></span></button>
+        </div>
+        <p class="muted small-text" id="cards-help">Passe la souris sur une carte pour voir la réponse. Clique dessus quand tu la connais : elle passe dans « Apprises ». Reclique pour la remettre à revoir.</p>
+        <p id="cards-status" class="status ok" hidden></p>
+        <div id="card-grid" class="card-grid"></div>
+        <p id="cards-empty" class="empty-state muted" hidden></p>
+        <div class="panel-foot" id="cards-foot"><button class="link-button danger" id="cards-clear">Effacer toutes les cartes</button></div>
+      </section>
+
+      <section class="panel" id="panel-fichiers" hidden>
+        <div class="panel-head"><h1>Fichiers</h1></div>
+        <label id="dropzone" class="dropzone" for="file-input">
+          <input type="file" id="file-input" multiple accept=".pdf,.docx,.pptx,.pages,.key,.txt,.md,.markdown" hidden>
+          <strong>Glisse ton cours ici</strong>
+          <span class="muted">PDF, Word, PowerPoint, Pages, Keynote, texte ou Markdown.
+            Un fichier du même nom qu'un fichier déjà présent le <strong>remplace</strong> (nouvelle version).</span>
+        </label>
+        <p id="upload-status" class="status" hidden></p>
+        <p id="chapters-status" class="status" hidden></p>
+        <ul id="file-list" class="file-list"></ul>
+      </section>
+    </section>
+
+    <!-- Créer un quiz ou des flashcards -->
+    <section id="view-create" class="view" hidden>
+      <h1 id="create-title">Nouveau quiz</h1>
+
+      <div class="card">
+        <div class="card-head">
+          <h2>Sur quoi ?</h2>
+          <div class="head-actions">
+            <button class="link-button" type="button" id="chapters-all">Tout cocher</button>
+            <button class="link-button" type="button" id="chapters-none">Tout décocher</button>
+          </div>
+        </div>
+        <div id="chapter-groups" class="chapter-groups"></div>
+        <p class="scope-line" data-scope></p>
+      </div>
+
+      <div class="card" id="create-quiz-options">
+        <h2>Le quiz</h2>
+        <div class="grid">
+          <div class="field">
+            <label for="num-questions">Nombre de questions</label>
+            <input type="number" id="num-questions" min="1" max="50" value="10">
+          </div>
+          <div class="field">
+            <label for="difficulty">Difficulté</label>
+            <select id="difficulty">
+              <option value="facile">Facile</option>
+              <option value="moyen" selected>Moyen</option>
+              <option value="difficile">Difficile</option>
+            </select>
+          </div>
+        </div>
+        <div class="field">
+          <label for="course-share">Questions de cours (définitions, « de quoi est composé… », termes à retrouver)</label>
+          <select id="course-share">
+            <option value="equilibre" selected>Équilibré : au moins 40 % de questions de cours</option>
+            <option value="beaucoup">Beaucoup : au moins 70 %</option>
+            <option value="que">Uniquement des questions de cours</option>
+          </select>
+          <small class="muted">Astuce : avec « Réponse courte » coché, certaines définitions sont à réécrire toi-même.</small>
+        </div>
+        <fieldset class="field types">
+          <legend>Types de questions</legend>
+          <label><input type="checkbox" name="types" value="qcm" checked> QCM</label>
+          <label><input type="checkbox" name="types" value="vrai_faux" checked> Vrai / Faux</label>
+          <label><input type="checkbox" name="types" value="reponse_courte" checked> Réponse courte</label>
+          <label><input type="checkbox" name="types" value="texte_a_trous"> Texte à trous <span class="badge">nouveau</span></label>
+        </fieldset>
+      </div>
+
+      <div class="card" id="create-target">
+        <h2>Cibler <span class="muted small-text">(facultatif)</span></h2>
+        <div class="field">
+          <label for="focus">Un thème précis</label>
+          <input type="text" id="focus" maxlength="200" placeholder="ex. les systèmes nerveux et leurs fonctions">
+          <small class="muted" id="focus-hint">Pirouette ne garde que les passages du cours qui en parlent, et l'IA ne pose de questions que là-dessus.</small>
+        </div>
+        <div class="field" id="manual-field">
+          <label for="manual">Tes questions</label>
+          <textarea id="manual" rows="3" placeholder="Une question par ligne, ex. : Quelles sont les deux parties du système nerveux central ?"></textarea>
+          <small class="muted" id="manual-hint">L'IA cherche la réponse dans ton cours et écrit les propositions. Une question sans réponse dans le cours est écartée.</small>
+        </div>
+      </div>
+
+      <div class="card" id="create-cards-options">
+        <h2>Les cartes</h2>
+        <div class="field inline-field">
+          <label for="cards-count">Nombre de cartes à ajouter</label>
+          <input type="number" id="cards-count" min="1" max="100" value="20">
+        </div>
+        <p class="muted small-text">Elles s'ajoutent à celles que tu as déjà, sans doublon.</p>
+      </div>
+
+      <div class="card">
+        <h2 id="engine-title">Moteur IA</h2>
+        <p class="muted small-text" id="engine-note" hidden></p>
+        <div class="engines" id="engines">
+          <label class="engine">
+            <input type="radio" name="provider" value="local">
+            <span>
+              <strong>Local (Ollama)</strong>
+              <small id="local-status" class="muted">Sur ton Mac, hors ligne, gratuit</small>
+            </span>
+          </label>
+          <label class="engine">
+            <input type="radio" name="provider" value="claude">
+            <span>
+              <strong>Claude (API)</strong>
+              <small id="claude-status" class="muted">Meilleure qualité, nécessite une clé API</small>
+            </span>
+          </label>
+        </div>
+        <div class="grid">
+          <div class="field" id="local-model-field">
+            <label for="local-model">Modèle local</label>
+            <select id="local-model"></select>
+          </div>
+          <div class="field">
+            <label for="language">Langue</label>
+            <input type="text" id="language" value="français">
+          </div>
+        </div>
+      </div>
+
+      <p id="create-error" class="error" hidden></p>
+      <button id="create-btn" class="primary">Générer le quiz</button>
+    </section>
+
+    <!-- Génération en cours -->
+    <section id="view-loading" class="view" hidden>
+      <div class="spinner"></div>
+      <h2 id="loading-title">Génération du quiz…</h2>
+      <ul id="progress-log" class="progress-log"></ul>
+    </section>
+
+    <!-- Séance de révision : flashcards (et questions de quiz mélangées) -->
+    <section id="view-cards" class="view" hidden>
+      <div class="quiz-head">
+        <h1 id="cards-title">Flashcards</h1>
+        <span id="cards-counter" class="pill"></span>
+      </div>
+      <div class="progress"><div id="cards-bar"></div></div>
+      <div class="session-top">
+        <p class="muted small-text session-origin" id="session-origin"></p>
+        <div class="filters mini" id="session-mode" role="radiogroup" aria-label="Façon de réviser les cartes">
+          <button type="button" role="radio" data-card-mode="flip">Retourner</button>
+          <button type="button" role="radio" data-card-mode="type">Écrire</button>
+        </div>
+      </div>
+      <div id="card-stage">
+        <div class="flashcard" id="flashcard" role="button" tabindex="0" aria-live="polite">
+          <span class="flashcard-inner">
+            <span class="flashcard-face flashcard-front"><span id="card-front"></span><small id="card-front-hint">Clique ou appuie sur Espace pour retourner</small></span>
+            <span class="flashcard-face flashcard-back"><small id="card-back-question"></small><span id="card-back"></span><small class="card-source" id="card-source"></small></span>
+          </span>
+        </div>
+        <div class="typed" id="typed-area" hidden>
+          <textarea id="typed-answer" rows="2" placeholder="Écris ta réponse, puis Entrée"></textarea>
+          <button class="primary" type="button" id="typed-check">Vérifier</button>
+        </div>
+        <div class="typed-result" id="typed-result" hidden></div>
+        <div class="ratings" id="ratings" hidden>
+          <button type="button" class="rating again" data-rating="again"><b>Je ne savais pas</b></button>
+          <button type="button" class="rating hard" data-rating="hard"><b>À moitié</b></button>
+          <button type="button" class="rating good" data-rating="good"><b>Je savais</b></button>
+        </div>
+        <p class="muted small-text center" id="card-keys"><span id="card-keys-text"></span> ·
+          <button class="link-button inline" type="button" id="card-edit-current">Modifier cette carte</button></p>
+      </div>
+      <div id="question-stage" hidden>
+        <div class="card question-card">
+          <span id="sq-type" class="tag"></span>
+          <h2 id="sq-text"></h2>
+          <div id="sq-answers"></div>
+          <div id="sq-feedback" class="feedback" hidden></div>
+        </div>
+        <div class="actions">
+          <button id="sq-validate" class="primary">Valider</button>
+          <button id="sq-next" class="primary" hidden>Continuer</button>
+        </div>
+      </div>
+      <div id="cards-done" class="card center" hidden>
+        <h2>Séance terminée</h2>
+        <p id="cards-summary"></p>
+        <div class="actions center-actions">
+          <button class="primary" id="session-correction-btn">Voir la correction</button>
+          <button class="ghost" id="session-done-back">Terminer</button>
+        </div>
+      </div>
+      <div id="session-correction" hidden>
+        <div class="panel-head">
+          <h2>Correction</h2>
+          <div class="filters" role="tablist" aria-label="Éléments affichés">
+            <button role="tab" data-correction="all">Tout</button>
+            <button role="tab" data-correction="errors">Mes erreurs seulement</button>
+          </div>
+        </div>
+        <ol class="review" id="session-review"></ol>
+        <div class="actions">
+          <button class="primary" id="session-redo">Refaire mes erreurs</button>
+          <button class="ghost" id="session-correction-done">Terminer</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- Quiz -->
+    <section id="view-quiz" class="view" hidden>
+      <div class="quiz-head">
+        <h1 id="quiz-title"></h1>
+        <span id="quiz-counter" class="pill"></span>
+      </div>
+      <div class="progress"><div id="progress-bar"></div></div>
+      <p class="status" id="quiz-note" hidden></p>
+      <div class="card question-card">
+        <span id="question-type" class="tag"></span>
+        <h2 id="question-text"></h2>
+        <div id="answer-area"></div>
+        <div id="feedback" class="feedback" hidden></div>
+      </div>
+      <div class="actions">
+        <button id="validate-btn" class="primary">Valider</button>
+        <button id="next-btn" class="primary" hidden>Question suivante</button>
+      </div>
+      <div class="question-tools" id="question-tools" hidden>
+        <button class="link-button" id="report-btn">Cette question ou sa réponse est incorrecte ? Signaler</button>
+        <button class="link-button danger" id="delete-q-btn">Supprimer cette question (hors sujet)</button>
+      </div>
+    </section>
+
+    <!-- Résultats -->
+    <section id="view-results" class="view" hidden>
+      <h1>Résultat</h1>
+      <p class="score"><span id="score"></span></p>
+      <div class="actions">
+        <button id="retry-btn" class="primary">Refaire le quiz</button>
+        <button id="retry-wrong-btn" class="ghost">Refaire mes erreurs</button>
+        <button id="back-course-btn" class="ghost">Retour au cours</button>
+      </div>
+      <div class="filters results-filter" role="tablist" aria-label="Questions affichées">
+        <button role="tab" data-results="all">Tout</button>
+        <button role="tab" data-results="errors">Mes erreurs seulement</button>
+      </div>
+      <ol id="review" class="review"></ol>
+    </section>
+  </main>
+
+  <!-- Définitions repérées dans un fichier -->
+  <dialog id="defs-dialog" class="report-dialog">
+    <h2 id="defs-title">Définitions repérées</h2>
+    <p class="muted small-text">Pas les bonnes ? Règle le repérage dans Réglages → Tes définitions.</p>
+    <ol id="defs-dialog-list" class="defs-list"></ol>
+    <div class="actions"><button class="ghost" type="button" id="defs-close">Fermer</button></div>
+  </dialog>
+
+  <!-- Cours mis à jour : ce qui ne correspond plus -->
+  <dialog id="outdated-dialog" class="report-dialog wide-dialog">
+    <form id="outdated-form">
+      <h2>Ton cours a changé</h2>
+      <p class="muted small-text">La phrase du cours d'où viennent ces questions et ces cartes n'est plus dans la nouvelle
+        version. Coche celles à supprimer ; les autres sont gardées et ne seront plus signalées.</p>
+      <ul class="outdated-list" id="outdated-list"></ul>
+      <div class="actions">
+        <button class="primary" type="submit" id="outdated-apply">Supprimer la sélection</button>
+        <button class="ghost" type="button" id="outdated-keep">Tout garder</button>
+        <button class="ghost" type="button" id="outdated-cancel">Plus tard</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Semaine des partiels -->
+  <dialog id="exam-dialog" class="report-dialog">
+    <form id="exam-form">
+      <h2>Semaine des partiels</h2>
+      <p class="muted small-text" id="exam-dialog-text">Indique le premier jour de ta semaine de partiels. Les révisions s'organisent pour que tout
+        soit revu avant, de plus en plus souvent à l'approche, puis chaque jour pendant la semaine.</p>
+      <div class="field">
+        <label for="exam-date">Premier jour</label>
+        <input type="date" id="exam-date">
+      </div>
+      <p class="muted small-text" id="exam-inherit" hidden></p>
+      <p class="status" id="exam-status" hidden></p>
+      <div class="actions">
+        <button class="primary" type="submit">Enregistrer</button>
+        <button class="ghost" type="button" id="exam-clear">Retirer la date</button>
+        <button class="ghost" type="button" id="exam-cancel">Annuler</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Nouveau cours -->
+  <dialog id="new-course-dialog" class="report-dialog">
+    <form id="new-course-form">
+      <h2>Nouveau cours</h2>
+      <label id="new-course-drop" class="dropzone small-drop" for="new-course-files">
+        <input type="file" id="new-course-files" multiple accept=".pdf,.docx,.pptx,.pages,.key,.txt,.md,.markdown" hidden>
+        <strong id="new-course-drop-title">Glisse ton cours ici</strong>
+        <span class="muted small-text" id="new-course-drop-sub">ou clique pour choisir · PDF, Word, PowerPoint, Pages, Keynote, texte</span>
+      </label>
+      <div class="field">
+        <label for="new-course-name">Nom du cours</label>
+        <input type="text" id="new-course-name" maxlength="120" placeholder="ex. Neurosciences, chap. 4" autocomplete="off">
+      </div>
+      <div class="field" id="new-course-folder-field">
+        <label for="new-course-folder">Dossier</label>
+        <select id="new-course-folder"></select>
+      </div>
+      <p class="status" id="new-course-status" hidden></p>
+      <div class="actions">
+        <button class="primary" type="submit" id="new-course-create">Créer le cours</button>
+        <button class="ghost" type="button" id="new-course-cancel">Annuler</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- « + » des flashcards -->
+  <div class="plus-menu" id="cards-menu" role="menu" hidden>
+    <button type="button" role="menuitem" data-cards-choice="ai"><strong>Générer avec l'IA</strong><small>À partir de ton cours</small></button>
+    <button type="button" role="menuitem" data-cards-choice="manual"><strong>Écrire une carte</strong><small>Toi-même, question et réponse</small></button>
+  </div>
+
+  <!-- Petite question (nom d'un dossier, d'un quiz…) -->
+  <dialog id="ask-dialog" class="report-dialog">
+    <form id="ask-form" method="dialog">
+      <h2 id="ask-title"></h2>
+      <input type="text" id="ask-input" maxlength="120" autocomplete="off">
+      <div class="actions">
+        <button class="primary" type="submit" value="ok">OK</button>
+        <button class="ghost" type="button" id="ask-cancel">Annuler</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Écrire ou corriger une flashcard -->
+  <dialog id="card-dialog" class="report-dialog">
+    <form id="card-form">
+      <h2 id="card-dialog-title">Nouvelle carte</h2>
+      <label class="field" for="card-front-input">Recto : la question ou le terme</label>
+      <textarea id="card-front-input" rows="2" placeholder="ex. Qu'est-ce que le système nerveux autonome ?"></textarea>
+      <label class="field" for="card-back-input">Verso : la réponse</label>
+      <textarea id="card-back-input" rows="4" placeholder="La réponse, avec les mots de ton cours"></textarea>
+      <p class="status" id="card-dialog-status" hidden></p>
+      <div class="actions">
+        <button class="primary" type="submit" id="card-save">Enregistrer</button>
+        <button class="ghost" type="button" id="card-save-next">Ajouter et en écrire une autre</button>
+        <button class="ghost" type="button" id="card-cancel">Fermer</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Feedback : une idée, un bug… -->
+  <dialog id="feedback-dialog" class="report-dialog">
+    <form id="feedback-form">
+      <h2>Ton retour sur Pirouette</h2>
+      <p class="muted small-text">Une idée, un bug, quelque chose de pas clair ? Pirouette prépare le mail, il ne reste qu'à l'envoyer.</p>
+      <div class="field">
+        <label for="feedback-kind">C'est…</label>
+        <select id="feedback-kind">
+          <option value="idee">Une idée</option>
+          <option value="bug">Un bug</option>
+          <option value="autre">Autre chose</option>
+        </select>
+      </div>
+      <label class="field" for="feedback-message">Ton message</label>
+      <textarea id="feedback-message" rows="5" placeholder="Ex. : ce serait bien de pouvoir…"></textarea>
+      <p class="status" id="feedback-status" hidden></p>
+      <div class="actions">
+        <button class="primary" type="submit" id="feedback-send">Envoyer</button>
+        <button class="ghost" type="button" id="feedback-cancel">Annuler</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Signaler une question -->
+  <dialog id="report-dialog" class="report-dialog">
+    <form id="report-form">
+      <h2>Signaler cette question</h2>
+      <p class="muted small-text">La question, les réponses proposées et la bonne réponse du quiz sont jointes automatiquement.</p>
+      <div class="report-box">
+        <p class="report-q" id="report-question"></p>
+        <ul class="report-choices" id="report-choices"></ul>
+        <p class="muted small-text" id="report-given"></p>
+      </div>
+      <label class="field" for="report-message">Ton message (facultatif)</label>
+      <textarea id="report-message" rows="4" placeholder="Ex. : la bonne réponse est plutôt « … », voir page 12 du cours."></textarea>
+      <p class="status" id="report-status" hidden></p>
+      <div class="actions">
+        <button class="primary" type="submit" id="report-send">Envoyer le signalement</button>
+        <button class="ghost" type="button" id="report-cancel">Annuler</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Nouvelle version disponible -->
+  <div class="update-toast" id="update-toast" role="status" hidden>
+    <p id="update-text"></p>
+    <div class="progress" id="update-progress" hidden><div id="update-bar"></div></div>
+    <div class="actions">
+      <button class="primary small" type="button" id="update-go">Mettre à jour</button>
+      <button class="ghost small" type="button" id="update-later">Plus tard</button>
+    </div>
+  </div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

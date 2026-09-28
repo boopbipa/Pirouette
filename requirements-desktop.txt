@@ -1,0 +1,4 @@
+# Pour fabriquer l'app de bureau (Pirouette.app / .dmg)
+-r requirements.txt
+pywebview>=6.0
+pyinstaller>=6.10
