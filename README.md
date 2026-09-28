@@ -196,8 +196,8 @@ tombent toujours avant la semaine, se resserrent les deux dernières semaines, p
 semaine ; les nouvelles cartes sont étalées pour être toutes vues à temps.
 
 **Mises à jour automatiques** (app Mac) : au lancement, Pirouette vérifie s'il existe une version plus récente et
-propose « Mettre à jour » : elle télécharge le .dmg de ce Mac, se ferme, remplace l'app et se relance (les données
-ne bougent pas). Réglages → Version → « Vérifier les mises à jour », ou le menu **Mise à jour** de la barre des menus du Mac (version actuelle, « Rechercher une mise à jour… », « Installer la mise à jour »). Il faut que les versions soient publiées sur
+propose « Mettre à jour » : elle télécharge le .dmg de ce Mac et prépare la nouvelle version, puis t'invite à quitter
+Pirouette et à la rouvrir ; l'app est remplacée pendant qu'elle est fermée (les données ne bougent pas). Réglages → Version → « Vérifier les mises à jour », ou le menu **Mise à jour** de la barre des menus du Mac (version actuelle, « Rechercher une mise à jour… », « Installer la mise à jour »). Il faut que les versions soient publiées sur
 un dépôt GitHub public (`PIROUETTE_UPDATE_REPO` pour en changer).
 
 **Couleur de l'app** : terre cuite par défaut (fond brun en mode sombre) ; Réglages → Couleur de l'app pour en changer

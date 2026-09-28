@@ -1135,7 +1135,7 @@ class InstallIn(BaseModel):
 
 @app.post("/api/update/install")
 async def update_install(body: InstallIn) -> StreamingResponse:
-    """Télécharge et prépare la nouvelle version ; l'interface ferme ensuite l'app, qui se relance à jour."""
+    """Télécharge et prépare la nouvelle version ; elle remplacera l'ancienne quand Pirouette sera quittée."""
     if not body.url.startswith("https://github.com/") and not body.url.startswith("https://objects.githubusercontent.com/"):
         raise HTTPException(400, "Adresse de mise à jour inattendue.")
 

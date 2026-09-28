@@ -63,7 +63,7 @@ class DesktopApi:
     """
 
     def quit(self) -> None:
-        """Ferme Pirouette (après avoir préparé une mise à jour, qui relance l'app toute seule)."""
+        """Ferme Pirouette (après une mise à jour : la nouvelle version prend la place de l'ancienne, à rouvrir)."""
         import webview
 
         for window in list(webview.windows):
@@ -157,6 +157,10 @@ def main() -> None:
         except KeyboardInterrupt:
             pass
         return
+
+    from app import updater
+
+    updater.resume_pending()  # une mise à jour téléchargée attend encore : elle s'installera à la fermeture
 
     import webview
 

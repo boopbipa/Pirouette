@@ -1,8 +1,10 @@
 """Mises à jour automatiques de l'app Mac.
 
 Au lancement, Pirouette regarde la dernière version publiée sur GitHub (page « Releases »). S'il y en a une plus
-récente, un clic suffit : Pirouette télécharge le .dmg de ce Mac (puce Apple ou Intel), en sort la nouvelle app, se
-ferme, remplace l'ancienne app par la nouvelle et se relance. Les données (cours, cartes…) ne bougent pas : elles
+récente, un clic suffit : Pirouette télécharge le .dmg de ce Mac (puce Apple ou Intel) et en sort la nouvelle app, rangée
+à côté (Pirouette.app.nouvelle). L'app ne se relance pas toute seule (c'était source de bugs) : on invite l'utilisateur
+à la quitter puis la rouvrir. Dès que plus aucune Pirouette ne tourne, un petit script remplace l'ancienne app par la
+nouvelle ; la prochaine ouverture est à jour. Les données (cours, cartes…) ne bougent pas : elles
 sont rangées à part, dans ~/Library/Application Support/Pirouette.
 """
 
@@ -46,9 +48,19 @@ def can_install() -> bool:
     return bundle is not None and os.access(bundle.parent, os.W_OK)
 
 
+def pending_app(bundle: Path | None = None) -> Path | None:
+    """Nouvelle version déjà téléchargée, qui attend que Pirouette soit quittée pour prendre la place de l'ancienne."""
+    bundle = bundle or app_bundle()
+    if bundle is None:
+        return None
+    new_app = bundle.with_name(bundle.name + ".nouvelle")
+    return new_app if (new_app / "Contents").is_dir() else None
+
+
 async def check() -> dict:
-    """Dernière version publiée : {current, latest, available, url, page, can_install} ou {error}."""
-    result = {"current": __version__, "can_install": can_install()}
+    """Dernière version publiée : {current, latest, available, url, page, can_install, ready} ou {error}.
+    `ready` : la nouvelle version est déjà téléchargée, il ne reste qu'à quitter et rouvrir Pirouette."""
+    result = {"current": __version__, "can_install": can_install(), "ready": pending_app() is not None}
     try:
         async with httpx.AsyncClient(timeout=8, follow_redirects=True) as client:
             response = await client.get(API, headers={"Accept": "application/vnd.github+json"})
@@ -69,12 +81,16 @@ async def check() -> dict:
     }
 
 
-def swap_script(bundle: Path, new_app: Path, pid: int) -> str:
-    """Script lancé à part : attend que Pirouette soit fermée, remplace l'app, puis la relance."""
+def swap_script(bundle: Path, new_app: Path) -> str:
+    """Script lancé à part : attend que plus aucune Pirouette ne tourne (l'utilisateur la quitte quand il veut),
+    puis remplace l'app. Il ne la relance pas : c'est l'utilisateur qui la rouvre."""
     q = lambda p: "'" + str(p).replace("'", "'\\''") + "'"  # noqa: E731
     old = bundle.with_name(bundle.name + ".ancienne")
+    running = q(str(bundle) + "/Contents/MacOS/")
     return f"""#!/bin/bash
-for i in $(seq 1 120); do kill -0 {pid} 2>/dev/null || break; sleep 0.5; done
+while pgrep -f {running} >/dev/null 2>&1; do sleep 1; done
+sleep 1
+[ -d {q(new_app)} ] || exit 0
 rm -rf {q(old)}
 if mv {q(bundle)} {q(old)} && mv {q(new_app)} {q(bundle)}; then
   rm -rf {q(old)}
@@ -82,12 +98,29 @@ else
   [ -d {q(old)} ] && [ ! -d {q(bundle)} ] && mv {q(old)} {q(bundle)}
 fi
 xattr -dr com.apple.quarantine {q(bundle)} 2>/dev/null
-open {q(bundle)}
 """
 
 
+def start_swap(bundle: Path, new_app: Path) -> None:
+    """Lance (à part, pour qu'il survive à la fermeture de Pirouette) le script qui remplacera l'app."""
+    work = Path(tempfile.mkdtemp(prefix="pirouette-maj-"))
+    script = work / "remplacer.sh"
+    script.write_text(swap_script(bundle, new_app), encoding="utf-8")
+    subprocess.Popen(["/bin/bash", str(script)], start_new_session=True,
+                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+
+def resume_pending() -> None:
+    """Au lancement : une nouvelle version attend encore (Mac redémarré entre-temps…) ? On relance l'attente,
+    le remplacement se fera quand cette Pirouette sera quittée."""
+    bundle = app_bundle()
+    new_app = pending_app(bundle)
+    if bundle is not None and new_app is not None:
+        start_swap(bundle, new_app)
+
+
 async def install(url: str, on_progress) -> None:
-    """Télécharge le .dmg, prépare la nouvelle app et lance le remplacement (qui attend la fermeture de Pirouette)."""
+    """Télécharge le .dmg, prépare la nouvelle app et lance le remplacement (qui attend que Pirouette soit quittée)."""
     bundle = app_bundle()
     if bundle is None:
         raise RuntimeError("La mise à jour automatique ne marche que dans l'app Mac.")
@@ -110,12 +143,10 @@ async def install(url: str, on_progress) -> None:
     subprocess.run(["hdiutil", "attach", "-nobrowse", "-readonly", "-mountpoint", str(mount), str(dmg)],
                    check=True, capture_output=True)
     try:
-        new_app = bundle.with_name("Pirouette.app.nouvelle")
+        new_app = bundle.with_name(bundle.name + ".nouvelle")
         shutil.rmtree(new_app, ignore_errors=True)
         subprocess.run(["ditto", str(mount / "Pirouette.app"), str(new_app)], check=True, capture_output=True)
     finally:
         subprocess.run(["hdiutil", "detach", "-force", str(mount)], capture_output=True)
-    script = work / "remplacer.sh"
-    script.write_text(swap_script(bundle, new_app, os.getpid()), encoding="utf-8")
-    subprocess.Popen(["/bin/bash", str(script)], start_new_session=True,
-                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    shutil.rmtree(work, ignore_errors=True)
+    start_swap(bundle, new_app)

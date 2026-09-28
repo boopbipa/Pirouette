@@ -3473,6 +3473,10 @@ async function checkUpdate({ quiet = false } = {}) {
     return;
   }
   state.update = info;
+  if (info.ready) {
+    if (!quiet) setStatus("#update-status", "La mise à jour est prête : quitte Pirouette puis rouvre-la.", true);
+    return showUpdateReady();
+  }
   if (!quiet) {
     if (info.error) setStatus("#update-status", UPDATE_ERRORS[info.error] || info.error, false);
     else setStatus("#update-status", info.available ? `La version ${info.latest} est disponible.` : "Tu as la dernière version.", true);
@@ -3500,8 +3504,25 @@ $("#update-later").addEventListener("click", () => {
   $("#update-toast").hidden = true;
 });
 
+// La nouvelle version est téléchargée : on ne relance pas l'app nous-mêmes (source de bugs), on invite à le faire.
+function showUpdateReady() {
+  $("#update-text").innerHTML = "<b>La mise à jour est prête.</b> Quitte Pirouette (⌘Q) puis rouvre-la : "
+    + "la nouvelle version s'installera à ce moment-là. Tes cours et tes cartes sont gardés.";
+  $("#update-progress").hidden = true;
+  $("#update-go").hidden = !window.pywebview?.api?.quit;
+  $("#update-go").disabled = false;
+  $("#update-go").textContent = "Quitter Pirouette";
+  $("#update-later").hidden = false;
+  $("#update-later").textContent = "Plus tard";
+  $("#update-toast").hidden = false;
+}
+
 $("#update-go").addEventListener("click", async () => {
   const info = state.update;
+  if (info.ready) {
+    window.pywebview?.api?.quit();
+    return;
+  }
   if (!info.can_install) {
     window.open(info.page, "_blank");
     return;
@@ -3518,9 +3539,8 @@ $("#update-go").addEventListener("click", async () => {
       if (event.type === "status") $("#update-text").textContent = event.message;
       if (event.type === "error") throw new Error(event.message);
       if (event.type === "done") {
-        $("#update-text").textContent = "C'est prêt : Pirouette se ferme et se relance à jour.";
-        setTimeout(() => window.pywebview?.api?.quit(), 1200);
-        return;
+        info.ready = true;
+        return showUpdateReady();
       }
     }
   } catch (err) {
@@ -3560,6 +3580,7 @@ window.pirouetteMenu = async (action) => {
     return updateNotice(escapeHtml(err.message));
   }
   state.update = info;
+  if (info.ready) return showUpdateReady();
   if (info.error) return updateNotice(escapeHtml(UPDATE_ERRORS[info.error] || info.error));
   if (!info.available) return updateNotice(`Tu as la dernière version : <b>Pirouette ${escapeHtml(info.current)}</b>.`);
   updateNotice(`<b>Pirouette ${escapeHtml(info.latest)}</b> est disponible (tu as la ${escapeHtml(info.current)}). Tes cours et tes cartes sont gardés.`,

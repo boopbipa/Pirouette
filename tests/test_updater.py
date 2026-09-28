@@ -13,10 +13,19 @@ REAL_CLIENT = httpx.AsyncClient
 def test_versions_and_script():
     assert updater.parse_version("v0.17.0") < updater.parse_version("0.18.0") < updater.parse_version("1.0")
     assert updater.parse_version("0.10.0") > updater.parse_version("0.9.9")
-    script = updater.swap_script(Path("/Applications/Pirouette.app"), Path("/Applications/Pirouette.app.nouvelle"), 4242)
-    assert "kill -0 4242" in script and "open '/Applications/Pirouette.app'" in script
+    script = updater.swap_script(Path("/Applications/Pirouette.app"), Path("/Applications/Pirouette.app.nouvelle"))
+    assert "pgrep -f '/Applications/Pirouette.app/Contents/MacOS/'" in script
+    assert "open " not in script  # l'app ne se relance pas toute seule : l'utilisateur la rouvre
     assert "mv '/Applications/Pirouette.app.nouvelle' '/Applications/Pirouette.app'" in script
     assert updater.app_bundle() is None  # pas l'app empaquetée : pas d'installation automatique
+    assert updater.pending_app() is None
+
+
+def test_pending_app(tmp_path):
+    bundle = tmp_path / "Pirouette.app"
+    assert updater.pending_app(bundle) is None
+    (tmp_path / "Pirouette.app.nouvelle" / "Contents").mkdir(parents=True)
+    assert updater.pending_app(bundle) == tmp_path / "Pirouette.app.nouvelle"
 
 
 @pytest.fixture
