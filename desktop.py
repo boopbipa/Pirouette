@@ -115,6 +115,30 @@ def remind() -> None:
         notify(text)
 
 
+def app_menu() -> list:
+    """Barre des menus du Mac : « Rechercher une mise à jour… » dans le menu Pirouette, et un menu « Mise à jour »."""
+    import webview
+    from webview.menu import Menu, MenuAction, MenuSeparator
+
+    from app import __version__
+
+    def call(action: str):
+        def run() -> None:
+            if webview.windows:
+                webview.windows[0].evaluate_js(f"window.pirouetteMenu && window.pirouetteMenu({action!r})")
+        return run
+
+    return [
+        Menu("__app__", [MenuAction("Rechercher une mise à jour…", call("check"))]),
+        Menu("Mise à jour", [
+            MenuAction(f"Version actuelle : {__version__}", call("version")),
+            MenuSeparator(),
+            MenuAction("Rechercher une mise à jour…", call("check")),
+            MenuAction("Installer la mise à jour", call("install")),
+        ]),
+    ]
+
+
 def main() -> None:
     os.environ.setdefault("QUIZZ_DATA_DIR", str(data_dir()))
     os.environ["PIROUETTE_DESKTOP"] = "1"
@@ -142,7 +166,7 @@ def main() -> None:
         background_color="#FAF8F3",
         text_select=True,  # indispensable pour sélectionner un mot et demander sa définition
     )
-    webview.start()
+    webview.start(menu=app_menu())
     server.should_exit = True
 
 

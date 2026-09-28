@@ -3388,7 +3388,9 @@ function showUpdateToast(info) {
     + (info.can_install ? " Tes cours et tes cartes sont gardés." : "");
   $("#update-go").textContent = info.can_install ? "Mettre à jour" : "Télécharger";
   $("#update-go").disabled = false;
+  $("#update-go").hidden = false;
   $("#update-later").hidden = false;
+  $("#update-later").textContent = "Plus tard";
   $("#update-progress").hidden = true;
   $("#update-toast").hidden = false;
 }
@@ -3431,3 +3433,36 @@ $("#update-go").addEventListener("click", async () => {
 
 $("#update-check").addEventListener("click", () => checkUpdate());
 setTimeout(() => checkUpdate({ quiet: true }), 2500);
+
+// Menu « Mise à jour » de la barre des menus du Mac (voir desktop.py) : il appelle window.pirouetteMenu(…).
+function updateNotice(html, { install = false } = {}) {
+  $("#update-text").innerHTML = html;
+  $("#update-progress").hidden = true;
+  $("#update-go").hidden = !install;
+  $("#update-go").disabled = false;
+  $("#update-go").textContent = state.update?.can_install ? "Mettre à jour" : "Télécharger";
+  $("#update-later").hidden = false;
+  $("#update-later").textContent = install ? "Plus tard" : "OK";
+  $("#update-toast").hidden = false;
+}
+
+window.pirouetteMenu = async (action) => {
+  const version = (await api("/api/settings").catch(() => ({}))).version || "";
+  if (action === "version") {
+    return updateNotice(`Tu utilises <b>Pirouette ${escapeHtml(version)}</b>.`);
+  }
+  updateNotice("Recherche d'une mise à jour…");
+  $("#update-later").hidden = true;
+  let info;
+  try {
+    info = await api("/api/update");
+  } catch (err) {
+    return updateNotice(escapeHtml(err.message));
+  }
+  state.update = info;
+  if (info.error) return updateNotice(escapeHtml(UPDATE_ERRORS[info.error] || info.error));
+  if (!info.available) return updateNotice(`Tu as la dernière version : <b>Pirouette ${escapeHtml(info.current)}</b>.`);
+  updateNotice(`<b>Pirouette ${escapeHtml(info.latest)}</b> est disponible (tu as la ${escapeHtml(info.current)}). Tes cours et tes cartes sont gardés.`,
+    { install: true });
+  if (action === "install" && info.can_install) $("#update-go").click();
+};

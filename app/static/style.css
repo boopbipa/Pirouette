@@ -870,3 +870,8 @@ input.cloze-input:disabled { opacity: 1; }
 .update-toast .actions { margin-top: 10px; }
 .update-toast .progress { margin: 8px 0 0; }
 #update-bar { height: 100%; width: 0; background: var(--accent); transition: width .2s; }
+
+/* Menu du haut : texte bien centré en hauteur */
+.nav-pill { align-items: center; }
+.nav-pill a, .nav-feedback { display: inline-flex; align-items: center; height: 34px; padding-top: 2px; padding-bottom: 0; line-height: 1; }
+.nav-feedback svg { flex: none; }
