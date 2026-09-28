@@ -361,6 +361,56 @@ class Store:
                 _write(path, course)
         self._save_folders([f for f in self.list_folders() if f["id"] != folder_id])
 
+    # ---------- Plan de révision et rétroplanning (sur un semestre, ou un cours sans semestre) ----------
+    def _owner(self, kind: str, owner_id: str) -> dict:
+        return self.get_folder(owner_id) if kind == "dossier" else self.get_course(owner_id)
+
+    def _update_owner(self, kind: str, owner_id: str, **fields) -> dict:
+        if kind == "dossier":
+            folders = self.list_folders()
+            folder = next((f for f in folders if f["id"] == owner_id), None)
+            if folder is None:
+                raise NotFound(owner_id)
+            folder.update(fields)
+            self._save_folders(folders)
+            return folder
+        course = self.get_course(owner_id)
+        course.update(fields)
+        self._save_course(course)
+        return course
+
+    def get_plan(self, kind: str, owner_id: str) -> dict | None:
+        return self._owner(kind, owner_id).get("plan")
+
+    def set_plan(self, kind: str, owner_id: str, plan: dict | None) -> dict:
+        return self._update_owner(kind, owner_id, plan=plan)
+
+    def get_retro(self, kind: str, owner_id: str) -> dict | None:
+        return self._owner(kind, owner_id).get("retro")
+
+    def set_retro(self, kind: str, owner_id: str, retro: dict | None) -> dict:
+        return self._update_owner(kind, owner_id, retro=retro)
+
+    def scope_course_ids(self, kind: str, owner_id: str) -> list[str]:
+        if kind == "dossier":
+            return [c["id"] for c in self.list_courses() if c.get("folder_id") == owner_id]
+        return [owner_id]
+
+    def active_days(self, course_ids: list[str]) -> set[date]:
+        """Jours où l'on a révisé (cartes ou questions) au moins un de ces cours."""
+        wanted = set(course_ids)
+        return {date.fromisoformat(day) for day, per_course in self.activity().items()
+                if any(cid in wanted and (e.get("cards") or e.get("questions")) for cid, e in per_course.items())}
+
+    def plans(self) -> list[tuple[str, str, str, dict]]:
+        """Plans en cours : (type, id, nom, plan) — semestres non archivés et cours sans semestre."""
+        found = [("dossier", f["id"], f["name"], f["plan"]) for f in self.list_folders()
+                 if f.get("plan") and not f.get("archived")]
+        known = {f["id"] for f in self.list_folders()}
+        found += [("cours", c["id"], c["name"], c["plan"]) for c in self.list_courses()
+                  if c.get("plan") and c.get("folder_id") not in known]
+        return found
+
     # ---------- Semaine des partiels ----------
     def set_exam_week(self, course_id: str, day: str) -> dict:
         course = self.get_course(course_id)

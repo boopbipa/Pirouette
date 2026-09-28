@@ -80,7 +80,7 @@ dans **Safari** → menu Fichier → **Ajouter au Dock** (ou, dans Chrome / Edge
 ## Utilisation
 
 1. **Mes cours** : « + Nouveau cours » ouvre une petite fenêtre : glisse ton fichier (le nom du cours est repris
-   du fichier), choisis éventuellement un dossier, et c'est créé (ex. « Biologie — chapitre 4 »). La page du cours a trois entrées :
+   du fichier), choisis éventuellement un semestre, et c'est créé (ex. « Biologie — chapitre 4 »). La page du cours a trois entrées :
    **Quiz**, **Flashcards** et **Fichiers**, chacune avec un bouton **+** pour en ajouter.
 2. **Tout préparer** : après le dépôt d'un cours (et le repérage des chapitres), Pirouette propose de créer d'un coup
    un quiz et des flashcards par chapitre (10 questions et 10 cartes par défaut), en arrière-plan, chapitre après
@@ -115,15 +115,13 @@ dans **Safari** → menu Fichier → **Ajouter au Dock** (ou, dans Chrome / Edge
    réponse sont joints, on ajoute un message, et Pirouette ouvre l'app Mail avec le signalement prêt à envoyer
    (une copie reste dans `data/feedback.json`).
    Un nouveau quiz ne repose pas les questions des quiz déjà créés sur le même cours, même reformulées.
-5. **Flashcards** : toutes les cartes sont affichées ; **passe la souris** sur une carte pour voir la réponse,
-   **clique** dessus quand tu la connais (elle passe dans « Apprises », reclique pour la remettre « À revoir »).
-   « Réviser une par une » propose les cartes du filtre choisi, une à une (Espace pour retourner, ← / →).
-   Ajouter des cartes complète le paquet sans doublon. Au survol d'une carte : ✎ pour la corriger, ✕ pour la
-   supprimer (✎ aussi pendant la révision une par une). « ✎ Écrire une carte » en ajoute une à la main
+5. **Flashcards** : toutes les cartes du cours sont affichées, à regarder librement : un **clic** retourne la carte.
+   On les apprend dans **Réviser**. Ajouter des cartes complète le paquet sans doublon. Au survol d'une carte : ✎ pour la corriger, ✕ pour la
+   supprimer (✎ aussi pendant la révision). « ✎ Écrire une carte » en ajoute une à la main
    (ou via le « + » de la tuile Flashcards → « Écrire une carte » ; « Ajouter et en écrire une autre » pour en enchaîner plusieurs ; Pirouette prévient si elle ressemble à une carte existante).
-6. **Dossiers** : « + Dossier » sur l'accueil (un semestre, une UE…). Glisse un cours sur un dossier pour l'y ranger,
-   ou choisis son dossier en haut de la page du cours. Un dossier se replie, se renomme (✎) et s'**archive** à la fin
-   du semestre : il passe dans « Archivés », replié, en bas de l'accueil. Supprimer un dossier garde ses cours.
+6. **Semestres** : « + Semestre » dans Mes cours. Glisse un cours sur un semestre pour l'y ranger,
+   ou choisis son semestre en haut de la page du cours. Un semestre se replie, se renomme (✎) et s'**archive** une fois
+   terminé : il passe dans « Archivés », replié, en bas de la page. Supprimer un semestre garde ses cours.
 
 Les fichiers **Pages** et **Keynote** sont lus directement par Pirouette (format actuel et ancien format '09), sans
 avoir besoin de ces apps. En dernier recours seulement, Pirouette demande à Pages / Keynote de convertir le fichier.
@@ -150,15 +148,28 @@ Modelfile ni de Terminal. On peut la baisser (Mac qui peine) ou la monter si la 
 sans que ça se voie, ce qui rallonge beaucoup la génération et fait chauffer le Mac. Pirouette coupe cette
 réflexion par défaut ; Réglages → IA locale → « Laisser le modèle réfléchir avant de répondre » la réactive.
 
-**Menu du haut** : **Accueil** (message de bienvenue, cartes du jour et un seul bouton « Réviser »), **Mes cours** (cours et dossiers),
+**Menu du haut** : **Accueil** (message de bienvenue, cartes du jour et un seul bouton « Réviser »), **Mes cours** (cours et semestres),
 **Réviser**, Réglages et **Feedback** (une idée, un bug : Pirouette prépare le mail).
-La page d'un cours ne montre que ses trois entrées (Quiz, Flashcards, Fichiers) ; chacune ouvre sa propre page.
+La page d'un cours sert à **ranger et fabriquer** : ses trois entrées (Quiz, Flashcards, Fichiers) ouvrent chacune sa
+page. On y crée, renomme et supprime les quiz (un clic montre leurs questions), on regarde et modifie les cartes ;
+on s'entraîne dans **Réviser** (lien « Réviser ce cours → »).
 Un **fil d'Ariane** en haut (Mes cours › Cours › Quiz › …) permet de remonter d'un clic. Les menus déroulants
 sont aux couleurs de l'app.
 
-**Réviser** (répétition espacée, comme Anki) : d'abord on choisit quoi réviser (tous ses cours, un dossier ou un
-cours), puis on arrive sur la révision du jour, les points faibles et le suivi (replié, « Détails » pour tout voir).
-- **Révision du jour** : les cartes dont le rappel est arrivé, plus 20 nouvelles cartes au plus par jour, avec des
+**Réviser** (répétition espacée, comme Anki) : d'abord on choisit un semestre (« Tout le semestre ») ou un cours,
+puis trois onglets : **Réviser**, **Rétroplanning** et **Suivi**.
+- **Plan de révision** (sur un semestre, ou un cours sans semestre) : « une séance tous les 1 / 2 / 3 / 7 jours, de
+  15 / 30 / 45 minutes ». Pirouette affiche la séance à faire ou la prochaine date, les séances tenues (« 4 sur 5 ») et
+  un mot d'encouragement ; chaque séance commence par les cartes où tu bloques, puis les cartes du jour, avec
+  quelques questions de quiz. Un cours rangé dans un semestre suit le plan du semestre.
+- **Là où tu bloques** : les 5 cartes les plus souvent oubliées, et « Revoir ces cartes ».
+- **Quiz** : les quiz du semestre ou du cours, à passer (« Passer »), avec le meilleur score.
+- **Rétroplanning** : à partir de la semaine des partiels (on peut l'indiquer là), Pirouette date les séances d'ici
+  là : d'abord les chapitres (un ou plusieurs par séance, avec « Quiz » — ou « Créer le quiz » — et « Cartes » du
+  chapitre), des séances de révision entre deux, puis la consolidation (erreurs, cartes difficiles) et des partiels
+  blancs à la fin. Une séance se coche « faite » (automatiquement quand ses quiz sont passés, ou quand on a révisé ce
+  jour-là) ; « Recalculer » repart d'aujourd'hui sans reprogrammer les chapitres déjà vus.
+- **Révision du jour** (sans plan) : les cartes dont le rappel est arrivé, plus 20 nouvelles cartes au plus par jour, avec des
   questions de tes quiz glissées entre les cartes (celles ratées, jamais faites ou réussies il y a plus d'une semaine).
   Après chaque carte : **Je ne savais pas / À moitié / Je savais** (touches 1 à 3). Pirouette en déduit quand la
   reposer (plus tôt si on ne savait pas, de plus en plus tard si on savait), sans l'afficher. Un clic sur la carte la
@@ -172,13 +183,11 @@ cours), puis on arrive sur la révision du jour, les points faibles et le suivi 
   sur n'importe laquelle. Les flashcards se répondent par écrit ; les réponses écrites se corrigent soi-même ou par
   l'IA (elle juge l'idée, pas la formulation, et chaque verdict se conteste). Note sur 20, correction (tout / mes
   erreurs), « Refaire mes erreurs », et l'historique des dernières notes.
-- **Mes points faibles** (dans le Suivi) : les cartes souvent oubliées et les questions de quiz ratées la dernière fois.
 - **Suivi** : cartes révisées et réussite des 7 derniers jours, calendrier des 12 dernières semaines, cartes à revoir
-  les 7 prochains jours, bilan par cours. On peut réviser tous ses cours (hors dossiers archivés), un dossier ou un cours.
-- Sur la page d'un cours : « Réviser ce cours » et « Mes points faibles ». Dans la grille des flashcards, le verso
-  d'une carte apprise indique son prochain rappel.
-- **Rappel quotidien** (app Mac) : Réglages → Révisions → « Me rappeler de réviser chaque jour » et l'heure. Une
-  notification arrive à l'heure choisie, même app fermée, s'il y a des cartes du jour (via un fichier de lancement
+  les 7 prochains jours, bilan par cours.
+- **Rappel** (app Mac) : Réglages → Révisions → « Me rappeler de réviser » et l'heure. Avec un plan, la notification
+  arrive les jours de séance (premier et dernier jour de la période, tant que la séance n'est pas faite) ; sans plan,
+  s'il y a des cartes du jour. Même app fermée (via un fichier de lancement
   dans `~/Library/LaunchAgents`, supprimé quand on décoche). Le même réglage fixe le nombre de nouvelles cartes par jour.
 
 **Explique-moi** : dans la correction d'un quiz, d'une séance de révision ou d'un partiel, « Explique-moi » demande à
@@ -189,7 +198,7 @@ réponse), avec une astuce pour retenir.
 cartes dont la phrase du cours a disparu (« Ton cours a changé : … ne correspondent plus au cours ») : on coche celles
 à supprimer, les autres sont gardées et ne sont plus signalées.
 
-**Semaine des partiels** : sur un dossier (icône calendrier, pour tous ses cours) ou sur un cours (menu « ••• »), le
+**Semaine des partiels** : sur un semestre (icône calendrier, pour tous ses cours) ou sur un cours (menu « ••• »), le
 premier jour de la semaine d'examens. L'accueil et Réviser affichent « Partiels dans N jours » ; les rappels des cartes
 tombent toujours avant la semaine, se resserrent les deux dernières semaines, puis reviennent chaque jour pendant la
 semaine ; les nouvelles cartes sont étalées pour être toutes vues à temps.

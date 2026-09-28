@@ -57,11 +57,11 @@
       <div class="page-head">
         <h1>Mes cours <span class="muted count" id="course-count"></span></h1>
         <div class="head-actions">
-          <button class="ghost small" type="button" id="new-folder">+ Dossier</button>
+          <button class="ghost small" type="button" id="new-folder">+ Semestre</button>
           <button class="primary small" type="button" id="new-course-btn">+ Nouveau cours</button>
         </div>
       </div>
-      <p class="muted small-text" id="folders-help" hidden>Glisse un cours sur un dossier pour l'y ranger (ou choisis son dossier depuis la page du cours).</p>
+      <p class="muted small-text" id="folders-help" hidden>Glisse un cours sur un semestre pour l'y ranger (ou choisis son semestre depuis la page du cours).</p>
       <div class="course-grid drop-zone" data-drop-folder="">
         <div id="course-list" class="contents"></div>
       </div>
@@ -87,14 +87,68 @@
     <section id="view-review-scope" class="view" hidden>
       <h1 id="review-scope-title"></h1>
       <p class="exam-countdown" id="review-exam" hidden></p>
+      <nav class="filters scope-tabs" id="scope-tabs" role="tablist" aria-label="Réviser">
+        <a role="tab" data-scope-tab="">Réviser</a>
+        <a role="tab" data-scope-tab="planning">Rétroplanning</a>
+        <a role="tab" data-scope-tab="suivi">Suivi</a>
+      </nav>
 
-      <div class="revise-grid">
-        <div class="card revise-card">
+      <div id="scope-main">
+        <!-- Plan de révision (semestre, ou cours sans semestre) -->
+        <div class="card plan-card" id="plan-card" hidden>
+          <div id="plan-setup" hidden>
+            <h2>Ton plan de révision</h2>
+            <p class="muted">Choisis ton rythme : Pirouette te rappelle chaque séance et commence par les cartes où tu bloques.</p>
+            <div class="plan-form">
+              <span>Une séance</span>
+              <select id="plan-every" class="chip" aria-label="Rythme des séances">
+                <option value="1">tous les jours</option><option value="2" selected>tous les 2 jours</option>
+                <option value="3">tous les 3 jours</option><option value="7">chaque semaine</option>
+              </select>
+              <span>de</span>
+              <select id="plan-minutes" class="chip" aria-label="Durée d'une séance">
+                <option value="15" selected>15 minutes</option><option value="30">30 minutes</option><option value="45">45 minutes</option>
+              </select>
+            </div>
+            <div class="actions">
+              <button class="primary" type="button" id="plan-save">Lancer mon plan</button>
+              <button class="ghost" type="button" id="plan-cancel" hidden>Annuler</button>
+            </div>
+          </div>
+          <div id="plan-view" hidden>
+            <div class="plan-head">
+              <h2>Ton plan</h2>
+              <span class="muted" id="plan-rhythm"></span>
+              <button class="link-button" type="button" id="plan-edit">Modifier</button>
+            </div>
+            <p class="plan-next" id="plan-next"></p>
+            <p class="muted" id="plan-regular"></p>
+            <button class="primary" type="button" id="plan-start">Commencer la séance</button>
+          </div>
+        </div>
+
+        <!-- Cours rangé dans un semestre : le plan se règle sur le semestre -->
+        <div class="card revise-card" id="today-card">
           <h2>Révision du jour</h2>
           <p class="revise-count" id="today-summary"></p>
-          <p class="muted small-text">Les cartes reviennent au bon moment, avec quelques questions de tes quiz.</p>
+          <p class="muted small-text" id="today-note">Les cartes reviennent au bon moment, avec quelques questions de tes quiz.</p>
           <button class="primary" id="start-today">Commencer</button>
         </div>
+
+        <div class="card hard-card" id="hard-card" hidden>
+          <div class="plan-head">
+            <h2>Là où tu bloques</h2>
+            <button class="ghost small" type="button" id="start-weak">Revoir ces cartes</button>
+          </div>
+          <p class="muted small-text">Les cartes que tu oublies le plus souvent. Chaque séance du plan commence par elles.</p>
+          <ol class="hard-list" id="hard-list"></ol>
+        </div>
+
+        <div class="scope-section" id="scope-quizzes-box">
+          <h2>Quiz</h2>
+          <ul class="quiz-list" id="scope-quizzes"></ul>
+        </div>
+
         <div class="card revise-card">
           <h2>Mode partiel</h2>
           <p class="revise-count" id="partiel-summary">Un partiel blanc</p>
@@ -104,32 +158,52 @@
           </div>
           <button class="ghost" id="start-partiel">Préparer un partiel</button>
         </div>
-      </div>
 
-      <div class="revise-options">
-        <div class="option-row">
-          <span class="muted">Les cartes :</span>
-          <div class="filters mini" role="radiogroup" aria-label="Façon de réviser les cartes">
-            <button type="button" role="radio" data-card-mode="flip">Je retourne la carte</button>
-            <button type="button" role="radio" data-card-mode="type">J'écris la réponse</button>
+        <div class="revise-options">
+          <div class="option-row">
+            <span class="muted">Les cartes :</span>
+            <div class="filters mini" role="radiogroup" aria-label="Façon de réviser les cartes">
+              <button type="button" role="radio" data-card-mode="flip">Je retourne la carte</button>
+              <button type="button" role="radio" data-card-mode="type">J'écris la réponse</button>
+            </div>
           </div>
+          <label class="option-row"><input type="checkbox" id="mix-questions" checked> Mélanger avec des questions de mes quiz</label>
         </div>
-        <label class="option-row"><input type="checkbox" id="mix-questions" checked> Mélanger avec des questions de mes quiz</label>
       </div>
 
-      <details class="card dashboard" id="dashboard">
-        <summary>
-          <span class="dash-title">Suivi</span>
-          <span class="dash-mini" id="dash-mini"></span>
-          <span class="dash-toggle muted small-text">Détails</span>
-        </summary>
-        <div class="dash-body">
-          <div class="weak-row">
-            <div><strong>Mes points faibles</strong>
-              <span class="muted small-text">Les cartes souvent oubliées et les questions ratées la dernière fois.</span>
-              <span id="weak-summary"></span></div>
-            <button class="ghost small" id="start-weak">Réviser mes points faibles</button>
+      <!-- Rétroplanning : des séances datées jusqu'à la semaine des partiels -->
+      <div id="scope-planning" hidden>
+        <div class="card" id="retro-setup" hidden>
+          <h2>Ton rétroplanning</h2>
+          <p class="muted" id="retro-intro"></p>
+          <div class="plan-form">
+            <label for="retro-exam" id="retro-exam-label">Semaine des partiels</label>
+            <input type="date" id="retro-exam">
+            <span>une séance</span>
+            <select id="retro-every" class="chip" aria-label="Rythme des séances">
+              <option value="1">tous les jours</option><option value="2" selected>tous les 2 jours</option>
+              <option value="3">tous les 3 jours</option><option value="7">chaque semaine</option>
+            </select>
           </div>
+          <p class="error" id="retro-error" hidden></p>
+          <div class="actions"><button class="primary" type="button" id="retro-build">Construire mon rétroplanning</button></div>
+        </div>
+        <div id="retro-view" hidden>
+          <div class="plan-head retro-head">
+            <p class="muted" id="retro-summary"></p>
+            <span class="head-actions">
+              <button class="ghost small" type="button" id="retro-rebuild">Recalculer</button>
+              <button class="link-button danger" type="button" id="retro-delete">Supprimer</button>
+            </span>
+          </div>
+          <ol class="retro-list" id="retro-list"></ol>
+        </div>
+        <p class="muted" id="retro-elsewhere" hidden></p>
+      </div>
+
+      <div id="scope-suivi" hidden>
+      <div class="card dashboard" id="dashboard">
+        <div class="dash-body">
           <div class="today progress-stats">
             <div class="stat"><b id="pg-cards">0</b><span>cartes révisées (7 jours)</span></div>
             <div class="stat"><b id="pg-cards-success">—</b><span>de cartes sues (7 jours)</span></div>
@@ -149,12 +223,13 @@
           <div class="course-progress" id="course-progress-box">
             <h3>Par cours</h3>
             <div class="table-wrap"><table>
-              <thead><tr><th>Cours</th><th>Cartes sues</th><th>Du jour</th><th>Points faibles</th><th>Cartes (30 j)</th><th>Quiz (30 j)</th><th>Dernière révision</th></tr></thead>
+              <thead><tr><th>Cours</th><th>Cartes sues</th><th>Du jour</th><th>À retravailler</th><th>Cartes (30 j)</th><th>Quiz (30 j)</th><th>Dernière révision</th></tr></thead>
               <tbody id="course-progress"></tbody>
             </table></div>
           </div>
         </div>
-      </details>
+      </div>
+      </div>
     </section>
 
     <!-- Mode partiel : préparation -->
@@ -286,8 +361,8 @@
         <h2>Révisions</h2>
         <label class="toggle-row first" id="reminder-row">
           <input type="checkbox" id="reminder-on">
-          <span><strong>Me rappeler de réviser chaque jour</strong>
-            <small class="muted" id="reminder-help">Une notification du Mac, même app fermée, s'il y a des cartes du jour.</small></span>
+          <span><strong>Me rappeler de réviser</strong>
+            <small class="muted" id="reminder-help">Une notification du Mac, même app fermée : les jours de séance de ton plan de révision (sans plan, s'il y a des cartes du jour).</small></span>
         </label>
         <div class="inline-row reminder-time" id="reminder-time-row" hidden>
           <label for="reminder-time">À</label>
@@ -438,7 +513,7 @@
         <div class="course-title">
           <h1 id="course-name"></h1>
           <div class="title-chips">
-            <select id="course-folder" class="chip" data-icon="folder" aria-label="Dossier du cours"></select>
+            <select id="course-folder" class="chip" data-icon="folder" aria-label="Semestre du cours"></select>
             <button type="button" class="exam-chip" id="course-exam-chip" hidden></button>
           </div>
         </div>
@@ -477,10 +552,7 @@
 
       <div class="revise-strip" id="course-revise">
         <span id="course-revise-text"></span>
-        <span class="head-actions">
-          <button class="ghost small" data-course-session="weak" id="course-weak-btn">Mes points faibles</button>
-          <button class="primary small" data-course-session="today">Réviser ce cours</button>
-        </span>
+        <a class="button primary small" id="course-revise-link" href="#/reviser">Réviser ce cours →</a>
       </div>
       </div>
 
@@ -510,24 +582,19 @@
           <h1>Quiz</h1>
           <button class="primary small" data-create="quiz">+ Nouveau quiz</button>
         </div>
+        <p class="muted small-text">Clique sur un quiz pour voir ses questions. Pour t'entraîner, passe-le depuis Réviser.</p>
         <ul id="quiz-list" class="quiz-list"></ul>
       </section>
 
       <section class="panel" id="panel-cartes" hidden>
         <div class="panel-head">
-          <h1>Flashcards</h1>
+          <h1>Flashcards <span class="muted count" id="cards-count"></span></h1>
           <div class="head-actions">
-            <button class="ghost small" id="cards-study">Réviser une par une</button>
             <button class="ghost small" id="card-write">Écrire une carte</button>
             <button class="primary small" data-create="cartes">+ Ajouter des cartes</button>
           </div>
         </div>
-        <div class="filters" id="card-filters" role="tablist" aria-label="Cartes à afficher">
-          <button role="tab" data-filter="review">À revoir <span></span></button>
-          <button role="tab" data-filter="known">Apprises <span></span></button>
-          <button role="tab" data-filter="all">Toutes <span></span></button>
-        </div>
-        <p class="muted small-text" id="cards-help">Passe la souris sur une carte pour voir la réponse. Clique dessus quand tu la connais : elle passe dans « Apprises ». Reclique pour la remettre à revoir.</p>
+        <p class="muted small-text" id="cards-help">Clique sur une carte pour la retourner. Pour les apprendre, révise-les depuis Réviser.</p>
         <p id="cards-status" class="status ok" hidden></p>
         <div id="card-grid" class="card-grid"></div>
         <p id="cards-empty" class="empty-state muted" hidden></p>
@@ -844,7 +911,7 @@
         <input type="text" id="new-course-name" maxlength="120" placeholder="ex. Neurosciences, chap. 4" autocomplete="off">
       </div>
       <div class="field" id="new-course-folder-field">
-        <label for="new-course-folder">Dossier</label>
+        <label for="new-course-folder">Semestre</label>
         <select id="new-course-folder"></select>
       </div>
       <p class="status" id="new-course-status" hidden></p>
@@ -861,7 +928,7 @@
     <button type="button" role="menuitem" data-cards-choice="manual"><strong>Écrire une carte</strong><small>Toi-même, question et réponse</small></button>
   </div>
 
-  <!-- Petite question (nom d'un dossier, d'un quiz…) -->
+  <!-- Petite question (nom d'un semestre, d'un quiz…) -->
   <dialog id="ask-dialog" class="report-dialog">
     <form id="ask-form" method="dialog">
       <h2 id="ask-title"></h2>

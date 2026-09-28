@@ -19,7 +19,6 @@ const state = {
   answered: false,  // la question affichée a-t-elle été validée ?
   fullRun: false,   // session sur toutes les questions (compte dans l'historique des scores)
   deck: null,       // paquet de flashcards du cours affiché
-  cardFilter: "review", // cartes affichées : à revoir, apprises ou toutes
   newCards: null,   // cartes qui viennent d'être ajoutées (repérées dans la grille)
   tab: null,        // entrée du cours affichée : quiz, cartes ou fichiers
   createKind: null, // page de création : "quiz" ou "cartes"
@@ -198,7 +197,7 @@ async function loadCourses() {
   renderFolders(courses, folders);
 
   $("#orphans").hidden = orphans.length === 0;
-  $("#orphan-list").innerHTML = orphans.map((q) => quizItem(q, null)).join("");
+  $("#orphan-list").innerHTML = orphans.map((q) => quizItem(q, null, null, { play: true })).join("");
   show("courses");
 }
 
@@ -239,15 +238,15 @@ function folderHtml(folder, courses) {
         ${FOLDER_ICON}<strong>${escapeHtml(folder.name)}</strong>
         <small class="muted">${plural(courses.length, "cours", "cours")}${folder.exam_week && !folder.archived ? ` · ${examLabel(folder.exam_week)}` : ""}</small>
         <span class="folder-actions">
-          <button class="icon" type="button" data-folder-rename="${folder.id}" title="Renommer le dossier" aria-label="Renommer le dossier">${ICON_EDIT}</button>
+          <button class="icon" type="button" data-folder-rename="${folder.id}" title="Renommer le semestre" aria-label="Renommer le semestre">${ICON_EDIT}</button>
           <button class="icon" type="button" data-folder-exam="${folder.id}" title="Semaine des partiels" aria-label="Semaine des partiels">${ICON_CALENDAR}</button>
           <button class="ghost small" type="button" data-folder-archive="${folder.id}">${folder.archived ? "Désarchiver" : "Archiver"}</button>
-          <button class="icon" type="button" data-folder-delete="${folder.id}" title="Supprimer le dossier (les cours sont gardés)" aria-label="Supprimer le dossier">${ICON_TRASH}</button>
+          <button class="icon" type="button" data-folder-delete="${folder.id}" title="Supprimer le semestre (les cours sont gardés)" aria-label="Supprimer le semestre">${ICON_TRASH}</button>
         </span>
       </summary>
       <div class="course-grid drop-zone" data-drop-folder="${folder.id}">
         ${courses.length ? courses.map(courseCard).join("")
-          : `<p class="folder-empty muted small-text">Dossier vide : glisse un cours ici.</p>`}
+          : `<p class="folder-empty muted small-text">Semestre vide : glisse un cours ici.</p>`}
       </div>
     </details>`;
 }
@@ -269,7 +268,7 @@ $("#view-courses").addEventListener("toggle", (e) => {
 }, true);
 
 $("#new-folder").addEventListener("click", async () => {
-  const name = await askText("Nom du dossier", "", "ex. Semestre 1, L2 psycho…");
+  const name = await askText("Nom du semestre", "", "ex. Semestre 1, L2 S3…");
   if (!name) return;
   await api("/api/folders", jsonBody("POST", { name }));
   loadCourses();
@@ -284,7 +283,7 @@ $("#view-courses").addEventListener("click", async (e) => {
   if (folderExam) return openExamDialog({ folder });
   try {
     if (folderRename) {
-      const name = await askText("Nouveau nom du dossier", folder.name);
+      const name = await askText("Nouveau nom du semestre", folder.name);
       if (!name) return;
       await api(`/api/folders/${folder.id}`, jsonBody("PATCH", { name }));
     }
@@ -293,7 +292,7 @@ $("#view-courses").addEventListener("click", async (e) => {
       await api(`/api/folders/${folder.id}`, jsonBody("PATCH", { archived: !folder.archived }));
     }
     if (folderDelete) {
-      if (!confirm(`Supprimer le dossier « ${folder.name} » ? Ses cours ne sont pas supprimés : ils reviennent dans « Mes cours ».`)) return;
+      if (!confirm(`Supprimer le semestre « ${folder.name} » ? Ses cours ne sont pas supprimés : ils reviennent dans « Mes cours ».`)) return;
       await api(`/api/folders/${folder.id}`, { method: "DELETE" });
     }
     loadCourses();
@@ -447,7 +446,7 @@ function renderReminder(settings) {
   $("#reminder-time").value = settings.reminder_time || "19:00";
   $("#reminder-time-row").hidden = !settings.reminder_time;
   $("#reminder-help").textContent = settings.reminder_supported
-    ? "Une notification du Mac à l'heure choisie, même app fermée, s'il y a des cartes du jour."
+    ? "Une notification du Mac à l'heure choisie, même app fermée : les jours de séance de ton plan de révision (sans plan, s'il y a des cartes du jour)."
     : "Disponible dans l'app Mac (Pirouette.app).";
   $("#new-per-day").value = settings.new_per_day;
   $("#revision-status").hidden = true;
@@ -459,8 +458,8 @@ async function saveReminder() {
     const settings = await api("/api/settings", jsonBody("PUT", { reminder_time: time }));
     renderReminder(settings);
     setStatus("#revision-status", time
-      ? `C'est noté : rappel chaque jour à ${time.replace(":", " h ")}, s'il y a des cartes à réviser. La première fois, macOS peut demander d'autoriser les notifications (de « Éditeur de script »).`
-      : "Rappel quotidien arrêté.", true);
+      ? `C'est noté : rappel à ${time.replace(":", " h ")} les jours de séance (ou de cartes à réviser). La première fois, macOS peut demander d'autoriser les notifications (de « Éditeur de script »).`
+      : "Rappel arrêté.", true);
   } catch (err) {
     $("#reminder-on").checked = !$("#reminder-on").checked;
     setStatus("#revision-status", err.message, false);
@@ -998,7 +997,7 @@ async function openNewCourse() {
   renderNewCourseFiles();
   const folders = (await api("/api/folders")).filter((f) => !f.archived);
   $("#new-course-folder-field").hidden = !folders.length;
-  $("#new-course-folder").innerHTML = `<option value="">Sans dossier</option>`
+  $("#new-course-folder").innerHTML = `<option value="">Sans semestre</option>`
     + folders.map((f) => `<option value="${f.id}">${escapeHtml(f.name)}</option>`).join("");
   $("#new-course-folder").value = "";
   $("#new-course-dialog").showModal();
@@ -1077,7 +1076,6 @@ async function loadCourse(id) {
     $("#chapters-status").hidden = $("#upload-status").hidden = $("#cards-status").hidden = true;
     state.deck = null;
     state.newCards = null;
-    state.cardFilter = "review";
   }
   state.course = course;
   if (!state.config) await loadConfig();
@@ -1128,16 +1126,16 @@ document.addEventListener("click", (e) => {
 async function renderFolderPick(course) {
   const folders = await api("/api/folders");
   const select = $("#course-folder");
-  select.innerHTML = `<option value="">Sans dossier</option>`
+  select.innerHTML = `<option value="">Sans semestre</option>`
     + folders.map((f) => `<option value="${f.id}">${escapeHtml(f.name)}${f.archived ? " (archivé)" : ""}</option>`).join("")
-    + `<option value="__new">+ Nouveau dossier…</option>`;
+    + `<option value="__new">+ Nouveau semestre…</option>`;
   select.value = folders.some((f) => f.id === course.folder_id) ? course.folder_id : "";
 }
 
 $("#course-folder").addEventListener("change", async (e) => {
   let folderId = e.target.value || null;
   if (folderId === "__new") {
-    const name = await askText("Nom du dossier", "", "ex. Semestre 1, L2 psycho…");
+    const name = await askText("Nom du semestre", "", "ex. Semestre 1, L2 S3…");
     if (!name) return renderFolderPick(state.course);
     folderId = (await api("/api/folders", jsonBody("POST", { name }))).id;
   }
@@ -1156,7 +1154,7 @@ function renderTiles(course) {
   $("#tile-quiz-num").textContent = quizzes.length;
   $("#tile-quiz-sub").textContent = !quizzes.length ? "Aucun quiz" : best === null ? "Pas encore fait" : `Meilleur score ${best} %`;
   $("#tile-cards-num").textContent = course.cards.total;
-  $("#tile-cards-sub").textContent = course.cards.total ? `${plural(course.cards.known, "apprise", "apprises")} · ${course.cards.review} à revoir` : "Aucune carte";
+  $("#tile-cards-sub").textContent = course.cards.total ? "Voir et modifier les cartes" : "Aucune carte";
   const chapters = course.files.reduce((n, f) => n + (f.chapters?.length || 0), 0);
   $("#tile-files-num").textContent = course.files.length;
   $("#tile-files-sub").textContent = !course.files.length ? "Dépose ton cours" : chapters ? `${chapters} chapitres` : "Tout le cours";
@@ -1196,29 +1194,53 @@ function renderFiles(course) {
 // « Quiz 3 · Titre » ; un quiz renommé s'affiche exactement avec le nom choisi.
 const quizLabel = (q, number = null) => (number && !q.custom_title ? `Quiz ${number} · ${q.title}` : q.title);
 
-function quizItem(q, course, number = null) {
+// Dans un cours, on gère ses quiz (aperçu des questions, renommer, supprimer) ; on les passe dans Réviser (`play`).
+function quizItem(q, course, number = null, { play = false } = {}) {
   const outdated = course && q.course_version < course.version;
   const best = q.best_score ? `Meilleur score ${q.best_score.score}/${q.best_score.total}` : "Pas encore fait";
+  const label = quizLabel(q, number);
   return `
-    <li class="quiz-item">
-      <button class="quiz-open" data-open-quiz="${q.id}">
-        <strong>${escapeHtml(quizLabel(q, number))}</strong>
-        <small class="muted">${q.count} questions · ${q.difficulty || "moyen"} · ${q.provider === "claude" ? "Claude" : "Local"} · ${formatDate(q.created_at)}</small>
+    <li class="quiz-item${play ? " play" : ""}">
+      <button class="quiz-open" ${play ? `data-open-quiz="${q.id}"` : `data-preview-quiz="${q.id}" aria-expanded="false"`}>
+        <strong>${escapeHtml(label)}</strong>
+        <small class="muted">${q.count} questions${play && q.course_name ? ` · ${escapeHtml(q.course_name)}` : ` · ${q.difficulty || "moyen"} · ${q.provider === "claude" ? "Claude" : "Local"} · ${formatDate(q.created_at)}`}</small>
         ${scopeNote(q.scope)}
         <small><span class="badge">${best}</span>${q.attempts > 1 ? ` <span class="muted">${q.attempts} essais</span>` : ""}
           ${outdated ? ` <span class="badge warn-badge" title="Le cours a été modifié depuis la création de ce quiz">cours mis à jour depuis</span>` : ""}</small>
       </button>
-      <button class="icon" data-rename-quiz="${q.id}" data-title="${escapeHtml(quizLabel(q, number))}" aria-label="Renommer ce quiz" title="Renommer">${ICON_EDIT}</button>
-      <button class="icon" data-delete-quiz="${q.id}" aria-label="Supprimer ce quiz" title="Supprimer">${ICON_TRASH}</button>
+      ${play ? `<button class="primary small" data-open-quiz="${q.id}">Passer</button>` : `
+      <button class="icon" data-rename-quiz="${q.id}" data-title="${escapeHtml(label)}" aria-label="Renommer ce quiz" title="Renommer">${ICON_EDIT}</button>
+      <button class="icon" data-delete-quiz="${q.id}" aria-label="Supprimer ce quiz" title="Supprimer">${ICON_TRASH}</button>`}
+      ${play ? "" : `<div class="quiz-preview" id="preview-${q.id}" hidden></div>`}
     </li>`;
 }
+
+// Aperçu d'un quiz dans le cours : ses questions et leurs réponses, sans le passer.
+document.addEventListener("click", async (e) => {
+  const button = e.target.closest("[data-preview-quiz]");
+  if (!button) return;
+  const box = $(`#preview-${button.dataset.previewQuiz}`);
+  const open = box.hidden;
+  button.setAttribute("aria-expanded", String(open));
+  box.hidden = !open;
+  if (!open || box.dataset.loaded) return;
+  const quiz = await api(`/api/quizzes/${button.dataset.previewQuiz}`).catch(() => null);
+  if (!quiz) return;
+  box.dataset.loaded = "1";
+  box.innerHTML = `<ol>${quiz.questions.map((q) => `<li><span>${escapeHtml(plainMd(q.question))}</span>
+      <small class="muted">${escapeHtml(plainMd(String(q.answer)))}</small></li>`).join("")}</ol>
+    ${quiz.course_id ? `<p class="muted small-text">Pour passer ce quiz : <a href="#/reviser/cours/${quiz.course_id}">Réviser ce cours →</a></p>` : ""}`;
+});
 
 document.addEventListener("click", async (e) => {
   const target = e.target.closest("[data-open-quiz], [data-rename-quiz], [data-delete-quiz], [data-remove-file], [data-create], [data-file-create]");
   if (!target) return;
   const { openQuiz, renameQuiz, deleteQuiz, removeFile, create, fileCreate, file } = target.dataset;
   try {
-    if (openQuiz) startQuiz(await api(`/api/quizzes/${openQuiz}`));
+    if (openQuiz) {
+      const back = !$("#view-review-scope").hidden ? location.hash : null;
+      startQuiz(await api(`/api/quizzes/${openQuiz}`), undefined, { back });
+    }
     if (renameQuiz) {
       const title = await askText("Nouveau nom du quiz", target.dataset.title);
       if (title) {
@@ -1623,7 +1645,6 @@ async function createCards() {
   try {
     const deck = await runJob("cards", form, "Création des flashcards…");
     state.deck = deck;
-    state.cardFilter = "review";
     state.newCards = new Set(deck.cards.slice(-deck.added).map((c) => c.id));
     await openCourse(state.course.id, "cartes");
     history.replaceState(null, "", courseHash("cartes"));
@@ -1675,42 +1696,27 @@ async function loadDeck() {
 }
 
 const cardIsKnown = (card) => card.status === "known";
-const CARD_FILTERS = {
-  review: { test: (c) => !cardIsKnown(c), empty: "Aucune carte à revoir : tu les connais toutes." },
-  known: { test: cardIsKnown, empty: "Aucune carte apprise pour l'instant : clique sur une carte quand tu la connais." },
-  all: { test: () => true, empty: "" },
-};
 
+// Toutes les cartes du cours, à regarder librement : un clic retourne la carte. La révision se fait dans Réviser.
 function renderCardGrid() {
   const cards = state.deck.cards;
-  const filter = CARD_FILTERS[state.cardFilter] ? state.cardFilter : "review";
-  document.querySelectorAll("[data-filter]").forEach((b) => {
-    const count = cards.filter(CARD_FILTERS[b.dataset.filter].test).length;
-    b.querySelector("span").textContent = count;
-    b.classList.toggle("active", b.dataset.filter === filter);
-    b.setAttribute("aria-selected", b.dataset.filter === filter);
-  });
-  const shown = cards.filter(CARD_FILTERS[filter].test);
   const none = !cards.length;
-  $("#card-filters").hidden = $("#cards-help").hidden = $("#cards-foot").hidden = $("#cards-study").hidden = none;
-  $("#cards-empty").hidden = shown.length > 0;
-  $("#cards-empty").textContent = none ? "Pas encore de flashcards pour ce cours : clique sur « + Ajouter des cartes »."
-    : CARD_FILTERS[filter].empty;
-  $("#card-grid").innerHTML = shown.map((c) => fcardHtml(c, { removable: true })).join("");
+  $("#cards-help").hidden = $("#cards-foot").hidden = none;
+  $("#cards-count").textContent = none ? "" : `· ${cards.length}`;
+  $("#cards-empty").hidden = !none;
+  $("#cards-empty").textContent = "Pas encore de flashcards pour ce cours : clique sur « + Ajouter des cartes ».";
+  $("#card-grid").innerHTML = cards.map((c) => fcardHtml(c, { removable: true })).join("");
 }
 
-// Une flashcard de la grille : question, réponse au survol, ✓ quand elle est apprise.
-function fcardHtml(c, { removable = false, course = "" } = {}) {
-  const known = cardIsKnown(c);
+function fcardHtml(c, { removable = false } = {}) {
   const isNew = state.newCards?.has(c.id);
   return `
-    <div class="fcard${known ? " is-known" : ""}" data-card="${c.id}" ${course ? `data-card-course="${course}"` : ""}
-         role="button" tabindex="0" aria-pressed="${known}" title="${known ? "Cliquer pour la remettre à revoir" : "Cliquer quand tu la connais"}">
+    <div class="fcard" data-card="${c.id}" role="button" tabindex="0" aria-pressed="false" title="Cliquer pour retourner la carte">
       <div class="fcard-inner">
         <div class="fcard-face fcard-front"><p>${escapeHtml(c.front)}</p></div>
         <div class="fcard-face fcard-back"><small>${escapeHtml(c.front)}</small><p>${escapeHtml(c.back)}</p></div>
       </div>
-      <span class="fcard-mark" ${known ? 'aria-label="Apprise"' : ""}>${known ? "✓" : isNew ? "Nouvelle" : ""}</span>
+      <span class="fcard-mark">${isNew ? "Nouvelle" : ""}</span>
       ${removable ? `<span class="fcard-tools">
         <button class="icon" data-edit-card="${c.id}" aria-label="Modifier cette carte" title="Modifier cette carte">${ICON_EDIT}</button>
         <button class="icon fcard-delete" data-delete-card="${c.id}" aria-label="Supprimer cette carte" title="Supprimer cette carte">✕</button>
@@ -1718,29 +1724,9 @@ function fcardHtml(c, { removable = false, course = "" } = {}) {
     </div>`;
 }
 
-document.querySelectorAll("[data-filter]").forEach((b) => b.addEventListener("click", () => {
-  state.cardFilter = b.dataset.filter;
-  renderCardGrid();
-}));
-
-async function toggleCard(el) {
-  const card = state.deck.cards.find((c) => c.id === el.dataset.card);
-  const known = !cardIsKnown(card);
-  card.status = known ? "known" : "review";
-  card.due = null;
-  api(`/api/courses/${state.course.id}/cards/${card.id}/review`, jsonBody("POST", { known }))
-    .then((updated) => { Object.assign(card, updated); if (!el.classList.contains("leaving")) renderCardGrid(); })
-    .catch(() => {});
-  state.course.cards.known += known ? 1 : -1;
-  state.course.cards.review += known ? -1 : 1;
-  renderTiles(state.course);
-  // La carte quitte la liste affichée (« À revoir » → « Apprises ») : petite animation avant de réafficher.
-  if (!CARD_FILTERS[state.cardFilter].test(card)) {
-    el.classList.add("leaving");
-    setTimeout(renderCardGrid, 260);
-  } else {
-    renderCardGrid();
-  }
+function flipCard(el) {
+  el.classList.toggle("flipped");
+  el.setAttribute("aria-pressed", String(el.classList.contains("flipped")));
 }
 
 $("#card-grid").addEventListener("click", async (e) => {
@@ -1754,12 +1740,12 @@ $("#card-grid").addEventListener("click", async (e) => {
     return refreshCourse();
   }
   const el = e.target.closest("[data-card]");
-  if (el) toggleCard(el);
+  if (el) flipCard(el);
 });
 $("#card-grid").addEventListener("keydown", (e) => {
   if (e.target.closest("button")) return;
   const el = e.target.closest("[data-card]");
-  if (el && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); toggleCard(el); }
+  if (el && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); flipCard(el); }
 });
 
 $("#cards-clear").addEventListener("click", async () => {
@@ -1842,7 +1828,6 @@ async function saveCardDialog(keepOpen) {
   if (!keepOpen) $("#card-dialog").close();
   if (onSaved) onSaved();
   else if (state.deck && !$("#view-course").hidden) {
-    if (!card) state.cardFilter = state.cardFilter === "known" ? "review" : state.cardFilter;
     renderTiles(state.course);
     renderCardGrid();
   }
@@ -1886,7 +1871,7 @@ async function startSession(params, { title, back }) {
   if (params.mode === "cards") query.set("questions", "0");
   const data = await api(`/api/session?${query}`);
   if (!data.items.length) {
-    alert(params.mode === "weak" ? "Aucun point faible pour l'instant : continue comme ça !"
+    alert(params.mode === "weak" ? "Aucune carte difficile pour l'instant : continue comme ça !"
       : params.mode === "today" ? "Rien à réviser aujourd'hui : tout est à jour." : "Aucune carte à réviser ici.");
     return;
   }
@@ -2231,22 +2216,12 @@ $("#card-edit-current").addEventListener("click", () => {
   } });
 });
 
-// Depuis un cours : « Réviser une par une » (cartes du filtre choisi), « Réviser ce cours », « Mes points faibles ».
-$("#cards-study").addEventListener("click", () => startSession(
-  { mode: "cards", course: state.course.id, filter: state.cardFilter },
-  { title: `Flashcards · ${state.course.name}`, back: courseHash("cartes") }));
-document.addEventListener("click", (e) => {
-  const mode = e.target.closest("[data-course-session]")?.dataset.courseSession;
-  if (!mode) return;
-  startSession({ mode, course: state.course.id },
-    { title: `${mode === "weak" ? "Points faibles" : "Révision"} · ${state.course.name}`, back: courseHash(state.tab) });
-});
-
+// Le cours sert à ranger et fabriquer ; on s'entraîne dans Réviser (un lien y mène).
 function renderCourseRevise(course) {
-  const { today, weak } = course.revision;
+  const { today } = course.revision;
   $("#course-revise").hidden = !course.cards.total && !course.quizzes.length;
-  $("#course-revise-text").innerHTML = `<b>${today}</b> carte${today > 1 ? "s" : ""} du jour · <b>${weak}</b> point${weak > 1 ? "s" : ""} faible${weak > 1 ? "s" : ""}`;
-  $("#course-weak-btn").disabled = !weak;
+  $("#course-revise-text").innerHTML = today ? `<b>${today}</b> carte${today > 1 ? "s" : ""} du jour` : "Tes cartes sont à jour.";
+  $("#course-revise-link").href = `#/reviser/cours/${course.id}`;
 }
 
 // ---------- Réviser : révision du jour, points faibles et suivi ----------
@@ -2267,57 +2242,112 @@ async function openReview() {
   const known = new Set(folders.map((f) => f.id));
   const group = (title, list, folderId = null) => list.length ? `
     <div class="pick-group"><h2>${escapeHtml(title)}</h2>
-      <div class="pick-grid">${folderId && list.length > 1 ? card(`#/reviser/dossier/${folderId}`, "Tout le dossier", counts(list), " main") : ""}${
+      <div class="pick-grid">${folderId && list.length > 1 ? card(`#/reviser/dossier/${folderId}`, "Tout le semestre", counts(list), " main") : ""}${
         list.map((c) => card(`#/reviser/cours/${c.id}`, c.name, c)).join("")}</div></div>` : "";
   $("#review-pick").innerHTML = !courses.length
     ? `<p class="empty-state muted">Pas encore de cours à réviser : crée un cours dans « Mes cours ».</p>`
     : folders.filter((f) => !f.archived).map((f) => group(f.name, courses.filter((c) => c.folder_id === f.id), f.id)).join("")
-      + group(folders.length ? "Sans dossier" : "Un cours", courses.filter((c) => !known.has(c.folder_id)))
+      + group(folders.length ? "Sans semestre" : "Un cours", courses.filter((c) => !known.has(c.folder_id)))
       + (archived.size ? `<details class="pick-archived"><summary>Archivés</summary>${
         folders.filter((f) => f.archived).map((f) => group(f.name, courses.filter((c) => c.folder_id === f.id), f.id)).join("")}</details>` : "");
   setCrumbs();
   show("review");
 }
 
-// … puis, pour ce choix : révision du jour, points faibles, et le suivi (replié).
+// … puis, pour ce choix, trois onglets : Réviser (plan, séance, quiz, partiel), Rétroplanning et Suivi.
+const SCOPE_TABS = { "": "Réviser", planning: "Rétroplanning", suivi: "Suivi" };
+
 async function openReviewScope(kind, id = "", sub = "") {
   if (kind === "cours" && sub === "partiel") return openPartielPrep(id);
   state.course = null;
-  let params = {}, name = "Tous mes cours";
+  const folders = await api("/api/folders");
+  let params = {}, name = "Tous mes cours", owner = null, parent = null;
   if (kind === "dossier") {
     params = { folder: id };
-    name = (await api("/api/folders")).find((f) => f.id === id)?.name || "Dossier";
+    name = folders.find((f) => f.id === id)?.name || "Semestre";
+    owner = { folder: id };
   } else if (kind === "cours") {
     params = { course: id };
-    name = (await api(`/api/courses/${id}`)).name;
+    const course = await api(`/api/courses/${id}`);
+    name = course.name;
+    parent = folders.find((f) => f.id === course.folder_id) || null;
+    owner = parent ? null : { course: id };  // un cours rangé dans un semestre suit le plan du semestre
   }
-  state.reviewScope = { params, name, hash: location.hash, single: kind === "cours" };
+  const base = `#/reviser/${kind}${id ? `/${id}` : ""}`;
+  const tab = sub in SCOPE_TABS ? sub : "";
+  state.reviewScope = { params, name, hash: location.hash, base, single: kind === "cours", owner, parent };
   $("#review-scope-title").textContent = name;
+  document.querySelectorAll("[data-scope-tab]").forEach((a) => {
+    const t = a.dataset.scopeTab;
+    a.href = base + (t ? `/${t}` : "");
+    a.classList.toggle("active", t === tab);
+    a.setAttribute("aria-selected", String(t === tab));
+  });
+  $("#scope-tabs").hidden = !owner && !parent;  // « Tous mes cours » : pas de plan
+  $("#scope-main").hidden = tab !== "";
+  $("#scope-planning").hidden = tab !== "planning";
+  $("#scope-suivi").hidden = tab !== "suivi";
   setCardMode(cardMode());
   $("#mix-questions").checked = mixQuestions();
-  setCrumbs([{ label: "Réviser", href: "#/reviser" }, { label: name }]);
+  setCrumbs([{ label: "Réviser", href: "#/reviser" }, ...(tab ? [{ label: name, href: base }, { label: SCOPE_TABS[tab] }] : [{ label: name }])]);
   show("review-scope");
-  await renderProgress();
+  if (tab === "planning") await renderRetro();
+  else if (tab === "suivi") await renderProgress();
+  else await renderScopeMain();
 }
 
 const reviewScope = () => state.reviewScope?.params || {};
+const ownerQuery = () => new URLSearchParams(state.reviewScope?.owner || {});
+const RHYTHM_TEXT = { 1: "une séance par jour", 2: "une séance tous les 2 jours", 3: "une séance tous les 3 jours", 7: "une séance par semaine" };
+const dayShort = (iso) => new Date(`${iso}T00:00`).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" });
+function dayWhen(iso) {
+  const days = daysUntil(iso);
+  return days === 0 ? "aujourd'hui" : days === 1 ? "demain" : dayShort(iso);
+}
 
-async function renderProgress() {
-  const data = await api(`/api/progress?${new URLSearchParams(reviewScope())}`);
-  const { today, weak, week } = data;
+// ---- Onglet Réviser : plan (ou révision du jour), là où l'on bloque, quiz, partiel ----
+async function renderScopeMain() {
+  const scope = state.reviewScope;
+  const [data, quizzes, plan] = await Promise.all([
+    api(`/api/progress?${new URLSearchParams(reviewScope())}`),
+    api("/api/quizzes"),
+    scope.owner ? api(`/api/plan?${ownerQuery()}`) : null,
+  ]);
+  const scoped = data.courses.filter((c) => (reviewScope().course ? c.id === reviewScope().course
+    : reviewScope().folder ? c.folder_id === reviewScope().folder : true));
+  const ids = new Set(scoped.map((c) => c.id));
+  state.scopePlan = plan;
+  $("#review-exam").hidden = !data.exam || data.exam.days <= -7;
+  if (data.exam) $("#review-exam").innerHTML = examSentence(data.exam);
+
+  // Plan de révision
+  $("#plan-card").hidden = !plan;
+  $("#today-card").hidden = Boolean(plan?.plan);
+  if (plan) renderPlan(plan);
+  const { today } = data;
   $("#today-summary").innerHTML = today.cards || today.questions
     ? `<b>${today.cards}</b> carte${today.cards > 1 ? "s" : ""}${today.questions ? ` · <b>${today.questions}</b> question${today.questions > 1 ? "s" : ""} de quiz` : ""}`
     : "Tout est à jour";
   $("#start-today").disabled = !today.cards && !(today.questions && mixQuestions());
-  $("#weak-summary").innerHTML = weak.cards || weak.questions
-    ? `<b>${weak.cards}</b> carte${weak.cards > 1 ? "s" : ""} · <b>${weak.questions}</b> question${weak.questions > 1 ? "s" : ""}`
-    : "Aucun pour l'instant";
-  $("#start-weak").disabled = !weak.cards && !(weak.questions && mixQuestions());
+  $("#today-note").innerHTML = scope.parent
+    ? `Le plan de révision se règle sur le semestre : <a href="#/reviser/dossier/${scope.parent.id}">${escapeHtml(scope.parent.name)} →</a>`
+    : "Les cartes reviennent au bon moment, avec quelques questions de tes quiz.";
 
-  // Mode partiel : sur un cours. Depuis « Tous mes cours » ou un dossier, on choisit le cours.
-  const scoped = data.courses.filter((c) => (reviewScope().course ? c.id === reviewScope().course
-    : reviewScope().folder ? c.folder_id === reviewScope().folder : true));
-  const single = Boolean(state.reviewScope?.single);
+  // Là où tu bloques
+  const hard = data.hard;
+  $("#hard-card").hidden = !hard.length;
+  $("#hard-list").innerHTML = hard.map((h) => `<li><span>${escapeHtml(h.front)}</span>
+    <small class="muted">${h.lapses ? `oubliée ${plural(h.lapses, "fois", "fois")}` : "ratée la dernière fois"}${
+      scope.single ? "" : ` · ${escapeHtml(h.course)}`}</small></li>`).join("");
+
+  // Quiz à passer
+  const names = Object.fromEntries(scoped.map((c) => [c.id, c.name]));
+  const mine = quizzes.filter((q) => ids.has(q.course_id)).map((q) => ({ ...q, course_name: scope.single ? "" : names[q.course_id] }));
+  $("#scope-quizzes-box").hidden = !mine.length;
+  $("#scope-quizzes").innerHTML = mine.map((q) => quizItem(q, null, null, { play: true })).join("");
+
+  // Mode partiel : sur un cours. Depuis un semestre, on choisit le cours.
+  const single = Boolean(scope.single);
   $("#partiel-pick").hidden = single;
   if (!single) {
     const pick = $("#partiel-course");
@@ -2326,14 +2356,169 @@ async function renderProgress() {
     if (scoped.some((c) => c.id === previous)) pick.value = previous;
   }
   $("#start-partiel").disabled = !single && !scoped.length;
+}
 
+function renderPlan(data) {
+  const { plan, status } = data;
+  $("#plan-setup").hidden = Boolean(plan);
+  $("#plan-view").hidden = !plan;
+  $("#plan-cancel").hidden = true;
+  if (!plan) {
+    $("#plan-save").textContent = "Lancer mon plan";
+    return;
+  }
+  $("#plan-rhythm").textContent = `${RHYTHM_TEXT[plan.every]} · ${plan.minutes} min`;
+  $("#plan-next").innerHTML = status.done_today
+    ? `Séance faite. Prochaine séance : <b>${dayWhen(status.next)}</b>.`
+    : plan.every > 1 && status.deadline !== status.next
+      ? `<b>Séance à faire</b>, d'ici ${dayWhen(status.deadline)} · ${plural(data.session.cards, "carte", "cartes")} environ.`
+      : `<b>Séance à faire aujourd'hui</b> · ${plural(data.session.cards, "carte", "cartes")} environ.`;
+  $("#plan-regular").textContent = (status.total ? `${status.kept} séance${status.kept > 1 ? "s" : ""} tenue${status.kept > 1 ? "s" : ""} sur ${status.total}. ` : "")
+    + status.message;
+  $("#plan-start").textContent = status.done_today ? "Refaire une séance" : "Commencer la séance";
+  $("#plan-start").className = status.done_today ? "ghost" : "primary";
+}
+
+$("#plan-save").addEventListener("click", async () => {
+  const data = await api("/api/plan", jsonBody("PUT", {
+    ...state.reviewScope.owner, every: Number($("#plan-every").value), minutes: Number($("#plan-minutes").value) }));
+  state.scopePlan = data;
+  renderPlan(data);
+  $("#today-card").hidden = true;
+});
+$("#plan-edit").addEventListener("click", () => {
+  const { plan } = state.scopePlan;
+  $("#plan-every").value = plan.every;
+  $("#plan-minutes").value = plan.minutes;
+  $("#plan-setup").hidden = false;
+  $("#plan-view").hidden = true;
+  $("#plan-save").textContent = "Enregistrer";
+  $("#plan-cancel").hidden = false;
+});
+$("#plan-cancel").addEventListener("click", () => renderPlan(state.scopePlan));
+$("#plan-start").addEventListener("click", () => startSession(
+  { mode: "plan", ...reviewScope(), minutes: state.scopePlan.plan.minutes },
+  { title: "Séance du plan", back: state.reviewScope.hash }));
+
+// ---- Onglet Rétroplanning ----
+const RETRO_KINDS = { learn: "Chapitres", review: "Révision", consolidate: "Consolidation", blanc: "Partiel blanc" };
+
+async function renderRetro() {
+  const scope = state.reviewScope;
+  $("#retro-elsewhere").hidden = Boolean(scope.owner);
+  $("#retro-setup").hidden = $("#retro-view").hidden = true;
+  if (!scope.owner) {
+    $("#retro-elsewhere").innerHTML = `Le rétroplanning se construit sur le semestre de ce cours :
+      <a href="#/reviser/dossier/${scope.parent.id}/planning">${escapeHtml(scope.parent.name)} →</a>`;
+    return;
+  }
+  const [data, plan] = await Promise.all([api(`/api/retro?${ownerQuery()}`), api(`/api/plan?${ownerQuery()}`)]);
+  state.retro = data;
+  if (plan.plan) $("#retro-every").value = plan.plan.every;
+  $("#review-exam").hidden = true;
+  if (!data.retro) {
+    $("#retro-setup").hidden = false;
+    $("#retro-error").hidden = true;
+    const future = data.exam && daysUntil(data.exam) > 0;
+    $("#retro-exam").value = future ? data.exam : "";
+    $("#retro-intro").textContent = future
+      ? `Partiels le ${dayLong(data.exam)}, dans ${plural(daysUntil(data.exam), "jour", "jours")}. Pirouette répartit tes chapitres sur les séances, garde du temps pour consolider, puis finit par des partiels blancs.`
+      : "Indique quand commence ta semaine de partiels : Pirouette répartit tes chapitres sur les séances d'ici là, garde du temps pour consolider, puis finit par des partiels blancs.";
+    return;
+  }
+  const { retro } = data;
+  $("#retro-view").hidden = false;
+  const left = retro.sessions.filter((s) => !s.done && !s.past).length;
+  $("#retro-summary").innerHTML = `<b>${examLabel(retro.exam)}</b> · ${RHYTHM_TEXT[retro.every]} · ${plural(left, "séance restante", "séances restantes")}`;
+  $("#retro-list").innerHTML = retro.sessions.map((s) => retroItem(s)).join("");
+}
+
+function retroItem(s) {
+  const when = s.today ? "Aujourd'hui" : daysUntil(s.date) === 1 ? "Demain" : dayShort(s.date);
+  let body = "";
+  if (s.kind === "learn") {
+    body = s.units.map((u) => `<div class="retro-unit"><span>${escapeHtml(u.title)}${
+      state.reviewScope.single ? "" : ` <small class="muted">· ${escapeHtml(u.course)}</small>`}</span>
+      <span class="retro-actions">${u.quiz_id
+        ? `<button class="${u.quiz_done ? "ghost" : "primary"} small" data-open-quiz="${u.quiz_id}">${u.quiz_done ? "Refaire le quiz" : "Quiz"}</button>`
+        : `<button class="ghost small" data-retro-make="${u.course_id}" data-key="${u.key}" data-title="${escapeHtml(u.title)}">Créer le quiz</button>`}
+        <button class="ghost small" data-retro-cards="${u.course_id}" data-title="${escapeHtml(u.title)}">Cartes</button></span></div>`).join("");
+  } else if (s.kind === "blanc") {
+    body = `<div class="retro-unit"><span>${escapeHtml(s.course)}</span><span class="retro-actions">
+      <a class="button ghost small" href="#/reviser/cours/${s.course_id}/partiel">Préparer le partiel</a></span></div>`;
+  } else {
+    body = `<div class="retro-unit"><span class="muted">${s.kind === "consolidate"
+      ? "Tes erreurs et les cartes où tu bloques." : "Les cartes du jour et quelques questions de tes quiz."}</span>
+      <span class="retro-actions"><button class="ghost small" data-retro-start="${s.kind}">Commencer</button></span></div>`;
+  }
+  return `<li class="retro-item${s.done ? " done" : ""}${s.today ? " today" : ""}${s.past && !s.done ? " missed" : ""}">
+    <label class="retro-check" title="Séance faite"><input type="checkbox" data-retro-check="${s.date}" ${s.done ? "checked" : ""}></label>
+    <div class="retro-body"><div class="retro-when"><strong>${when}</strong><span class="muted">${RETRO_KINDS[s.kind]}</span></div>${body}</div>
+  </li>`;
+}
+
+$("#retro-build").addEventListener("click", () => buildRetro(true));
+$("#retro-rebuild").addEventListener("click", () => {
+  if (confirm("Recalculer le rétroplanning à partir d'aujourd'hui ? Les séances faites sont gardées.")) buildRetro(false);
+});
+async function buildRetro(withDate) {
+  try {
+    await api("/api/retro", jsonBody("POST", { ...state.reviewScope.owner, every: Number($("#retro-every").value),
+      exam: withDate ? $("#retro-exam").value : "" }));
+  } catch (err) {
+    return showError("#retro-error", err.message);
+  }
+  renderRetro();
+}
+$("#retro-delete").addEventListener("click", async () => {
+  if (!confirm("Supprimer le rétroplanning ?")) return;
+  await api(`/api/retro?${ownerQuery()}`, { method: "DELETE" });
+  renderRetro();
+});
+$("#retro-list").addEventListener("change", async (e) => {
+  const box = e.target.closest("[data-retro-check]");
+  if (!box) return;
+  await api("/api/retro/session", jsonBody("PUT", { ...state.reviewScope.owner, date: box.dataset.retroCheck, done: box.checked }));
+  renderRetro();
+});
+$("#retro-list").addEventListener("click", async (e) => {
+  const cards = e.target.closest("[data-retro-cards]");
+  if (cards) {
+    return startSession({ mode: "chapter", course: cards.dataset.retroCards, chapter: cards.dataset.title },
+      { title: cards.dataset.title, back: state.reviewScope.hash });
+  }
+  const start = e.target.closest("[data-retro-start]");
+  if (start) {
+    const mode = start.dataset.retroStart === "consolidate" ? "weak" : "today";
+    return startSession({ mode, ...reviewScope() },
+      { title: mode === "weak" ? "Consolidation" : "Révision", back: state.reviewScope.hash });
+  }
+  const make = e.target.closest("[data-retro-make]");
+  if (make) {
+    make.disabled = true;
+    const form = new FormData();
+    form.append("provider", "local");
+    form.append("num_questions", "10");
+    form.append("chapters", make.dataset.key);
+    try {
+      await api(`/api/courses/${make.dataset.retroMake}/quizzes/background`, { method: "POST", body: form });
+      make.textContent = "Quiz en préparation…";
+      jobsState.keepOpen = true;
+      refreshJobs();
+    } catch (err) {
+      make.disabled = false;
+      alert(err.message);
+    }
+  }
+});
+
+// ---- Onglet Suivi ----
+async function renderProgress() {
+  const data = await api(`/api/progress?${new URLSearchParams(reviewScope())}`);
+  const { week } = data;
   const pctText = (v) => (v === null ? "—" : `${v} %`);
   $("#review-exam").hidden = !data.exam || data.exam.days <= -7;
   if (data.exam) $("#review-exam").innerHTML = examSentence(data.exam);
-  $("#dash-mini").innerHTML = `<span><b>${week.cards}</b> carte${week.cards > 1 ? "s" : ""} cette semaine</span>`
-    + `<span><b>${pctText(week.cards_success)}</b> sues</span>`
-    + `<span><b>${data.active_days}</b> jour${data.active_days > 1 ? "s" : ""} actif${data.active_days > 1 ? "s" : ""}</span>`
-    + (weak.cards + weak.questions ? `<span><b>${weak.cards + weak.questions}</b> point${weak.cards + weak.questions > 1 ? "s" : ""} faible${weak.cards + weak.questions > 1 ? "s" : ""}</span>` : "");
   $("#pg-cards").textContent = week.cards;
   $("#pg-cards-success").textContent = pctText(week.cards_success);
   $("#pg-questions-success").textContent = pctText(week.questions_success);
@@ -2373,7 +2558,7 @@ async function renderProgress() {
 
 $("#mix-questions").addEventListener("change", (e) => {
   try { localStorage.setItem("pirouette.mixQuestions", e.target.checked ? "1" : "0"); } catch {}
-  renderProgress();
+  renderScopeMain();
 });
 $("#start-today").addEventListener("click", () => startSession({ mode: "today", ...reviewScope() },
   { title: "Révision du jour", back: state.reviewScope.hash }));
@@ -2382,7 +2567,7 @@ $("#start-partiel").addEventListener("click", () => {
   if (id) go(`#/reviser/cours/${id}/partiel`);
 });
 $("#start-weak").addEventListener("click", () => startSession({ mode: "weak", ...reviewScope() },
-  { title: "Points faibles", back: state.reviewScope.hash }));
+  { title: "Là où tu bloques", back: state.reviewScope.hash }));
 
 // ---------- Déroulé du quiz ----------
 // Pendant un quiz ou une révision, le suivi des créations se replie (il ne cache plus les boutons).
@@ -2390,8 +2575,10 @@ function foldJobs() {
   if (jobsState.open) { jobsState.open = false; renderJobs(); }
 }
 
-function startQuiz(quiz, questions = quiz.questions) {
+// `back` : la page d'où l'on lance le quiz (Réviser › un semestre ou un cours) ; sinon le cours du quiz.
+function startQuiz(quiz, questions = quiz.questions, { back = state.quizBack } = {}) {
   foldJobs();
+  state.quizBack = back || null;
   state.quiz = quiz;
   state.questions = questions;
   state.fullRun = questions.length === quiz.questions.length;
@@ -2404,15 +2591,17 @@ function startQuiz(quiz, questions = quiz.questions) {
   note.textContent = quiz.dropped?.length
     ? `Réponse introuvable dans le cours, question écartée : ${quiz.dropped.map((q) => `« ${q} »`).join(", ")}.` : "";
   const inCourse = quiz.course_id && state.course?.id === quiz.course_id;
-  setCrumbs(inCourse ? courseCrumbs(state.course, "quiz", quiz.title)
+  if (state.quizBack) setCrumbs(sessionCrumbs(state.quizBack, quiz.title));
+  else setCrumbs(inCourse ? courseCrumbs(state.course, "quiz", quiz.title)
     : quiz.course_id ? [COURSES_CRUMB, { label: quiz.course_name || "Cours", href: `#/cours/${quiz.course_id}/quiz` }, { label: quiz.title }]
     : [COURSES_CRUMB, { label: quiz.title }]);
-  $("#back-course-btn").textContent = quiz.course_id ? "Retour au cours" : "Mes cours";
+  $("#back-course-btn").textContent = state.quizBack ? "Retour à Réviser" : quiz.course_id ? "Retour au cours" : "Mes cours";
   show("quiz");
   renderQuestion();
 }
 
 function backToCourse() {
+  if (state.quizBack) return go(state.quizBack);
   go(state.quiz?.course_id ? `#/cours/${state.quiz.course_id}/quiz` : "#/cours");
 }
 $("#back-course-btn").addEventListener("click", backToCourse);
@@ -3430,9 +3619,9 @@ function openExamDialog({ folder = null, course = null }) {
   $("#exam-date").value = own || "";
   const inherited = course && !own && course.exam?.from === "dossier" ? course.exam.date : null;
   $("#exam-inherit").hidden = !inherited;
-  if (inherited) $("#exam-inherit").textContent = `Pour l'instant, ce cours suit la date de son dossier : ${dayLong(inherited)}. Une date ici la remplace pour ce cours seulement.`;
+  if (inherited) $("#exam-inherit").textContent = `Pour l'instant, ce cours suit la date de son semestre : ${dayLong(inherited)}. Une date ici la remplace pour ce cours seulement.`;
   $("#exam-dialog-text").textContent = (folder
-    ? `Premier jour de la semaine de partiels pour tous les cours du dossier « ${folder.name} ». `
+    ? `Premier jour de la semaine de partiels pour tous les cours du semestre « ${folder.name} ». `
     : "Indique le premier jour de ta semaine de partiels. ")
     + "Les révisions s'organisent pour que tout soit revu avant, de plus en plus souvent à l'approche, puis chaque jour pendant la semaine.";
   $("#exam-clear").hidden = !own;
@@ -3658,7 +3847,7 @@ $("#jobs-list").addEventListener("click", async (e) => {
     if (!quiz) return;
     await api(`/api/jobs/${start.dataset.job}`, { method: "DELETE" }).catch(() => {});
     if (quiz.course_id && state.course?.id !== quiz.course_id) state.course = await api(`/api/courses/${quiz.course_id}`);
-    startQuiz(quiz);
+    startQuiz(quiz, undefined, { back: null });
     refreshJobs();
   }
   if (dismiss) {

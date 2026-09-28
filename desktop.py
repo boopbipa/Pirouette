@@ -103,14 +103,14 @@ class DesktopApi:
 
 
 def remind() -> None:
-    """Lancé chaque jour par macOS (voir app/reminder.py) : notification s'il y a des cartes du jour."""
-    from app.reminder import message, notify
+    """Lancé chaque jour par macOS (voir app/reminder.py) : notification les jours de séance (ou de cartes du jour)."""
+    from app.reminder import daily_text, notify
     from app.storage import Store
 
     store = Store(Path(os.environ["QUIZZ_DATA_DIR"]))
     if not store.get_settings().get("reminder_time"):
         return
-    text = message(store.stats()["cards_today"])
+    text = daily_text(store)
     if text:
         notify(text)
 

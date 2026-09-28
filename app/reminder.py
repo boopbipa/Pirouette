@@ -11,7 +11,10 @@ import os
 import plistlib
 import subprocess
 import sys
+from datetime import date, timedelta
 from pathlib import Path
+
+from . import plan as plans
 
 LABEL = "app.pirouette.rappel"
 
@@ -68,6 +71,24 @@ def message(count: int) -> str | None:
     if count <= 0:
         return None
     return f"{count} carte{'s' if count > 1 else ''} t'attend{'ent' if count > 1 else ''} aujourd'hui. On révise ?"
+
+
+def daily_text(store, today: date | None = None) -> str | None:
+    """Texte du rappel : avec un plan de révision, seulement les jours de séance (premier et dernier jour de la
+    période, tant que la séance n'est pas faite) ; sans plan, s'il y a des cartes du jour."""
+    today = today or date.today()
+    found = store.plans()
+    if not found:
+        return message(store.stats()["cards_today"])
+    due = []
+    for kind, owner_id, name, plan in found:
+        status = plans.status(plan, store.active_days(store.scope_course_ids(kind, owner_id)), today)
+        deadline = date.fromisoformat(status["deadline"])
+        if not status["done_today"] and today in {deadline - timedelta(days=plan["every"] - 1), deadline}:
+            due.append(name)
+    if not due:
+        return None
+    return f"Séance de révision prévue aujourd'hui : {', '.join(due)}. On s'y met ?"
 
 
 def notify(text: str, title: str = "Pirouette") -> bool:

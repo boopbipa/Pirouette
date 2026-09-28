@@ -219,7 +219,7 @@ button:disabled { opacity: .4; cursor: not-allowed; }
 .review p { margin: 4px 0; }
 .review .q { font-weight: 600; }
 
-a.button { text-decoration: none; display: inline-block; border-radius: 999px; padding: 10px 20px; }
+a.button { text-decoration: none; display: inline-block; border-radius: 999px; padding: 10px 20px; border: 1px solid transparent; }
 a.button.small { padding: 6px 12px; font-size: 14px; }
 a.button.primary { color: var(--on-accent); font-weight: 600; }
 button.small { padding: 6px 12px; font-size: 14px; }
@@ -265,7 +265,12 @@ button.small { padding: 6px 12px; font-size: 14px; }
 .file-list li.empty { border: 0; background: none; }
 
 .quiz-list { list-style: none; padding: 0; margin: 0; }
-.quiz-item { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.quiz-item { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; }
+.quiz-item .quiz-open { min-width: 0; }
+.quiz-preview { flex: 1 0 100%; padding: 12px 18px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); }
+.quiz-preview ol { margin: 0 0 8px; padding-left: 20px; display: grid; gap: 8px; }
+.quiz-preview li span { display: block; }
+.quiz-preview p { margin: 0; }
 .quiz-open {
   flex: 1; display: flex; flex-direction: column; align-items: flex-start; gap: 2px; text-align: left;
   background: var(--bg); border: 1px solid var(--border); color: var(--text);
@@ -469,7 +474,7 @@ code { font-family: "SF Mono", Menlo, monospace; font-size: .88em; background: v
 .fcard { position: relative; height: 190px; perspective: 1000px; cursor: pointer; outline: none; transition: opacity .25s, transform .25s; }
 .fcard.leaving { opacity: 0; transform: scale(.94); }
 .fcard-inner { position: relative; width: 100%; height: 100%; transition: transform .4s; transform-style: preserve-3d; }
-.fcard:hover .fcard-inner, .fcard:focus-visible .fcard-inner { transform: rotateY(180deg); }
+.fcard.flipped .fcard-inner { transform: rotateY(180deg); }
 .fcard-face {
   position: absolute; inset: 0; display: flex; flex-direction: column; justify-content: center; gap: 8px;
   padding: 18px; border-radius: var(--radius); background: var(--surface); box-shadow: var(--shadow);
@@ -488,7 +493,7 @@ code { font-family: "SF Mono", Menlo, monospace; font-size: .88em; background: v
 }
 .fcard.is-known .fcard-mark { width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center;
   background: var(--ok); color: var(--surface); font-size: 13px; }
-.fcard:hover .fcard-mark { opacity: 0; }
+.fcard.flipped .fcard-mark { opacity: 0; }
 .fcard-tools { position: absolute; top: 4px; right: 4px; z-index: 2; display: flex; opacity: 0; transition: opacity .15s; }
 .fcard:hover .fcard-tools, .fcard:focus-within .fcard-tools { opacity: 1; }
 .fcard-tools .icon:hover { color: var(--text); }
@@ -941,3 +946,41 @@ main { padding-bottom: 120px; }
 .jobs.open .jobs-list { grid-template-columns: minmax(0, 1fr); }
 .job .primary.small, .job .ghost.small { flex: none; }
 .jobs:not(.open) { width: auto; max-width: min(340px, calc(100vw - 40px)); }
+
+/* Réviser : onglets, plan de révision, là où tu bloques, rétroplanning */
+.scope-tabs { margin: 14px 0 6px; }
+.scope-tabs a { padding: 6px 16px; font-size: 14px; border-radius: 999px; color: var(--muted); text-decoration: none; cursor: pointer; }
+.scope-tabs a:hover { color: var(--text); }
+.scope-tabs a.active { background: var(--surface); color: var(--text); box-shadow: 0 1px 3px rgba(0, 0, 0, .12); }
+#scope-main > .card, #scope-main > .scope-section, #scope-planning > .card, #scope-suivi > .card { margin-top: 14px; }
+.plan-card { border: 1.5px solid var(--accent); }
+.plan-card h2 { margin: 0; }
+.plan-card p { margin: 6px 0 0; }
+.plan-form { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 16px 0; }
+.plan-form input[type=date] { width: auto; }
+.plan-head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.plan-head h2 { margin: 0; }
+.plan-head .link-button, .plan-head .head-actions, .plan-head > .ghost { margin-left: auto; }
+.plan-next { font: 500 19px/1.35 var(--display); margin-top: 12px !important; }
+.plan-next b { color: var(--accent-ink); }
+#plan-start { margin-top: 16px; }
+.hard-list { margin: 12px 0 0; padding-left: 22px; display: grid; gap: 8px; }
+.hard-list li span { display: block; }
+.scope-section h2 { margin: 26px 0 10px; }
+.quiz-item.play .quiz-open { cursor: pointer; }
+#scope-suivi .dashboard { padding: 18px; }
+#scope-suivi .dash-body { padding: 0; border: 0; }
+.retro-head { margin: 14px 0 4px; }
+.retro-list { list-style: none; margin: 10px 0 0; padding: 0; display: grid; gap: 10px; }
+.retro-item { display: flex; gap: 14px; padding: 14px 16px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); }
+.retro-item.today { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+.retro-item.done { opacity: .6; }
+.retro-item.missed .retro-when strong { color: var(--muted); }
+.retro-check { padding-top: 2px; }
+.retro-check input { width: 18px; height: 18px; }
+.retro-body { flex: 1; min-width: 0; display: grid; gap: 8px; }
+.retro-when { display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; }
+.retro-when strong { font: 600 16px/1.3 var(--display); }
+.retro-when strong::first-letter { text-transform: uppercase; }
+.retro-unit { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.retro-actions { display: flex; gap: 6px; flex-wrap: wrap; }

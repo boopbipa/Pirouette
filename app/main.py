@@ -10,7 +10,7 @@ import re
 import subprocess
 import sys
 from dataclasses import replace
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -22,7 +22,7 @@ from pydantic import BaseModel
 
 load_dotenv()
 
-from . import local_ai, reminder, srs, updater  # noqa: E402
+from . import local_ai, plan as plans, reminder, srs, updater  # noqa: E402
 from .grounding import Grounding  # noqa: E402
 from .jobs import Jobs  # noqa: E402
 from .chapters import (CHAPTERS_SCHEMA, CHAPTERS_SYSTEM, ai_candidates, build_chapters_prompt,  # noqa: E402
@@ -219,7 +219,7 @@ async def save_appearance(body: AppearanceIn) -> dict:
 async def test_reminder() -> dict:
     if not reminder.supported():
         raise HTTPException(400, "Le rappel quotidien fonctionne dans l'app Mac.")
-    text = reminder.message(store.stats()["cards_today"]) or "Rien à réviser aujourd'hui : tout est à jour."
+    text = reminder.daily_text(store) or "Rien de prévu aujourd'hui : tout est à jour."
     return {"shown": reminder.notify(text), "message": text}
 
 
@@ -375,7 +375,7 @@ async def list_folders() -> list[dict]:
 @app.post("/api/folders")
 async def create_folder(body: FolderIn) -> dict:
     if not (body.name or "").strip():
-        raise HTTPException(400, "Donne un nom au dossier.")
+        raise HTTPException(400, "Donne un nom au semestre.")
     return store.create_folder(body.name)
 
 
@@ -967,10 +967,25 @@ SESSION_QUESTIONS = 10
 
 @app.get("/api/session")
 async def session(mode: str = "today", course: str = "", folder: str = "", filter: str = "review",
-                  questions: bool = True) -> dict:
-    """Une séance de révision : `today` (cartes du jour + questions de quiz à reposer), `weak` (points faibles)
-    ou `cards` (les cartes d'un cours, selon le filtre de la grille)."""
+                  questions: bool = True, minutes: int = 15, chapter: str = "") -> dict:
+    """Une séance de révision : `today` (cartes du jour + questions de quiz à reposer), `weak` (points faibles),
+    `plan` (séance du plan : les cartes les plus difficiles d'abord, à la taille choisie), `chapter` (les cartes
+    d'un chapitre, pour le rétroplanning) ou `cards` (les cartes d'un cours)."""
     ids = _scope(course, folder)
+    if mode == "plan":
+        max_cards, max_questions = plans.session_size(minutes if minutes in plans.MINUTES else 15)
+        hard = store.weak_cards(ids)[:max_cards // 3]
+        seen = {e["card"]["id"] for e in hard}
+        cards = [_card_item(e) for e in hard + [e for e in store.today_cards(ids) if e["card"]["id"] not in seen]][:max_cards]
+        chosen = store.weak_questions(ids)[:max_questions]
+        chosen += store.review_questions(ids)[:max_questions - len(chosen)]
+        asked = [_question_item(e) for e in chosen] if questions else []
+        random.shuffle(asked)
+        return {"mode": mode, "items": _interleave(cards, asked), "cards": len(cards), "questions": len(asked)}
+    if mode == "chapter":
+        cards = [_card_item({"course": c, "card": card}) for c, deck in store._decks(ids) for card in deck
+                 if _same_title(chapter, card.get("scope") or [])]
+        return {"mode": mode, "items": cards, "cards": len(cards), "questions": 0}
     if mode == "today":
         cards = [_card_item(e) for e in store.today_cards(ids)]
         chosen = store.weak_questions(ids)[:SESSION_QUESTIONS]
@@ -991,6 +1006,187 @@ async def session(mode: str = "today", course: str = "", folder: str = "", filte
     return {"mode": mode, "items": _interleave(cards, asked), "cards": len(cards), "questions": len(asked)}
 
 
+# ---------- Plan de révision et rétroplanning ----------
+
+def _owner(folder: str, course: str) -> tuple[str, str]:
+    if folder:
+        store.get_folder(folder)
+        return "dossier", folder
+    if course:
+        store.get_course(course)
+        return "cours", course
+    raise HTTPException(400, "Choisis un semestre ou un cours.")
+
+
+def _hard_cards(ids: list[str], limit: int = 5) -> list[dict]:
+    """Les cartes où l'on bloque le plus : souvent oubliées, ratées la dernière fois."""
+    return [{"course_id": e["course"]["id"], "course": e["course"]["name"], "front": e["card"]["front"],
+             "back": e["card"]["back"], "lapses": e["card"].get("lapses", 0)} for e in store.weak_cards(ids)[:limit]]
+
+
+@app.get("/api/plan")
+async def get_plan(folder: str = "", course: str = "") -> dict:
+    kind, owner_id = _owner(folder, course)
+    ids = store.scope_course_ids(kind, owner_id)
+    plan = store.get_plan(kind, owner_id)
+    status = plans.status(plan, store.active_days(ids), date.today()) if plan else None
+    cards, questions = plans.session_size(plan["minutes"]) if plan else (0, 0)
+    return {"plan": plan, "status": status, "hard": _hard_cards(ids), "weak": len(store.weak_cards(ids)),
+            "session": {"cards": min(cards, len(store.today_cards(ids)) + len(store.weak_cards(ids))),
+                        "questions": questions},
+            "rhythms": plans.RHYTHMS, "minutes": plans.MINUTES}
+
+
+class PlanIn(BaseModel):
+    folder: str = ""
+    course: str = ""
+    every: int = 2
+    minutes: int = 15
+
+
+@app.put("/api/plan")
+async def save_plan(body: PlanIn) -> dict:
+    kind, owner_id = _owner(body.folder, body.course)
+    try:
+        plans.check(body.every, body.minutes)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    old = store.get_plan(kind, owner_id) or {}
+    start = old.get("start") if old.get("every") == body.every else None  # nouveau rythme : on repart d'aujourd'hui
+    store.set_plan(kind, owner_id, {"every": body.every, "minutes": body.minutes, "start": start or date.today().isoformat()})
+    return await get_plan(body.folder, body.course)
+
+
+@app.delete("/api/plan")
+async def delete_plan(folder: str = "", course: str = "") -> dict:
+    kind, owner_id = _owner(folder, course)
+    store.set_plan(kind, owner_id, None)
+    return {"plan": None}
+
+
+def _exam_day(kind: str, owner_id: str) -> date | None:
+    owner = store.get_folder(owner_id) if kind == "dossier" else store.get_course(owner_id)
+    day = owner.get("exam_week")
+    if not day and kind == "cours":
+        info = store.exam_info(owner)
+        day = info and info["date"]
+    return date.fromisoformat(day) if day else None
+
+
+def _retro_units(ids: list[str], skip: set[str]) -> tuple[list[dict], list[dict]]:
+    """Chapitres des cours (dans l'ordre des fichiers), sans ceux déjà vus ; et les cours."""
+    courses = sorted((c for c in store.list_courses() if c["id"] in ids), key=lambda c: c["name"].lower())
+    units = []
+    for course in courses:
+        for key, title in _units(course, ""):
+            if f"{course['id']}:{key}" not in skip:
+                units.append({"course_id": course["id"], "course": course["name"], "key": key,
+                              "title": title or course["name"]})
+    return units, [{"id": c["id"], "name": c["name"]} for c in courses if c["files"]]
+
+
+def _same_title(title: str, scope: list[str]) -> bool:
+    """« Chapitre 1 — La cellule » et « Chapitre 1 : La cellule » désignent le même chapitre."""
+    norm = lambda t: " ".join(re.findall(r"\w+", t.lower()))  # noqa: E731
+    return norm(title) in {norm(t) for t in scope}
+
+
+def _retro_view(kind: str, owner_id: str) -> dict:
+    ids = store.scope_course_ids(kind, owner_id)
+    retro = store.get_retro(kind, owner_id)
+    exam = _exam_day(kind, owner_id)
+    if not retro:
+        return {"retro": None, "exam": exam and exam.isoformat()}
+    active = store.active_days(ids)
+    today = date.today()
+    quizzes = [q for q in store.list_quizzes() if q.get("course_id") in ids]
+    for s in retro["sessions"]:
+        day = date.fromisoformat(s["date"])
+        for unit in s["units"]:
+            same = [q for q in quizzes if q.get("course_id") == unit["course_id"]]
+            quiz = next((q for q in same if _same_title(unit["title"], q.get("scope") or [])), None) \
+                or (next((q for q in same if not q.get("scope")), None) if "-" not in unit["key"] else None)
+            unit["quiz_id"] = quiz and quiz["id"]
+            unit["quiz_done"] = bool(quiz and quiz.get("best_score"))
+        # Séance faite : cochée à la main ; pour les chapitres, tous leurs quiz passés ; sinon, on a révisé ce jour-là.
+        learned = s["kind"] == "learn" and all(u["quiz_done"] for u in s["units"])
+        s.update(past=day < today, today=day == today,
+                 done=bool(s.get("checked")) or learned or (s["kind"] != "learn" and day <= today and day in active))
+    return {"retro": retro, "exam": exam and exam.isoformat()}
+
+
+@app.get("/api/retro")
+async def get_retro(folder: str = "", course: str = "") -> dict:
+    return _retro_view(*_owner(folder, course))
+
+
+class RetroIn(BaseModel):
+    folder: str = ""
+    course: str = ""
+    every: int = 2
+    exam: str = ""   # début de la semaine des partiels, si elle n'est pas encore connue
+
+
+@app.post("/api/retro")
+async def build_retro(body: RetroIn) -> dict:
+    """(Re)construit le rétroplanning d'aujourd'hui aux partiels ; les chapitres des séances faites sont gardés."""
+    kind, owner_id = _owner(body.folder, body.course)
+    if body.every not in plans.RHYTHMS:
+        raise HTTPException(400, "Rythme inconnu.")
+    if body.exam:
+        try:
+            store.update_folder(owner_id, exam_week=body.exam) if kind == "dossier" else store.set_exam_week(owner_id, body.exam)
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+    exam = _exam_day(kind, owner_id)
+    today = date.today()
+    if not exam or exam <= today:
+        raise HTTPException(400, "Indique une semaine de partiels à venir.")
+    old = _retro_view(kind, owner_id)["retro"]
+    kept = [s for s in (old or {}).get("sessions", []) if s["past"] or s["done"]]
+    seen = {f"{u['course_id']}:{u['key']}" for s in kept if s["done"] for u in s["units"]}
+    kept = [s for s in kept if s["date"] < today.isoformat() or s["done"]]  # la séance faite aujourd'hui reste
+    start = today + timedelta(days=1) if any(s["date"] == today.isoformat() for s in kept) else today
+    units, courses = _retro_units(store.scope_course_ids(kind, owner_id), seen)
+    fresh = plans.build_retro(start, exam, body.every, units, courses)
+    clean = lambda s: {k: v for k, v in s.items() if k not in {"past", "today", "done"}} | ({"checked": True} if s.get("done") else {})  # noqa: E731
+    sessions = [clean(s) for s in kept] + [clean(s) for s in fresh]
+    for s in sessions:
+        for unit in s["units"]:
+            unit.pop("quiz_id", None)
+            unit.pop("quiz_done", None)
+    store.set_retro(kind, owner_id, {"every": body.every, "exam": exam.isoformat(),
+                                     "created": today.isoformat(), "sessions": sessions})
+    return _retro_view(kind, owner_id)
+
+
+class RetroCheckIn(BaseModel):
+    folder: str = ""
+    course: str = ""
+    date: str
+    done: bool = True
+
+
+@app.put("/api/retro/session")
+async def check_retro_session(body: RetroCheckIn) -> dict:
+    kind, owner_id = _owner(body.folder, body.course)
+    retro = store.get_retro(kind, owner_id)
+    if not retro:
+        raise HTTPException(404, "Pas de rétroplanning.")
+    for s in retro["sessions"]:
+        if s["date"] == body.date:
+            s["checked"] = body.done
+    store.set_retro(kind, owner_id, retro)
+    return _retro_view(kind, owner_id)
+
+
+@app.delete("/api/retro")
+async def delete_retro(folder: str = "", course: str = "") -> dict:
+    kind, owner_id = _owner(folder, course)
+    store.set_retro(kind, owner_id, None)
+    return {"retro": None}
+
+
 @app.get("/api/progress")
 async def progress(course: str = "", folder: str = "") -> dict:
     ids = _scope(course, folder)
@@ -1004,6 +1200,7 @@ async def progress(course: str = "", folder: str = "") -> dict:
         "today": {"cards": len(store.today_cards(ids)),
                   "questions": min(SESSION_QUESTIONS, len(store.weak_questions(ids)) + len(store.review_questions(ids)))},
         "weak": {"cards": len(store.weak_cards(ids)), "questions": len(store.weak_questions(ids))},
+        "hard": _hard_cards(ids),
         "new_per_day": store.new_per_day(),
     }
 
