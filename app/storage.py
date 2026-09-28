@@ -610,6 +610,83 @@ class Store:
     def get_quiz(self, quiz_id: str) -> dict:
         return _read(self._quiz_path(quiz_id))
 
+    # ---------- Un quiz par chapitre ----------
+    @staticmethod
+    def chapter_key(quiz: dict) -> tuple | None:
+        """Les quiz d'un même cours sur les mêmes chapitres se regroupent. Pas les quiz sur tout le cours ni les
+        quiz sur un thème précis. « Chapitre 1 — X » et « Chapitre 1 : X » désignent le même chapitre."""
+        scope = quiz.get("scope") or []
+        if not scope or not quiz.get("course_id") or quiz.get("focus"):
+            return None
+        return quiz["course_id"], tuple(sorted(" ".join(re.findall(r"\w+", str(t).lower())) for t in scope))
+
+    def chapter_quiz(self, key: tuple) -> dict | None:
+        """Le quiz déjà créé sur ces chapitres (le plus ancien), s'il y en a un."""
+        same = [self.get_quiz(q["id"]) for q in self.list_quizzes(key[0]) if self.chapter_key(q) == key]
+        return min(same, key=lambda q: q.get("created_at") or "") if same else None
+
+    def add_to_quiz(self, quiz_id: str, questions: list[dict]) -> tuple[dict, int]:
+        """Ajoute des questions à un quiz, sauf celles qui ressemblent à une question qu'il contient déjà."""
+        from .revision import is_duplicate
+
+        quiz = self.get_quiz(quiz_id)
+        notion = lambda q: {"front": q["question"], "back": "" if q["type"] == "vrai_faux" else q["answer"]}  # noqa: E731
+        known = [notion(q) for q in quiz["questions"]]
+        added = 0
+        for question in questions:
+            if not is_duplicate(**notion(question), others=known):
+                quiz["questions"].append(question)
+                known.append(notion(question))
+                added += 1
+        quiz["updated_at"] = _now()
+        _write(self._quiz_path(quiz_id), quiz)
+        return quiz, added
+
+    def merge_chapter_quizzes(self) -> int:
+        """Regroupe les quiz qui portent sur les mêmes chapitres : les questions des plus récents rejoignent le plus
+        ancien (sans les questions semblables), avec leur suivi (réussites, ratés). Renvoie le nombre de quiz fondus."""
+        from .revision import is_duplicate
+
+        groups: dict[tuple, list[dict]] = {}
+        for summary in self.list_quizzes():
+            key = self.chapter_key(summary)
+            if key:
+                groups.setdefault(key, []).append(summary)
+        merged = 0
+        for key, members in groups.items():
+            if len(members) < 2:
+                continue
+            members.sort(key=lambda q: q.get("created_at") or "")
+            target = self.get_quiz(members[0]["id"])
+            notion = lambda q: {"front": q["question"], "back": "" if q["type"] == "vrai_faux" else q["answer"]}  # noqa: E731
+            known = [notion(q) for q in target["questions"]]
+            stats = target.setdefault("stats", {})
+            renamed: dict[str, str] = {}
+            for summary in members[1:]:
+                other = self.get_quiz(summary["id"])
+                for index, question in enumerate(other["questions"]):
+                    if is_duplicate(**notion(question), others=known):
+                        continue
+                    target["questions"].append(question)
+                    known.append(notion(question))
+                    if str(index) in (other.get("stats") or {}):
+                        stats[str(len(target["questions"]) - 1)] = other["stats"][str(index)]
+                    renamed[f"{other['id']}:{question['question']}"] = f"{target['id']}:{question['question']}"
+                if not target.get("attempts") and other.get("attempts"):
+                    target["attempts"] = other["attempts"]  # garde au moins un score à afficher
+                self._quiz_path(other["id"]).unlink()
+                merged += 1
+            _write(self._quiz_path(target["id"]), target)
+            if renamed:  # questions « gardées malgré le cours mis à jour » : elles changent de quiz
+                try:
+                    course = self.get_course(key[0])
+                except NotFound:
+                    continue
+                if course.get("kept_outdated"):
+                    course["kept_outdated"] = [renamed.get(k, k) for k in course["kept_outdated"]]
+                    self._save_course(course)
+        return merged
+
     def rename_quiz(self, quiz_id: str, title: str) -> dict:
         """Nouveau nom, affiché tel quel (sans le « Quiz 3 · » ajouté aux quiz jamais renommés)."""
         quiz = self.get_quiz(quiz_id)
@@ -746,7 +823,7 @@ class Store:
             attempts = quiz.get("attempts", [])
             summaries.append({
                 **{k: quiz.get(k) for k in ("id", "title", "created_at", "provider", "model", "difficulty",
-                                            "course_id", "course_version", "sources", "scope", "custom_title")},
+                                            "course_id", "course_version", "sources", "scope", "custom_title", "focus")},
                 "count": len(quiz.get("questions", [])),
                 "attempts": len(attempts),
                 "last_score": attempts[-1] if attempts else None,

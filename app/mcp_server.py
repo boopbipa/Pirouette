@@ -220,9 +220,16 @@ class Pirouette:
             raise ToolError("Aucune question retenue.\n" + report)
         quiz = {"title": str(titre).strip()[:120] or "Quiz", "questions": kept, "difficulty": "moyen",
                 **self._meta(course, sources, chapitres)}
-        self.store.save_quiz(quiz)
-        done = f"Quiz « {quiz['title']} » enregistré dans Pirouette : {len(kept)} question{'s' if len(kept) > 1 else ''}. " \
-               f"L'étudiant le trouve dans Réviser › {course['name']} (et dans Mes cours › {course['name']} › Quiz)."
+        key = self.store.chapter_key(quiz)
+        existing = self.store.chapter_quiz(key) if key else None
+        if existing:  # un quiz existe déjà sur ces chapitres : on l'alimente
+            merged, added = self.store.add_to_quiz(existing["id"], kept)
+            done = f"{added} question{'s' if added > 1 else ''} ajoutée{'s' if added > 1 else ''} au quiz « {merged['title']} » " \
+                   f"(déjà créé sur ces chapitres, {len(merged['questions'])} questions en tout)."
+        else:
+            self.store.save_quiz(quiz)
+            done = f"Quiz « {quiz['title']} » enregistré dans Pirouette : {len(kept)} question{'s' if len(kept) > 1 else ''}."
+        done += f" L'étudiant le trouve dans Réviser › {course['name']} (et dans Mes cours › {course['name']} › Quiz)."
         return done + (f"\n\nQuestions refusées ({len(refused)}) — corrige-les et renvoie-les dans un nouveau quiz si tu veux :\n{report}"
                        if refused else "")
 

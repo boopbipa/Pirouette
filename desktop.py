@@ -198,6 +198,10 @@ def main() -> None:
 
     updater.resume_pending()  # une mise à jour téléchargée attend encore : elle s'installera à la fermeture
     refresh_claude_link()
+    try:
+        store.merge_chapter_quizzes()  # des quiz sur les mêmes chapitres : un seul, sans questions en double
+    except Exception:
+        pass
     saving = threading.Thread(target=backup.run_if_due, args=(store,), daemon=True)  # sauvegarde automatique
     saving.start()
 

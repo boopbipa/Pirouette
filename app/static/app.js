@@ -2459,10 +2459,14 @@ async function renderMastery() {
   const several = data.length > 1;
   $("#mastery-list").innerHTML = data.map((c) => `
     ${several ? `<h3>${escapeHtml(c.course)}</h3>` : ""}
-    <ul class="mastery-rows">${c.chapters.map((ch) => {
+    <ul class="mastery-rows">${c.chapters.map((ch, i) => {
+      // Plusieurs fichiers (« PARTIE 2 » dans chacun) : le nom du fichier sépare les groupes.
+      const files = new Set(c.chapters.map((x) => x.file));
+      const header = files.size > 1 && (i === 0 || c.chapters[i - 1].file !== ch.file)
+        ? `<li class="mastery-file">${escapeHtml(ch.file.replace(/\.[^.]+$/, ""))}</li>` : "";
       const detail = [ch.cards ? `${ch.solid}/${ch.cards} cartes ancrées` : "", ch.weak ? `${ch.weak} difficile${ch.weak > 1 ? "s" : ""}` : "",
         ch.quiz !== null ? `quiz ${ch.quiz} %` : ""].filter(Boolean).join(" · ");
-      return `<li title="${escapeHtml(detail || "Pas encore révisé")}">
+      return `${header}<li title="${escapeHtml(detail || "Pas encore révisé")}">
         <span class="mastery-title">${escapeHtml(ch.title)}</span>
         <span class="mastery-bar"><span class="lvl ${ch.level}" style="width:${Math.max(ch.score, ch.level === "a_voir" ? 0 : 6)}%"></span></span>
         <span class="mastery-level ${ch.level}">${MASTERY_NAMES[ch.level]}</span></li>`;

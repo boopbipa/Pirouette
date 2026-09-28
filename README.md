@@ -115,6 +115,9 @@ dans **Safari** → menu Fichier → **Ajouter au Dock** (ou, dans Chrome / Edge
    réponse sont joints, on ajoute un message, et Pirouette ouvre l'app Mail avec le signalement prêt à envoyer
    (une copie reste dans `data/feedback.json`).
    Un nouveau quiz ne repose pas les questions des quiz déjà créés sur le même cours, même reformulées.
+   **Un seul quiz par chapitre** : recréer un quiz sur les mêmes chapitres alimente le quiz existant (nouvelles
+   questions seulement, les semblables sont écartées) au lieu d'en créer un second. Au lancement, les quiz en double
+   d'un même chapitre sont regroupés (questions semblables retirées, suivi des réussites et des ratés gardé).
 5. **Flashcards** : toutes les cartes du cours sont affichées, à regarder librement : un **clic** retourne la carte.
    On les apprend dans **Réviser**. Ajouter des cartes complète le paquet sans doublon. Au survol d'une carte : ✎ pour la corriger, ✕ pour la
    supprimer (✎ aussi pendant la révision). « ✎ Écrire une carte » en ajoute une à la main

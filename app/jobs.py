@@ -47,8 +47,10 @@ class Jobs:
                     job.update(status="done", message=f"{made['count']} cartes ajoutées",
                                result={"title": made["title"], "count": made["count"]})
                 else:
-                    job.update(status="done", message=f"{len(made['questions'])} questions",
-                               result={"quiz_id": made["id"], "title": made["title"], "count": len(made["questions"])})
+                    added = made.get("added")
+                    job.update(status="done", message=f"{added} questions ajoutées au quiz du chapitre" if added
+                               else f"{len(made['questions'])} questions",
+                               result={"quiz_id": made["id"], "title": made["title"], "count": added or len(made["questions"])})
             except ProviderError as exc:
                 job.update(status="error", message=str(exc))
             except Exception as exc:  # une erreur ne doit pas arrêter les travaux suivants

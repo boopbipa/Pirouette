@@ -817,6 +817,16 @@ def _save_quiz_result(quiz: dict, course: dict, provider: str, model: str, optio
     if dropped:
         quiz["dropped"] = dropped  # tes questions sans réponse dans le cours : signalées au début du quiz
     quiz.update(_meta(course, provider, model, options.language, sources, chapters), difficulty=options.difficulty)
+    # Un quiz existe déjà sur ces chapitres : on l'alimente au lieu d'en créer un second (les questions semblables
+    # sont écartées ; l'IA a déjà reçu la liste des questions existantes pour ne pas les reposer).
+    key = store.chapter_key(quiz)
+    existing = store.chapter_quiz(key) if key else None
+    if existing:
+        merged, added = store.add_to_quiz(existing["id"], quiz["questions"])
+        if not added:
+            raise ProviderError("Toutes les questions proposées ressemblaient à celles déjà dans le quiz de ce chapitre. "
+                                "Réessaie, ou choisis un autre niveau de difficulté.")
+        return merged | {"added": added, "new_questions": list(range(len(merged["questions"]) - added, len(merged["questions"])))}
     return store.save_quiz(quiz)
 
 
@@ -1290,7 +1300,8 @@ async def mastery(folder: str = "", course: str = "") -> list[dict]:
             scores = [100 * q["best_score"]["score"] / max(q["best_score"]["total"], 1) for q in quizzes
                       if q.get("course_id") == c["id"] and q.get("best_score")
                       and (single or _same_title(title, q.get("scope") or []))]
-            chapters.append({"key": key, "title": title} | _chapter_mastery(cards, scores))
+            file_name = next((f["name"] for f in c["files"] if key == f["id"] or key.startswith(f"{f['id']}-")), "")
+            chapters.append({"key": key, "title": title, "file": file_name} | _chapter_mastery(cards, scores))
         if chapters:
             result.append({"course_id": c["id"], "course": c["name"], "chapters": chapters})
     return result

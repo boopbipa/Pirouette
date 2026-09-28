@@ -1013,6 +1013,8 @@ main { padding-bottom: 120px; }
 .mastery-card h3 { margin: 16px 0 4px; font-size: 15px; }
 .mastery-rows { list-style: none; margin: 10px 0 0; padding: 0; display: grid; gap: 8px; }
 .mastery-rows li { display: grid; grid-template-columns: minmax(0, 1fr) minmax(90px, 200px) 70px; align-items: center; gap: 12px; font-size: 14.5px; }
+.mastery-rows li.mastery-file { display: block; margin-top: 8px; font-size: 12.5px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.mastery-rows li.mastery-file:first-child { margin-top: 0; }
 .mastery-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .mastery-bar { height: 8px; border-radius: 999px; background: var(--sunken); overflow: hidden; }
 .mastery-bar .lvl { display: block; height: 100%; border-radius: 999px; }
