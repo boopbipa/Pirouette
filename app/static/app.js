@@ -35,7 +35,6 @@ const jobsState = { list: [], timer: null, open: false, keepOpen: false, seen: n
 // ---------- Navigation ----------
 function show(view) {
   document.querySelectorAll(".view").forEach((v) => (v.hidden = v.id !== `view-${view}`));
-  document.body.classList.toggle("on-home", view === "home");  // le nom « Pirouette » à côté du logo : accueil seulement
   window.scrollTo(0, 0);
 }
 
@@ -153,7 +152,7 @@ const plural = (n, one, many) => `${n} ${n > 1 ? many : one}`;
 function renderStats(stats) {
   const sub = $("#hero-sub");
   if (!stats.courses) {
-    sub.textContent = "Crée ton premier cours pour commencer : donne-lui un nom juste en dessous.";
+    sub.textContent = "Bienvenue ! Trois étapes pour bien démarrer :";
     return;
   }
   sub.innerHTML = stats.cards_today
@@ -161,9 +160,44 @@ function renderStats(stats) {
     : stats.decks ? "Tes cartes sont à jour pour aujourd'hui." : "Prêt pour un quiz ou quelques flashcards ?";
 }
 
+// Premier lancement : trois étapes (l'IA, un semestre, un premier cours), cochées au fur et à mesure.
+function renderGuide(config, folders, stats) {
+  const steps = [
+    { done: config.local.available || config.claude.available, title: "Installe l'IA locale",
+      text: "Elle lit tes cours et écrit les quiz, sur ton Mac. Quelques clics dans Réglages.", action: `<a class="button primary small" href="#/reglages">Ouvrir les réglages</a>` },
+    { done: folders.length > 0, title: "Crée ton semestre",
+      text: "Tes cours s'y rangent, avec la date de tes partiels et ton plan de révision.", action: `<button class="primary small" type="button" data-guide="semestre">Créer un semestre</button>` },
+    { done: stats.courses > 0, title: "Importe ton premier cours",
+      text: "Un PDF, un Word, un Pages… Pirouette repère les chapitres et prépare quiz et flashcards.", action: `<button class="primary small" type="button" data-guide="cours">Importer un cours</button>` },
+  ];
+  // Seulement au premier lancement : dès qu'un cours existe, le guide laisse la place au bouton Réviser.
+  const current = stats.courses ? -1 : steps.findIndex((st) => !st.done);
+  $("#home-guide").hidden = current === -1;
+  $("#home-guide").innerHTML = steps.map((st, i) => `
+    <li class="guide-step${st.done ? " done" : ""}${i === current ? " current" : ""}">
+      <span class="guide-num">${st.done ? "✓" : i + 1}</span>
+      <div><strong>${st.title}</strong><small class="muted">${st.text}</small>${i === current ? `<div class="guide-action">${st.action}</div>` : ""}</div>
+    </li>`).join("");
+  return current !== -1;
+}
+$("#home-guide").addEventListener("click", async (e) => {
+  const step = e.target.closest("[data-guide]")?.dataset.guide;
+  if (step === "semestre") {
+    const name = await askText("Nom du semestre", "", "ex. Semestre 1, L2 S3…");
+    if (name) await api("/api/folders", jsonBody("POST", { name }));
+    openHome();
+  }
+  if (step === "cours") {
+    const folders = (await api("/api/folders")).filter((f) => !f.archived);
+    openNewCourse({ folder: folders[folders.length - 1]?.id || "" });
+  }
+});
+
 async function openHome() {
-  const [profile, stats, config] = await Promise.all([api("/api/profile"), api("/api/stats"), api("/api/config")]);
-  $("#setup-banner").hidden = config.local.available || config.claude.available;
+  const [profile, stats, config, folders] = await Promise.all([api("/api/profile"), api("/api/stats"), api("/api/config"), api("/api/folders")]);
+  const guiding = renderGuide(config, folders, stats);
+  $("#setup-banner").hidden = guiding || config.local.available || config.claude.available;
+  $(".home-actions").hidden = guiding;
   state.course = null;
   state.profile = profile;
   state.stats = stats;
@@ -415,6 +449,7 @@ async function openSettings() {
   $("#calib-result").hidden = $("#calib-status").hidden = true;
   $("#local-thinking-status").hidden = true;
   $("#settings-data-dir").textContent = settings.data_dir;
+  renderBackup(settings);
   $("#settings-import").hidden = !settings.desktop;
   ["#settings-name-status", "#settings-key-status", "#settings-import-status"].forEach((id) => ($(id).hidden = true));
 
@@ -438,6 +473,30 @@ $("#local-thinking").addEventListener("change", async (e) => {
     setStatus("#local-thinking-status", err.message, false);
   }
 });
+
+// ---------- Sauvegardes : copie de tout + CSV, à l'ouverture, chaque semaine ou jamais ----------
+function renderBackup(settings) {
+  $("#backup-mode").value = settings.backup_mode;
+  $("#backup-dir").textContent = settings.backup_dir.replace(/^\/Users\/[^/]+/, "~");
+  $("#backup-last").textContent = settings.last_backup
+    ? `Dernière sauvegarde : ${formatDate(settings.last_backup)}.` : "Pas encore de sauvegarde.";
+  $("#backup-open").hidden = !settings.desktop;
+}
+$("#backup-mode").addEventListener("change", async (e) => {
+  renderBackup(await api("/api/settings", jsonBody("PUT", { backup_mode: e.target.value })));
+});
+$("#backup-now").addEventListener("click", async () => {
+  $("#backup-now").disabled = true;
+  try {
+    const result = await api("/api/backup", { method: "POST" });
+    renderBackup(result);
+    setStatus("#backup-status", "Sauvegarde faite.", true);
+  } catch (err) {
+    setStatus("#backup-status", err.message, false);
+  }
+  $("#backup-now").disabled = false;
+});
+$("#backup-open").addEventListener("click", () => api("/api/backup/open", { method: "POST" }).catch(() => {}));
 
 // ---------- Révisions : rappel quotidien, nouvelles cartes par jour ----------
 function renderReminder(settings) {
@@ -989,7 +1048,7 @@ $("#settings-import-btn").addEventListener("click", async () => {
 // ---------- Nouveau cours : une petite fenêtre, on y glisse son fichier ----------
 const newCourse = { files: [] };
 
-async function openNewCourse() {
+async function openNewCourse({ folder = "" } = {}) {
   newCourse.files = [];
   $("#new-course-name").value = "";
   $("#new-course-status").hidden = true;
@@ -999,7 +1058,7 @@ async function openNewCourse() {
   $("#new-course-folder-field").hidden = !folders.length;
   $("#new-course-folder").innerHTML = `<option value="">Sans semestre</option>`
     + folders.map((f) => `<option value="${f.id}">${escapeHtml(f.name)}</option>`).join("");
-  $("#new-course-folder").value = "";
+  $("#new-course-folder").value = folders.some((f) => f.id === folder) ? folder : "";
   $("#new-course-dialog").showModal();
   $("#new-course-name").focus();
 }
@@ -1022,7 +1081,7 @@ function addNewCourseFiles(fileList) {
   renderNewCourseFiles();
 }
 
-$("#new-course-btn").addEventListener("click", openNewCourse);
+$("#new-course-btn").addEventListener("click", () => openNewCourse());
 $("#new-course-cancel").addEventListener("click", () => $("#new-course-dialog").close());
 $("#new-course-files").addEventListener("change", (e) => { addNewCourseFiles(e.target.files); e.target.value = ""; });
 const courseDrop = $("#new-course-drop");
@@ -1724,7 +1783,7 @@ function fcardHtml(c, { removable = false } = {}) {
     </div>`;
 }
 
-function flipCard(el) {
+function flipGridCard(el) {
   el.classList.toggle("flipped");
   el.setAttribute("aria-pressed", String(el.classList.contains("flipped")));
 }
@@ -1740,12 +1799,12 @@ $("#card-grid").addEventListener("click", async (e) => {
     return refreshCourse();
   }
   const el = e.target.closest("[data-card]");
-  if (el) flipCard(el);
+  if (el) flipGridCard(el);
 });
 $("#card-grid").addEventListener("keydown", (e) => {
   if (e.target.closest("button")) return;
   const el = e.target.closest("[data-card]");
-  if (el && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); flipCard(el); }
+  if (el && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); flipGridCard(el); }
 });
 
 $("#cards-clear").addEventListener("click", async () => {
@@ -2340,6 +2399,8 @@ async function renderScopeMain() {
     <small class="muted">${h.lapses ? `oubliée ${plural(h.lapses, "fois", "fois")}` : "ratée la dernière fois"}${
       scope.single ? "" : ` · ${escapeHtml(h.course)}`}</small></li>`).join("");
 
+  renderMastery();
+
   // Quiz à passer
   const names = Object.fromEntries(scoped.map((c) => [c.id, c.name]));
   const mine = quizzes.filter((q) => ids.has(q.course_id)).map((q) => ({ ...q, course_name: scope.single ? "" : names[q.course_id] }));
@@ -2356,6 +2417,23 @@ async function renderScopeMain() {
     if (scoped.some((c) => c.id === previous)) pick.value = previous;
   }
   $("#start-partiel").disabled = !single && !scoped.length;
+}
+
+const MASTERY_NAMES = { acquis: "Acquis", en_cours: "En cours", fragile: "Fragile", a_voir: "À voir" };
+async function renderMastery() {
+  const data = await api(`/api/mastery?${new URLSearchParams(reviewScope())}`).catch(() => []);
+  $("#mastery-card").hidden = !data.length;
+  const several = data.length > 1;
+  $("#mastery-list").innerHTML = data.map((c) => `
+    ${several ? `<h3>${escapeHtml(c.course)}</h3>` : ""}
+    <ul class="mastery-rows">${c.chapters.map((ch) => {
+      const detail = [ch.cards ? `${ch.solid}/${ch.cards} cartes ancrées` : "", ch.weak ? `${ch.weak} difficile${ch.weak > 1 ? "s" : ""}` : "",
+        ch.quiz !== null ? `quiz ${ch.quiz} %` : ""].filter(Boolean).join(" · ");
+      return `<li title="${escapeHtml(detail || "Pas encore révisé")}">
+        <span class="mastery-title">${escapeHtml(ch.title)}</span>
+        <span class="mastery-bar"><span class="lvl ${ch.level}" style="width:${Math.max(ch.score, ch.level === "a_voir" ? 0 : 6)}%"></span></span>
+        <span class="mastery-level ${ch.level}">${MASTERY_NAMES[ch.level]}</span></li>`;
+    }).join("")}</ul>`).join("");
 }
 
 function renderPlan(data) {
@@ -3674,7 +3752,7 @@ async function checkUpdate({ quiet = false } = {}) {
   state.update = info;
   if (info.ready) {
     if (!quiet) setStatus("#update-status", "La mise à jour est prête : quitte Pirouette puis rouvre-la.", true);
-    return showUpdateReady();
+    return showUpdateReady({ popup: !quiet });
   }
   if (!quiet) {
     if (info.error) setStatus("#update-status", UPDATE_ERRORS[info.error] || info.error, false);
@@ -3703,18 +3781,27 @@ $("#update-later").addEventListener("click", () => {
   $("#update-toast").hidden = true;
 });
 
-// La nouvelle version est téléchargée : on ne relance pas l'app nous-mêmes (source de bugs), on invite à le faire.
-function showUpdateReady() {
-  $("#update-text").innerHTML = "<b>La mise à jour est prête.</b> Quitte Pirouette (⌘Q) puis rouvre-la : "
-    + "la nouvelle version s'installera à ce moment-là. Tes cours et tes cartes sont gardés.";
+// La nouvelle version est téléchargée : on ne relance pas l'app nous-mêmes (source de bugs). Une fenêtre invite
+// à quitter puis rouvrir ; « Plus tard » laisse un rappel discret en bas de l'écran.
+function showUpdateReady({ popup = true } = {}) {
+  $("#update-text").innerHTML = "<b>La mise à jour est prête.</b> Quitte Pirouette (⌘Q) puis rouvre-la.";
   $("#update-progress").hidden = true;
   $("#update-go").hidden = !window.pywebview?.api?.quit;
   $("#update-go").disabled = false;
   $("#update-go").textContent = "Quitter Pirouette";
   $("#update-later").hidden = false;
   $("#update-later").textContent = "Plus tard";
-  $("#update-toast").hidden = false;
+  $("#update-toast").hidden = popup;
+  if (!popup) return;
+  $("#update-dialog-text b").textContent = state.update?.latest || "";
+  $("#update-dialog-quit").hidden = !window.pywebview?.api?.quit;
+  if (!$("#update-dialog").open) $("#update-dialog").showModal();
 }
+$("#update-dialog-quit").addEventListener("click", () => window.pywebview?.api?.quit());
+$("#update-dialog-later").addEventListener("click", () => {
+  $("#update-dialog").close();
+  $("#update-toast").hidden = false;
+});
 
 $("#update-go").addEventListener("click", async () => {
   const info = state.update;

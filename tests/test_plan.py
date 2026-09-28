@@ -89,3 +89,25 @@ def test_retro_api(tmp_path, monkeypatch):
     again = client.post("/api/retro", json={"folder": folder, "every": 3}).json()["retro"]["sessions"]
     assert [u["title"] for s in again for u in s["units"]].count("Chapitre 1 : Le neurone") == 1
     assert again[0]["done"]
+
+
+def test_chapter_mastery_levels():
+    new = {"front": "q", "back": "r"}
+    solid = {"front": "q", "back": "r", "reviews": 4, "interval": 12, "ease": 2.6, "status": "known", "last_rating": "good"}
+    weak = {"front": "q", "back": "r", "reviews": 5, "interval": 1, "lapses": 3, "last_rating": "again", "status": "review"}
+    assert main._chapter_mastery([new, new], [])["level"] == "a_voir"
+    assert main._chapter_mastery([solid] * 9 + [new], [90])["level"] == "acquis"
+    assert main._chapter_mastery([solid, weak, new], [])["level"] == "fragile"
+    assert main._chapter_mastery([], [40])["level"] == "fragile"
+    mid = main._chapter_mastery([solid, new, new], [70])
+    assert mid["level"] == "en_cours" and mid["solid"] == 1 and mid["quiz"] == 70
+
+
+def test_mastery_api(tmp_path, monkeypatch):
+    store, client, folder, cid = _setup(tmp_path, monkeypatch)
+    data = client.get(f"/api/mastery?folder={folder}").json()
+    assert data[0]["course"] == "Neuro"
+    chapters = {c["title"]: c for c in data[0]["chapters"]}
+    assert chapters["Chapitre 1 : Le neurone"]["cards"] == 40 and chapters["Chapitre 2 : La synapse"]["cards"] == 0
+    assert chapters["Chapitre 1 : Le neurone"]["level"] == "fragile"  # la carte oubliée 3 fois
+    assert chapters["Chapitre 2 : La synapse"]["level"] == "a_voir"

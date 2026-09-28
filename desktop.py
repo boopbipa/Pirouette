@@ -158,9 +158,11 @@ def main() -> None:
             pass
         return
 
-    from app import updater
+    from app import backup, updater
+    from app.main import store
 
     updater.resume_pending()  # une mise à jour téléchargée attend encore : elle s'installera à la fermeture
+    threading.Thread(target=backup.run_if_due, args=(store,), daemon=True).start()  # sauvegarde automatique
 
     import webview
 

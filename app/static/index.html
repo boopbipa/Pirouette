@@ -35,6 +35,7 @@
 
     <!-- Accueil : phrase du jour, compteurs, la révision du jour -->
     <section id="view-home" class="view home">
+      <div class="home-brand"><span class="app-icon"><svg aria-hidden="true"><use href="#logo"/></svg></span>Pirouette</div>
       <div class="hero">
         <h1 class="greeting" id="greeting">On révise ?</h1>
         <p class="hero-sub" id="hero-sub"></p>
@@ -46,6 +47,7 @@
           <button class="link-button" type="button" id="name-skip">Plus tard</button>
         </form>
       </div>
+      <ol class="guide" id="home-guide" hidden></ol>
       <p class="exam-countdown" id="home-exam" hidden></p>
       <div class="home-actions">
         <button class="primary" type="button" id="home-start"></button>
@@ -142,6 +144,14 @@
           </div>
           <p class="muted small-text">Les cartes que tu oublies le plus souvent. Chaque séance du plan commence par elles.</p>
           <ol class="hard-list" id="hard-list"></ol>
+        </div>
+
+        <div class="card mastery-card" id="mastery-card" hidden>
+          <h2>Maîtrise par chapitre</h2>
+          <p class="muted small-text">D'après tes cartes (bien ancrées ou difficiles) et le meilleur score des quiz de chaque chapitre.</p>
+          <div id="mastery-list"></div>
+          <p class="mastery-legend muted small-text"><span class="lvl acquis"></span>Acquis <span class="lvl en_cours"></span>En cours
+            <span class="lvl fragile"></span>Fragile <span class="lvl a_voir"></span>À voir</p>
         </div>
 
         <div class="scope-section" id="scope-quizzes-box">
@@ -497,6 +507,21 @@
         <h2>Tes données</h2>
         <p class="muted small-text">Cours, quiz et cartes sont enregistrés ici, sur cet ordinateur :</p>
         <p><code id="settings-data-dir"></code></p>
+        <div class="backup-box">
+          <div class="plan-form">
+            <strong>Sauvegarde automatique</strong>
+            <select id="backup-mode" class="chip" aria-label="Fréquence des sauvegardes">
+              <option value="open">à chaque ouverture</option><option value="week">chaque semaine</option><option value="off">jamais</option>
+            </select>
+          </div>
+          <p class="muted small-text">Une copie de tout (pour tout récupérer) et tes flashcards et quiz en CSV (Numbers, Excel, Anki),
+            dans <code id="backup-dir"></code>. Les 10 dernières sont gardées. <span id="backup-last"></span></p>
+          <div class="actions">
+            <button class="ghost small" type="button" id="backup-now">Sauvegarder maintenant</button>
+            <button class="link-button" type="button" id="backup-open" hidden>Ouvrir le dossier</button>
+          </div>
+          <p class="status" id="backup-status" hidden></p>
+        </div>
         <div id="settings-import" hidden>
           <p class="muted small-text">Tu utilisais la version précédente (lancée avec <code>run.sh</code> ou <code>.command</code>) ?
             Choisis son dossier <code>data</code> pour récupérer tes cours.</p>
@@ -958,6 +983,16 @@
   </dialog>
 
   <!-- Feedback : une idée, un bug… -->
+  <!-- Mise à jour téléchargée : on invite à quitter puis rouvrir (pas de relance automatique) -->
+  <dialog id="update-dialog" class="report-dialog">
+    <h2>La mise à jour est prête</h2>
+    <p id="update-dialog-text">Pirouette <b></b> est téléchargée. Quitte l'app puis rouvre-la : la nouvelle version s'installe pendant qu'elle est fermée. Tes cours et tes cartes sont gardés.</p>
+    <div class="actions">
+      <button class="primary" type="button" id="update-dialog-quit">Quitter Pirouette</button>
+      <button class="ghost" type="button" id="update-dialog-later">Plus tard</button>
+    </div>
+  </dialog>
+
   <dialog id="feedback-dialog" class="report-dialog">
     <form id="feedback-form">
       <h2>Ton retour sur Pirouette</h2>

@@ -22,7 +22,7 @@ from pydantic import BaseModel
 
 load_dotenv()
 
-from . import local_ai, plan as plans, reminder, srs, updater  # noqa: E402
+from . import backup, local_ai, plan as plans, reminder, srs, updater  # noqa: E402
 from .grounding import Grounding  # noqa: E402
 from .jobs import Jobs  # noqa: E402
 from .chapters import (CHAPTERS_SCHEMA, CHAPTERS_SYSTEM, ai_candidates, build_chapters_prompt,  # noqa: E402
@@ -126,6 +126,7 @@ class SettingsIn(BaseModel):
     definition_rule: str | None = None  # comment repérer les définitions ; "auto" = deviner, "aucune" = ne pas repérer
     reminder_time: str | None = None    # rappel quotidien « HH:MM » (Mac) ; "" pour l'arrêter
     new_per_day: int | None = None      # nouvelles cartes par jour dans la révision du jour
+    backup_mode: str | None = None      # sauvegarde automatique : "open" (à l'ouverture), "week", "off"
 
 
 def _settings_view() -> dict:
@@ -148,6 +149,9 @@ def _settings_view() -> dict:
         "reminder_supported": reminder.supported(),
         "new_per_day": store.new_per_day(),
         "data_dir": str(store.root.resolve()),
+        "backup_mode": store.get_settings().get("backup_mode", "week"),
+        "backup_dir": str(backup.backup_dir(store)),
+        "last_backup": store.get_settings().get("last_backup"),
         "desktop": os.getenv("PIROUETTE_DESKTOP") == "1",
     }
 
@@ -184,6 +188,10 @@ async def save_settings(body: SettingsIn) -> dict:
         store.save_settings(reminder_time=body.reminder_time or None)
     if body.new_per_day is not None:
         store.save_settings(new_per_day=max(0, min(body.new_per_day, 200)))
+    if body.backup_mode is not None:
+        if body.backup_mode not in backup.MODES:
+            raise HTTPException(400, "Fréquence de sauvegarde inconnue.")
+        store.save_settings(backup_mode=body.backup_mode)
     if body.local_thinking is not None:
         store.save_settings(local_thinking=body.local_thinking)
         ollama_provider.THINKING = body.local_thinking
@@ -197,6 +205,25 @@ async def save_settings(body: SettingsIn) -> dict:
         else:
             os.environ.pop("ANTHROPIC_API_KEY", None)
     return _settings_view()
+
+
+@app.post("/api/backup")
+async def backup_now() -> dict:
+    try:
+        folder = await run_in_threadpool(backup.make, store)
+    except OSError as exc:
+        raise HTTPException(500, f"La sauvegarde n'a pas pu se faire : {exc}") from exc
+    return {"path": str(folder)} | _settings_view()
+
+
+@app.post("/api/backup/open")
+async def open_backups() -> dict:
+    """Ouvre le dossier des sauvegardes dans le Finder (app Mac)."""
+    folder = backup.backup_dir(store)
+    folder.mkdir(parents=True, exist_ok=True)
+    if sys.platform == "darwin":
+        subprocess.run(["open", str(folder)], capture_output=True, timeout=10)
+    return {"path": str(folder)}
 
 
 class AppearanceIn(BaseModel):
@@ -1185,6 +1212,57 @@ async def delete_retro(folder: str = "", course: str = "") -> dict:
     kind, owner_id = _owner(folder, course)
     store.set_retro(kind, owner_id, None)
     return {"retro": None}
+
+
+# ---------- Maîtrise par chapitre ----------
+
+MASTERY_LEVELS = ("a_voir", "fragile", "en_cours", "acquis")
+
+
+def _chapter_mastery(cards: list[dict], quiz_scores: list[float]) -> dict:
+    """Où l'on en est sur un chapitre : cartes vues, bien ancrées (rappel à 7 jours ou plus), difficiles ; meilleur
+    score de ses quiz. Niveau : à voir, fragile, en cours, acquis ; et un score de 0 à 100."""
+    seen = [c for c in cards if c.get("reviews")]
+    solid = [c for c in seen if (c.get("interval") or 0) >= 7 and not srs.is_weak(c)]
+    weak = [c for c in seen if srs.is_weak(c)]
+    quiz = round(max(quiz_scores)) if quiz_scores else None
+    parts = []
+    if cards:
+        parts.append(100 * (len(solid) + 0.5 * (len(seen) - len(solid) - len(weak))) / len(cards))
+    if quiz is not None:
+        parts.append(quiz)
+    score = round(sum(parts) / len(parts)) if parts else 0
+    if not seen and quiz is None:
+        level = "a_voir"
+    elif (seen and len(weak) >= max(1, 0.2 * len(seen))) or (quiz is not None and quiz < 50):
+        level = "fragile"
+    elif score >= 80:
+        level = "acquis"
+    else:
+        level = "en_cours"
+    return {"cards": len(cards), "seen": len(seen), "solid": len(solid), "weak": len(weak), "quiz": quiz,
+            "score": score, "level": level}
+
+
+@app.get("/api/mastery")
+async def mastery(folder: str = "", course: str = "") -> list[dict]:
+    ids = _scope(course, folder)
+    quizzes = [q for q in store.list_quizzes() if q.get("course_id") in ids]
+    result = []
+    for c in sorted((c for c in store.list_courses() if c["id"] in ids), key=lambda c: c["name"].lower()):
+        deck = (store.get_doc(c["id"], "cards") or {}).get("cards", [])
+        units = _units(c, "")
+        chapters = []
+        for key, title in units:
+            single = len(units) == 1  # un seul chapitre : toutes les cartes et tous les quiz du cours
+            cards = deck if single else [card for card in deck if _same_title(title, card.get("scope") or [])]
+            scores = [100 * q["best_score"]["score"] / max(q["best_score"]["total"], 1) for q in quizzes
+                      if q.get("course_id") == c["id"] and q.get("best_score")
+                      and (single or _same_title(title, q.get("scope") or []))]
+            chapters.append({"key": key, "title": title} | _chapter_mastery(cards, scores))
+        if chapters:
+            result.append({"course_id": c["id"], "course": c["name"], "chapters": chapters})
+    return result
 
 
 @app.get("/api/progress")

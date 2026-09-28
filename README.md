@@ -148,7 +148,8 @@ Modelfile ni de Terminal. On peut la baisser (Mac qui peine) ou la monter si la 
 sans que ça se voie, ce qui rallonge beaucoup la génération et fait chauffer le Mac. Pirouette coupe cette
 réflexion par défaut ; Réglages → IA locale → « Laisser le modèle réfléchir avant de répondre » la réactive.
 
-**Menu du haut** : **Accueil** (message de bienvenue, cartes du jour et un seul bouton « Réviser »), **Mes cours** (cours et semestres),
+**Menu du haut** : **Accueil** (logo, message de bienvenue, cartes du jour et un seul bouton « Réviser » ; au premier
+lancement, un guide en 3 étapes : installer l'IA locale, créer son semestre, importer son premier cours), **Mes cours** (cours et semestres),
 **Réviser**, Réglages et **Feedback** (une idée, un bug : Pirouette prépare le mail).
 La page d'un cours sert à **ranger et fabriquer** : ses trois entrées (Quiz, Flashcards, Fichiers) ouvrent chacune sa
 page. On y crée, renomme et supprime les quiz (un clic montre leurs questions), on regarde et modifie les cartes ;
@@ -163,6 +164,8 @@ puis trois onglets : **Réviser**, **Rétroplanning** et **Suivi**.
   un mot d'encouragement ; chaque séance commence par les cartes où tu bloques, puis les cartes du jour, avec
   quelques questions de quiz. Un cours rangé dans un semestre suit le plan du semestre.
 - **Là où tu bloques** : les 5 cartes les plus souvent oubliées, et « Revoir ces cartes ».
+- **Maîtrise par chapitre** : une barre par chapitre (Acquis, En cours, Fragile, À voir), d'après ses cartes (bien
+  ancrées — rappel à 7 jours ou plus — ou difficiles) et le meilleur score de ses quiz.
 - **Quiz** : les quiz du semestre ou du cours, à passer (« Passer »), avec le meilleur score.
 - **Rétroplanning** : à partir de la semaine des partiels (on peut l'indiquer là), Pirouette date les séances d'ici
   là : d'abord les chapitres (un ou plusieurs par séance, avec « Quiz » — ou « Créer le quiz » — et « Cartes » du
@@ -203,9 +206,14 @@ premier jour de la semaine d'examens. L'accueil et Réviser affichent « Partiel
 tombent toujours avant la semaine, se resserrent les deux dernières semaines, puis reviennent chaque jour pendant la
 semaine ; les nouvelles cartes sont étalées pour être toutes vues à temps.
 
+**Sauvegardes** : Réglages → Tes données → « Sauvegarde automatique » à chaque ouverture, chaque semaine (par défaut)
+ou jamais, et « Sauvegarder maintenant ». Chaque sauvegarde est un dossier daté dans `Documents/Pirouette - Sauvegardes`
+avec `pirouette-donnees.zip` (tout, pour tout récupérer ; sans la clé API) et `flashcards.csv` / `quiz.csv` (Numbers,
+Excel, Anki). Les 10 dernières sont gardées.
+
 **Mises à jour automatiques** (app Mac) : au lancement, Pirouette vérifie s'il existe une version plus récente et
-propose « Mettre à jour » : elle télécharge le .dmg de ce Mac et prépare la nouvelle version, puis t'invite à quitter
-Pirouette et à la rouvrir ; l'app est remplacée pendant qu'elle est fermée (les données ne bougent pas). Réglages → Version → « Vérifier les mises à jour », ou le menu **Mise à jour** de la barre des menus du Mac (version actuelle, « Rechercher une mise à jour… », « Installer la mise à jour »). Il faut que les versions soient publiées sur
+propose « Mettre à jour » : elle télécharge le .dmg de ce Mac et prépare la nouvelle version, puis une fenêtre t'invite à
+quitter Pirouette et à la rouvrir (rien ne se relance tout seul) ; l'app est remplacée pendant qu'elle est fermée (les données ne bougent pas). Réglages → Version → « Vérifier les mises à jour », ou le menu **Mise à jour** de la barre des menus du Mac (version actuelle, « Rechercher une mise à jour… », « Installer la mise à jour »). Il faut que les versions soient publiées sur
 un dépôt GitHub public (`PIROUETTE_UPDATE_REPO` pour en changer).
 
 **Couleur de l'app** : terre cuite par défaut (fond brun en mode sombre) ; Réglages → Couleur de l'app pour en changer
