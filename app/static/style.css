@@ -875,3 +875,33 @@ input.cloze-input:disabled { opacity: 1; }
 .nav-pill { align-items: center; }
 .nav-pill a, .nav-feedback { display: inline-flex; align-items: center; height: 34px; padding-top: 2px; padding-bottom: 0; line-height: 1; }
 .nav-feedback svg { flex: none; }
+
+/* Un quiz par chapitre */
+.quiz-mode { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; }
+.quiz-mode .filters { margin: 0; align-self: flex-start; }
+
+/* Suivi des créations en arrière-plan */
+.jobs { position: fixed; left: 20px; bottom: 20px; z-index: 55; width: min(340px, calc(100vw - 40px));
+        border-radius: var(--radius); background: var(--surface); border: 1px solid var(--border);
+        box-shadow: 0 18px 40px -16px rgba(0, 0, 0, .45); overflow: hidden; }
+.jobs-head { display: flex; align-items: center; gap: 10px; width: 100%; padding: 12px 14px; border-radius: 0;
+             background: transparent; color: var(--text); text-align: left; font-size: 14.5px; }
+.jobs-head strong { flex: 1; font-weight: 600; }
+.jobs-toggle { width: 7px; height: 7px; border: solid var(--muted); border-width: 0 2px 2px 0; transform: rotate(-135deg); margin-top: 3px; transition: transform .15s; }
+.jobs.open .jobs-toggle { transform: rotate(45deg); margin-top: -3px; }
+.jobs-dot { width: 10px; height: 10px; border-radius: 50%; flex: none; }
+.jobs-dot.busy { background: var(--accent); animation: pulse 1.2s ease-in-out infinite; }
+.jobs-dot.ready { background: var(--ok); }
+.jobs-list { list-style: none; margin: 0; padding: 0 8px 8px; display: none; max-height: 45vh; overflow: auto; }
+.jobs.open .jobs-list { display: grid; gap: 4px; }
+.job { display: flex; align-items: center; gap: 10px; padding: 8px 8px; border-radius: 10px; background: var(--sunken); }
+.job-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.job-main strong { font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.job-main small { font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.job-state { width: 16px; height: 16px; flex: none; border-radius: 50%; }
+.job.running .job-state { border: 2px solid var(--border); border-top-color: var(--accent); animation: spin 1s linear infinite; }
+.job.queued .job-state { border: 2px dashed var(--border); }
+.job.done .job-state { background: var(--ok); box-shadow: inset 0 0 0 4px var(--ok-soft); }
+.job.error .job-state { background: var(--ko); }
+.job.error small { color: var(--ko); white-space: normal; }
+.job .primary.small { padding: 5px 10px; font-size: 13px; }

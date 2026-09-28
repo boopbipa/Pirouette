@@ -91,6 +91,10 @@ dans **Safari** → menu Fichier → **Ajouter au Dock** (ou, dans Chrome / Edge
    difficulté, types, part de **questions de cours** : définitions, « de quoi est composé… », termes à retrouver —
    au moins 40 %, 70 % ou 100 %) ou le nombre de cartes, puis lance. Pirouette vérifie la part de questions de cours
    et redemande précisément celles qui manquent.
+   **Un quiz par chapitre** (le choix par défaut quand plusieurs chapitres sont cochés) : Pirouette crée un quiz pour
+   chaque chapitre, titré avec le nom du chapitre. Les quiz se créent **en arrière-plan**, l'un après l'autre : on
+   peut faire un autre quiz ou réviser en attendant ; un petit suivi en bas à gauche, visible partout dans l'app,
+   montre l'avancée et propose « Commencer » dès qu'un quiz est prêt.
    **Cibler** (facultatif) : un **thème précis** (« les systèmes nerveux et leurs fonctions ») — Pirouette ne garde
    que les passages du cours qui en parlent et l'IA ne pose de questions (ou ne fait de cartes) que là-dessus ;
    **tes questions**, une par ligne — l'IA cherche la réponse dans le cours et écrit les propositions (une question
@@ -129,7 +133,8 @@ questions de cours et aux flashcards.
 **Uniquement ton cours** : pour chaque question et chaque carte, l'IA doit recopier la phrase du cours qui contient
 la réponse. Pirouette vérifie que cette phrase existe bien dans les chapitres choisis, et que les mots importants de la
 réponse s'y trouvent ; sinon la question est écartée et remplacée (le modèle ne peut pas compléter avec ce qu'il sait
-par ailleurs). La phrase s'affiche ensuite sous l'explication (« Dans ton cours »).
+par ailleurs). La phrase s'affiche ensuite sous l'explication (« Dans ton cours »). Les marques de gras et
+d'italique du cours (« ***GABA*** ») sont retirées des questions, des cartes et des citations.
 
 **Mémoire de lecture (contexte)** : Réglages → IA locale → étape 3. Pirouette la règle d'office selon la mémoire du
 Mac (32 768 tokens avec 18 Go, soit environ 27 pages de cours lues d'un coup) et l'envoie à chaque demande : pas de

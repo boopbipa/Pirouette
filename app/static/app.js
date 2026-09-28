@@ -1369,7 +1369,31 @@ function renderScope() {
     else if (chosen.length === units.length) el.innerHTML = "Porte sur <strong>tout le cours</strong>.";
     else el.innerHTML = `Porte sur <strong>${chosen.length} partie${chosen.length > 1 ? "s" : ""} sur ${units.length}</strong> : ${chosen.map((u) => escapeHtml(u.title)).join(" · ")}`;
   }
+  updateQuizMode();
 }
+
+// Un quiz par chapitre (le choix par défaut dès que plusieurs chapitres sont cochés) ou un seul quiz.
+function perChapter() {
+  return state.createKind === "quiz" && !$("#quiz-mode-row").hidden && state.quizMode !== "single";
+}
+function updateQuizMode() {
+  if (!state.course || state.createKind !== "quiz") return;
+  const chosen = chapterUnits().filter((u) => isChecked(u.key)).length;
+  $("#quiz-mode-row").hidden = chosen < 2;
+  document.querySelectorAll("[data-quiz-mode]").forEach((b) => b.classList.toggle("active", b.dataset.quizMode === (state.quizMode || "chapters")));
+  const each = perChapter();
+  $("#num-questions-label").textContent = each ? "Questions par quiz" : "Nombre de questions";
+  $("#manual-field").hidden = each;
+  $("#quiz-mode-hint").textContent = each
+    ? `${chosen} quiz de ${Number($("#num-questions").value) || 10} questions, un par chapitre coché, créés l'un après l'autre en arrière-plan.`
+    : "Un seul quiz sur tous les chapitres cochés.";
+  $("#create-btn").textContent = each ? `Créer les ${chosen} quiz` : "Générer le quiz";
+}
+document.querySelectorAll("[data-quiz-mode]").forEach((b) => b.addEventListener("click", () => {
+  state.quizMode = b.dataset.quizMode;
+  updateQuizMode();
+}));
+$("#num-questions").addEventListener("input", updateQuizMode);
 
 function scopeNote(scope) {
   return scope?.length ? `<small class="muted">Sur : ${scope.map(escapeHtml).join(" · ")}</small>` : "";
@@ -1516,6 +1540,7 @@ async function openCreate(id, kind) {
     : "Pirouette ne garde que les passages du cours qui en parlent, et l'IA ne fait de cartes que là-dessus.";
   updateManualHint();
   $("#create-btn").textContent = isQuiz ? "Générer le quiz" : "Créer les cartes";
+  state.quizMode = null;
   showError("#create-error", "");
   renderChapterPicker(course);
   show("create");
@@ -1561,12 +1586,19 @@ async function generateQuiz() {
   form.append("types", types.join(","));
   form.append("course_share", $("#course-share").value);
   form.append("focus", $("#focus").value);
-  form.append("manual", $("#manual").value);
+  form.append("manual", perChapter() ? "" : $("#manual").value);
+  form.append("per_chapter", perChapter() ? "1" : "");
   showError("#create-error", "");
+  // La création se fait en arrière-plan : on peut faire un autre quiz en attendant (suivi en bas à gauche).
   try {
-    startQuiz(await runJob("quizzes", form, "Génération du quiz…"));
+    const { jobs } = await api(`/api/courses/${state.course.id}/quizzes/background`, { method: "POST", body: form });
+    jobsState.open = true;
+    await refreshJobs();
+    go(courseHash("quiz"));
+    const status = $("#cards-status");
+    status.hidden = true;
   } catch (err) {
-    backToCreate(err.message);
+    showError("#create-error", err.message);
   }
 }
 
@@ -1886,7 +1918,7 @@ function showCard() {
   $("#card-front").textContent = card.front;
   $("#card-back").textContent = card.back;
   $("#card-back-question").textContent = card.front;
-  $("#card-source").innerHTML = card.source ? `Dans ton cours : « ${escapeHtml(card.source)} »` : "";
+  $("#card-source").innerHTML = card.source ? `Dans ton cours : « ${escapeHtml(plainMd(card.source))} »` : "";
   $("#card-front-hint").textContent = typing ? "Écris ta réponse ci-dessous" : "Clique ou appuie sur Espace pour retourner";
   $("#typed-area").hidden = !typing;
   $("#typed-answer").value = "";
@@ -2523,8 +2555,13 @@ function record(q, given, correct) {
 }
 
 // La phrase du cours d'où vient la question (vérifiée à la création du quiz).
+// Sans les marques de gras / italique du cours (« ***GABA*** » → « GABA »).
+function plainMd(text) {
+  return String(text ?? "").replace(/\*{2,3}(?=\S)(.+?)(?<=\S)\*{2,3}/g, "$1").replace(/(?<![\w*])\*(?=\S)([^*\n]+?)(?<=\S)\*(?![\w*])/g, "$1");
+}
+
 function sourceHtml(item) {
-  return item.source ? `<p class="source"><span>Dans ton cours</span>« ${escapeHtml(item.source)} »</p>` : "";
+  return item?.source ? `<p class="source"><span>Dans ton cours</span>« ${escapeHtml(plainMd(item.source))} »</p>` : "";
 }
 
 function keyTermsHtml(q) {
@@ -3466,3 +3503,64 @@ window.pirouetteMenu = async (action) => {
     { install: true });
   if (action === "install" && info.can_install) $("#update-go").click();
 };
+
+// ---------- Suivi des quiz créés en arrière-plan (en bas à gauche, sur toutes les pages) ----------
+const jobsState = { list: [], timer: null, open: true, seen: new Set() };
+
+async function refreshJobs() {
+  let list;
+  try { list = await api("/api/jobs"); } catch { return; }
+  const finishedNow = list.filter((j) => j.status === "done" && !jobsState.seen.has(j.id) && jobsState.list.some((o) => o.id === j.id && o.status !== "done"));
+  list.filter((j) => j.status === "done").forEach((j) => jobsState.seen.add(j.id));
+  jobsState.list = list;
+  renderJobs();
+  // Un quiz vient d'être prêt : la liste du cours affiché se met à jour.
+  if (finishedNow.length && state.course && !$("#view-course").hidden && finishedNow.some((j) => j.course_id === state.course.id)) {
+    refreshCourse();
+  }
+  const busy = list.some((j) => j.status === "queued" || j.status === "running");
+  clearTimeout(jobsState.timer);
+  if (busy) jobsState.timer = setTimeout(refreshJobs, 1500);
+}
+
+function renderJobs() {
+  const list = jobsState.list;
+  $("#jobs").hidden = !list.length;
+  if (!list.length) return;
+  const busy = list.filter((j) => j.status === "queued" || j.status === "running").length;
+  const done = list.filter((j) => j.status === "done").length;
+  $("#jobs-title").textContent = busy
+    ? `Création de ${plural(busy, "quiz", "quiz")} en cours${done ? ` · ${done} prêt${done > 1 ? "s" : ""}` : ""}`
+    : `${plural(done, "quiz prêt", "quiz prêts")}${list.some((j) => j.status === "error") ? " · erreur" : ""}`;
+  $("#jobs-dot").className = `jobs-dot ${busy ? "busy" : "ready"}`;
+  $("#jobs").classList.toggle("open", jobsState.open);
+  $("#jobs-list").innerHTML = list.map((j) => `
+    <li class="job ${j.status}">
+      <span class="job-state" aria-hidden="true"></span>
+      <span class="job-main">
+        <strong>${escapeHtml(j.status === "done" ? j.result.title : j.label)}</strong>
+        <small class="muted">${escapeHtml(j.course_name)} · ${escapeHtml(j.status === "queued" ? "en attente" : j.message)}</small>
+      </span>
+      ${j.status === "done" ? `<button class="primary small" type="button" data-job-start="${j.result.quiz_id}" data-job="${j.id}">Commencer</button>` : ""}
+      ${j.status === "done" || j.status === "error" ? `<button class="icon" type="button" data-job-dismiss="${j.id}" aria-label="Retirer de la liste" title="Retirer">✕</button>` : ""}
+    </li>`).join("");
+}
+
+$("#jobs-head").addEventListener("click", () => { jobsState.open = !jobsState.open; renderJobs(); });
+$("#jobs-list").addEventListener("click", async (e) => {
+  const start = e.target.closest("[data-job-start]");
+  const dismiss = e.target.closest("[data-job-dismiss]")?.dataset.jobDismiss;
+  if (start) {
+    const quiz = await api(`/api/quizzes/${start.dataset.jobStart}`).catch((err) => alert(err.message));
+    if (!quiz) return;
+    await api(`/api/jobs/${start.dataset.job}`, { method: "DELETE" }).catch(() => {});
+    if (quiz.course_id && state.course?.id !== quiz.course_id) state.course = await api(`/api/courses/${quiz.course_id}`);
+    startQuiz(quiz);
+    refreshJobs();
+  }
+  if (dismiss) {
+    await api(`/api/jobs/${dismiss}`, { method: "DELETE" }).catch(() => {});
+    refreshJobs();
+  }
+});
+refreshJobs();

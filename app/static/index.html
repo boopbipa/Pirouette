@@ -548,9 +548,16 @@
 
       <div class="card" id="create-quiz-options">
         <h2>Le quiz</h2>
+        <div class="quiz-mode" id="quiz-mode-row" hidden>
+          <div class="filters" role="radiogroup" aria-label="Combien de quiz">
+            <button type="button" role="radio" data-quiz-mode="chapters">Un quiz par chapitre</button>
+            <button type="button" role="radio" data-quiz-mode="single">Un seul quiz</button>
+          </div>
+          <small class="muted" id="quiz-mode-hint"></small>
+        </div>
         <div class="grid">
           <div class="field">
-            <label for="num-questions">Nombre de questions</label>
+            <label for="num-questions" id="num-questions-label">Nombre de questions</label>
             <input type="number" id="num-questions" min="1" max="50" value="10">
           </div>
           <div class="field">
@@ -901,6 +908,14 @@
       </div>
     </form>
   </dialog>
+
+  <!-- Quiz en cours de création (en arrière-plan) -->
+  <aside class="jobs" id="jobs" aria-live="polite" hidden>
+    <button type="button" class="jobs-head" id="jobs-head">
+      <span class="jobs-dot" id="jobs-dot"></span><strong id="jobs-title"></strong><span class="jobs-toggle" aria-hidden="true"></span>
+    </button>
+    <ul class="jobs-list" id="jobs-list"></ul>
+  </aside>
 
   <!-- Nouvelle version disponible -->
   <div class="update-toast" id="update-toast" role="status" hidden>

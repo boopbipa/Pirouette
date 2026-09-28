@@ -113,8 +113,10 @@ def normalize_cards(parts: list[dict], limit: int, existing: list[dict] = (), gr
                 return kept
             if not isinstance(item, dict):
                 continue
-            front, back = str(item.get("front", "")).strip(), str(item.get("back", "")).strip()
-            source = str(item.get("source", "")).strip()
+            from .quiz import plain_text
+
+            front, back = plain_text(item.get("front", "")), plain_text(item.get("back", ""))
+            source = plain_text(item.get("source", ""))
             if not front or not back or is_duplicate(front, back, [*existing, *kept]):
                 continue
             card = {"id": uuid.uuid4().hex[:8], "front": front, "back": back, "source": source,

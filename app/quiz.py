@@ -217,15 +217,22 @@ def plan_chunks(chunks: list[str], total_questions: int) -> list[tuple[str, int]
     return [(c, n) for c, n in zip(chunks, counts) if n > 0]
 
 
+def plain_text(value) -> str:
+    """Sans les marques de gras / italique du cours (« ***GABA*** » → « GABA »), que le modèle recopie parfois."""
+    text = re.sub(r"\*{2,3}(?=\S)(.+?)(?<=\S)\*{2,3}", r"\1", str(value or ""))
+    text = re.sub(r"(?<![\w*])\*(?=\S)([^*\n]+?)(?<=\S)\*(?![\w*])", r"\1", text)
+    return text.strip()
+
+
 def normalize_question(raw: dict, allowed_types: list[str]) -> dict | None:
     """Valide et corrige une question renvoyée par le modèle. Renvoie None si elle est inutilisable."""
     qtype = str(raw.get("type", "")).strip().lower().replace("-", "_").replace(" ", "_")
-    question = str(raw.get("question", "")).strip()
-    answer = str(raw.get("answer", "")).strip()
-    explanation = str(raw.get("explanation", "")).strip()
-    source = str(raw.get("source", "")).strip()
+    question = plain_text(raw.get("question", ""))
+    answer = plain_text(raw.get("answer", ""))
+    explanation = plain_text(raw.get("explanation", ""))
+    source = plain_text(raw.get("source", ""))
     kind = "cours" if str(raw.get("kind", "")).strip().lower() == "cours" else "reflexion"
-    choices = [str(c).strip() for c in raw.get("choices") or [] if str(c).strip()]
+    choices = [plain_text(c) for c in raw.get("choices") or [] if plain_text(c)]
 
     if qtype not in QUESTION_TYPES or qtype not in allowed_types or not question or not answer:
         return None

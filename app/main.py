@@ -24,6 +24,7 @@ load_dotenv()
 
 from . import local_ai, reminder, srs, updater  # noqa: E402
 from .grounding import Grounding  # noqa: E402
+from .jobs import Jobs  # noqa: E402
 from .chapters import (CHAPTERS_SCHEMA, CHAPTERS_SYSTEM, ai_candidates, build_chapters_prompt,  # noqa: E402
                        chapter_text, chapters_from_ai, detect_chapters)
 from .definitions import RULE_IDS, analyse, definitions_for  # noqa: E402
@@ -45,6 +46,7 @@ PROVIDERS = {"local": ollama_provider} | ({"claude": claude_provider} if CLAUDE_
 MAX_TOP_UPS = 3  # demandes supplémentaires au plus quand il manque des questions ou des cartes
 
 store = Store(Path(os.getenv("QUIZZ_DATA_DIR", ROOT.parent / "data")))
+jobs = Jobs()
 
 
 def _apply_settings() -> None:
@@ -586,6 +588,68 @@ async def generate_quiz(
     focus: str = Form(""),
     manual: str = Form(""),
 ) -> StreamingResponse:
+    course, sources, course_text, job = _quiz_job(course_id, provider, model, num_questions, difficulty, types,
+                                                  language, chapters, course_share, focus, manual)
+    return _stream(course, sources, course_text, job)
+
+
+@app.post("/api/courses/{course_id}/quizzes/background")
+async def generate_quiz_background(
+    course_id: str,
+    provider: str = Form("local"),
+    model: str = Form(""),
+    num_questions: int = Form(10),
+    difficulty: str = Form("moyen"),
+    types: str = Form(",".join(QUESTION_TYPES)),
+    language: str = Form("français"),
+    chapters: str = Form(""),
+    course_share: str = Form("equilibre"),
+    focus: str = Form(""),
+    manual: str = Form(""),
+    per_chapter: bool = Form(False),
+) -> dict:
+    """Crée le quiz en arrière-plan (ou un quiz par chapitre choisi) : on suit l'avancée avec /api/jobs."""
+    course = store.get_course(course_id)
+    units = _units(course, chapters) if per_chapter else []
+    plan = units if len(units) > 1 else [(chapters, "")]
+    created = []
+    for key, label in plan:
+        _, _, _, job = _quiz_job(course_id, provider, model, num_questions, difficulty, types, language, key,
+                                 course_share, focus, "" if label else manual, title=label)
+        created.append(jobs.submit({"kind": "quiz", "course_id": course_id, "course_name": course["name"],
+                                    "label": label or focus or "Nouveau quiz"}, job))
+    return {"jobs": created}
+
+
+def _units(course: dict, chapters: str) -> list[tuple[str, str]]:
+    """Chapitres choisis (« <fichier>-<n> »), un fichier sans chapitres comptant comme un seul : (clé, titre)."""
+    selection = {c for c in chapters.split(",") if c}
+    units = []
+    for f in course["files"]:
+        if f.get("chapters"):
+            for position, chapter in enumerate(f["chapters"]):
+                key = f"{f['id']}-{position}"
+                if not selection or f["id"] in selection or key in selection:
+                    units.append((key, chapter["title"]))
+        elif not selection or f["id"] in selection:
+            units.append((f["id"], Path(f["name"]).stem))
+    return units
+
+
+@app.get("/api/jobs")
+async def list_jobs() -> list[dict]:
+    return jobs.list()
+
+
+@app.delete("/api/jobs/{job_id}")
+async def dismiss_job(job_id: str) -> dict:
+    jobs.dismiss(job_id)
+    return {"deleted": job_id}
+
+
+def _quiz_job(course_id: str, provider: str, model: str, num_questions: int, difficulty: str, types: str,
+              language: str, chapters: str, course_share: str, focus: str, manual: str, title: str = ""):
+    """Prépare la création d'un quiz : (cours, sources, texte, job) ; `job(on_progress)` crée et enregistre le quiz."""
     course, sources, course_text, model = _prepare(course_id, provider, model, chapters)
     focus = focus.strip()[:200]
     mine = parse_manual_lines(manual)
@@ -618,8 +682,8 @@ async def generate_quiz(
                               f"Thème « {focus} » : tout le cours est gardé, l'IA s'en tient au thème")
         wanted = options.num_questions - len(own)
         if wanted <= 0:
-            return _save_quiz_result({"title": f"Mes questions · {course['name']}", "questions": own}, course, provider,
-                                     model, options, sources, chapters, dropped, focus)
+            return _save_quiz_result({"title": title or f"Mes questions · {course['name']}", "questions": own}, course,
+                                     provider, model, options, sources, chapters, dropped, focus)
         options = replace(options, num_questions=wanted)
         previous = previous + own
         asked = [q["question"] for q in previous]
@@ -648,9 +712,11 @@ async def generate_quiz(
             raise ProviderError("Aucune nouvelle question valable : celles proposées étaient déjà dans tes quiz, "
                                 "hors du cours ou trop faciles. Réessaie, choisis d'autres chapitres ou un autre modèle.")
         quiz["questions"] = own + quiz["questions"]
+        if title:
+            quiz["title"] = title  # un quiz par chapitre : le titre du chapitre
         return _save_quiz_result(quiz, course, provider, model, options, sources, chapters, dropped, focus)
 
-    return _stream(course, sources, course_text, job)
+    return course, sources, course_text, job
 
 
 def _save_quiz_result(quiz: dict, course: dict, provider: str, model: str, options: QuizOptions, sources: list,

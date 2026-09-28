@@ -161,3 +161,14 @@ def test_prompt_asks_for_course_questions():
     assert "Au moins 7 questions sur 10 sont des questions de cours" in prompt and "De quoi est composé" in prompt
     prompt = build_user_prompt("cours", 5, QuizOptions(course_share=1.0, types=["reponse_courte"]))
     assert "Toutes les questions sont des questions de cours" in prompt and "réécrire la définition" in prompt
+
+
+def test_formatting_marks_are_removed():
+    from app.quiz import plain_text
+
+    assert plain_text("***GABA*** Inhibiteur, il aide à réduire le **stress** et l’**anxiété**") == \
+        "GABA Inhibiteur, il aide à réduire le stress et l’anxiété"
+    assert plain_text("*Italique* et 5 * 3 = 15") == "Italique et 5 * 3 = 15"
+    q = normalize_question({"type": "qcm", "question": "Quel est le rôle du **GABA** ?", "choices": ["**Inhibiteur**", "Excitateur"],
+                            "answer": "Inhibiteur", "explanation": "", "source": "***GABA*** Inhibiteur"}, ALL)
+    assert q["question"] == "Quel est le rôle du GABA ?" and q["answer"] == "Inhibiteur" and q["source"] == "GABA Inhibiteur"
