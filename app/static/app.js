@@ -35,6 +35,7 @@ const jobsState = { list: [], timer: null, open: false, keepOpen: false, seen: n
 // ---------- Navigation ----------
 function show(view) {
   document.querySelectorAll(".view").forEach((v) => (v.hidden = v.id !== `view-${view}`));
+  document.body.classList.toggle("on-home", view === "home");  // l'accueil a déjà son grand logo au centre
   window.scrollTo(0, 0);
 }
 

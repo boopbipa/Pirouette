@@ -87,13 +87,15 @@ def swap_script(bundle: Path, new_app: Path) -> str:
     q = lambda p: "'" + str(p).replace("'", "'\\''") + "'"  # noqa: E731
     old = bundle.with_name(bundle.name + ".ancienne")
     running = q(str(bundle) + "/Contents/MacOS/")
+    old_running = q(str(old) + "/Contents/MacOS/")
+    # Rouverte très vite, Pirouette peut encore tourner depuis l'ancienne app déplacée : on ne la supprime alors
+    # pas (elle le sera à la prochaine mise à jour) — la supprimer sous ses pieds faisait geler l'app.
     return f"""#!/bin/bash
 while pgrep -f {running} >/dev/null 2>&1; do sleep 1; done
-sleep 1
 [ -d {q(new_app)} ] || exit 0
-rm -rf {q(old)}
-if mv {q(bundle)} {q(old)} && mv {q(new_app)} {q(bundle)}; then
-  rm -rf {q(old)}
+pgrep -f {old_running} >/dev/null 2>&1 || rm -rf {q(old)}
+if [ ! -e {q(old)} ] && mv {q(bundle)} {q(old)} && mv {q(new_app)} {q(bundle)}; then
+  pgrep -f {old_running} >/dev/null 2>&1 || rm -rf {q(old)}
 else
   [ -d {q(old)} ] && [ ! -d {q(bundle)} ] && mv {q(old)} {q(bundle)}
 fi

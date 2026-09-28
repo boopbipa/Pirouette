@@ -64,11 +64,22 @@ class DesktopApi:
     """
 
     def quit(self) -> None:
-        """Ferme Pirouette (après une mise à jour : la nouvelle version prend la place de l'ancienne, à rouvrir)."""
+        """Ferme Pirouette (après une mise à jour : la nouvelle version prend la place de l'ancienne, à rouvrir).
+
+        Appelée depuis l'interface : fermer la fenêtre depuis ce fil d'exécution pouvait bloquer l'app (il fallait
+        forcer à quitter). On ferme donc à part, et si rien ne s'est fermé au bout de quelques secondes, on arrête
+        le programme net (les données sont déjà enregistrées sur le disque à chaque action)."""
         import webview
 
-        for window in list(webview.windows):
-            window.destroy()
+        def close() -> None:
+            for window in list(webview.windows):
+                try:
+                    window.destroy()
+                except Exception:
+                    pass
+
+        threading.Thread(target=close, daemon=True).start()
+        threading.Timer(4, lambda: os._exit(0)).start()
 
     def import_legacy_data(self) -> dict:
         """Récupère les cours d'une ancienne version (le dossier « data » à côté de run.sh)."""
@@ -187,7 +198,8 @@ def main() -> None:
 
     updater.resume_pending()  # une mise à jour téléchargée attend encore : elle s'installera à la fermeture
     refresh_claude_link()
-    threading.Thread(target=backup.run_if_due, args=(store,), daemon=True).start()  # sauvegarde automatique
+    saving = threading.Thread(target=backup.run_if_due, args=(store,), daemon=True)  # sauvegarde automatique
+    saving.start()
 
     import webview
 
@@ -199,6 +211,10 @@ def main() -> None:
     )
     webview.start(menu=app_menu())
     server.should_exit = True
+    # Fenêtre fermée : on s'arrête pour de bon. Sinon Python attend ses tâches de fond (une création de quiz, une
+    # requête en cours…) et l'app restait ouverte sans fenêtre, bloquée, empêchant aussi la mise à jour de s'installer.
+    saving.join(timeout=15)  # une sauvegarde en cours se termine d'abord
+    os._exit(0)
 
 
 if __name__ == "__main__":

@@ -86,6 +86,7 @@ a { color: var(--accent-ink); }
   padding: 12px 24px; background: color-mix(in srgb, var(--bg) 88%, transparent);
   backdrop-filter: saturate(1.4) blur(10px); -webkit-backdrop-filter: saturate(1.4) blur(10px);
 }
+body.on-home .brand { visibility: hidden; }  /* le logo est déjà au centre de l'accueil */
 .brand { display: flex; align-items: center; gap: 8px; font: 700 16px/1 var(--display); color: var(--text); text-decoration: none; letter-spacing: -.01em; justify-self: start; }
 .app-icon { width: 28px; height: 28px; padding: 5px; border-radius: 8px; background: var(--accent); color: #FFF6EE; display: grid; flex: none;
             box-shadow: 0 0 0 1px rgba(0, 0, 0, .06), 0 2px 6px rgba(0, 0, 0, .14); }
