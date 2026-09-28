@@ -150,8 +150,7 @@ Modelfile ni de Terminal. On peut la baisser (Mac qui peine) ou la monter si la 
 sans que ça se voie, ce qui rallonge beaucoup la génération et fait chauffer le Mac. Pirouette coupe cette
 réflexion par défaut ; Réglages → IA locale → « Laisser le modèle réfléchir avant de répondre » la réactive.
 
-**Menu du haut** : **Accueil** (message de bienvenue, cartes du jour, jours de révision d'affilée, réussite aux quiz
-des 7 derniers jours, bouton pour lancer la révision du jour et accès à Mes cours), **Mes cours** (cours et dossiers),
+**Menu du haut** : **Accueil** (message de bienvenue, cartes du jour et un seul bouton « Réviser »), **Mes cours** (cours et dossiers),
 **Réviser**, Réglages et **Feedback** (une idée, un bug : Pirouette prépare le mail).
 La page d'un cours ne montre que ses trois entrées (Quiz, Flashcards, Fichiers) ; chacune ouvre sa propre page.
 Un **fil d'Ariane** en haut (Mes cours › Cours › Quiz › …) permet de remonter d'un clic. Les menus déroulants
@@ -204,7 +203,7 @@ un dépôt GitHub public (`PIROUETTE_UPDATE_REPO` pour en changer).
 (roue chromatique, couleurs toutes prêtes, aperçu clair et sombre).
 
 Toutes les données restent sur ton Mac, dans le dossier `data/` (cours, fichiers originaux, quiz, cartes,
-prénom). Les compteurs de l'accueil (cartes à revoir, jours d'affilée, réussite aux quiz) sont calculés sur place : rien n'est envoyé ailleurs.
+prénom). Les compteurs (cartes à revoir, suivi des révisions) sont calculés sur place : rien n'est envoyé ailleurs.
 
 ## Configuration (`.env`)
 

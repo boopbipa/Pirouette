@@ -36,6 +36,7 @@ const jobsState = { list: [], timer: null, open: false, keepOpen: false, seen: n
 // ---------- Navigation ----------
 function show(view) {
   document.querySelectorAll(".view").forEach((v) => (v.hidden = v.id !== `view-${view}`));
+  document.body.classList.toggle("on-home", view === "home");  // le nom « Pirouette » à côté du logo : accueil seulement
   window.scrollTo(0, 0);
 }
 
@@ -152,20 +153,13 @@ const plural = (n, one, many) => `${n} ${n > 1 ? many : one}`;
 
 function renderStats(stats) {
   const sub = $("#hero-sub");
-  $("#today").hidden = !stats.courses;
   if (!stats.courses) {
     sub.textContent = "Crée ton premier cours pour commencer : donne-lui un nom juste en dessous.";
     return;
   }
   sub.innerHTML = stats.cards_today
     ? `<b>${plural(stats.cards_today, "carte t'attend", "cartes t'attendent")}</b> aujourd'hui.`
-    : stats.decks ? "Tes cartes sont à jour pour aujourd'hui. Un petit quiz pour vérifier ?" : "Prêt pour un quiz ou quelques flashcards ?";
-  $("#stat-review").textContent = stats.cards_today;
-  $("#stat-review-label").textContent = stats.cards_today > 1 ? "cartes du jour" : "carte du jour";
-  $("#stat-streak").textContent = plural(stats.streak, "jour", "jours");
-  $("#stat-streak-label").textContent = stats.streak ? "de révision d'affilée" : "révise aujourd'hui pour lancer ta série";
-  $("#stat-week").textContent = stats.week_success === null ? "—" : `${stats.week_success} %`;
-  $("#stat-week-label").textContent = stats.week_success === null ? "pas encore de quiz cette semaine" : "de réussite aux quiz (7 jours)";
+    : stats.decks ? "Tes cartes sont à jour pour aujourd'hui." : "Prêt pour un quiz ou quelques flashcards ?";
 }
 
 async function openHome() {
@@ -178,9 +172,7 @@ async function openHome() {
   $("#name-prompt").hidden = profile.asked;
   renderStats(stats);
   const start = $("#home-start");
-  start.textContent = !stats.courses ? "Créer mon premier cours"
-    : stats.cards_today ? `Réviser mes ${plural(stats.cards_today, "carte", "cartes")} du jour` : "Réviser";
-  $("#home-courses").hidden = !stats.courses;
+  start.textContent = !stats.courses ? "Créer mon premier cours" : "Réviser";
   const exam = stats.next_exam;
   $("#home-exam").hidden = !exam;
   if (exam) $("#home-exam").innerHTML = examSentence(exam, exam.course);
@@ -191,9 +183,6 @@ async function openHome() {
 $("#home-start").addEventListener("click", () => {
   const stats = state.stats || {};
   if (!stats.courses) return go("#/nouveau-cours");
-  if (stats.cards_today) {
-    return startSession({ mode: "today" }, { title: "Révision du jour", back: "#/" });
-  }
   go("#/reviser");
 });
 
@@ -2275,16 +2264,14 @@ async function openReview() {
         weak ? `${weak} point${weak > 1 ? "s" : ""} faible${weak > 1 ? "s" : ""}` : ""}` : "À jour ✓"}</small>
     </a>`;
   const archived = new Set(folders.filter((f) => f.archived).map((f) => f.id));
-  const active = courses.filter((c) => !archived.has(c.folder_id));
   const known = new Set(folders.map((f) => f.id));
   const group = (title, list, folderId = null) => list.length ? `
     <div class="pick-group"><h2>${escapeHtml(title)}</h2>
-      <div class="pick-grid">${folderId && list.length > 1 ? card(`#/reviser/dossier/${folderId}`, "Tout le dossier", counts(list), " whole") : ""}${
+      <div class="pick-grid">${folderId && list.length > 1 ? card(`#/reviser/dossier/${folderId}`, "Tout le dossier", counts(list), " main") : ""}${
         list.map((c) => card(`#/reviser/cours/${c.id}`, c.name, c)).join("")}</div></div>` : "";
   $("#review-pick").innerHTML = !courses.length
     ? `<p class="empty-state muted">Pas encore de cours à réviser : crée un cours dans « Mes cours ».</p>`
-    : `<div class="pick-grid">${card("#/reviser/tout", "Tous mes cours", counts(active), " main")}</div>`
-      + folders.filter((f) => !f.archived).map((f) => group(f.name, courses.filter((c) => c.folder_id === f.id), f.id)).join("")
+    : folders.filter((f) => !f.archived).map((f) => group(f.name, courses.filter((c) => c.folder_id === f.id), f.id)).join("")
       + group(folders.length ? "Sans dossier" : "Un cours", courses.filter((c) => !known.has(c.folder_id)))
       + (archived.size ? `<details class="pick-archived"><summary>Archivés</summary>${
         folders.filter((f) => f.archived).map((f) => group(f.name, courses.filter((c) => c.folder_id === f.id), f.id)).join("")}</details>` : "");
@@ -3142,11 +3129,23 @@ $("#exam-doubt").addEventListener("click", () => {
 });
 $("#exam-submit").addEventListener("click", () => submitExam(false));
 
-// On quitte l'épreuve en cours (menu, fil d'Ariane) : on demande d'abord.
+// On quitte un quiz, une révision ou un partiel en cours (menu, fil d'Ariane) : on demande d'abord.
+function leaveQuestion() {
+  if (state.exam?.running && !$("#view-exam").hidden) return "Tu es sûr de vouloir quitter le partiel ? Tes réponses seront perdues.";
+  if (!$("#view-quiz").hidden) return "Tu es sûr de vouloir quitter le quiz ?";
+  if (!$("#view-cards").hidden && $("#cards-done").hidden) return "Tu es sûr de vouloir quitter la révision ?";
+  return null;
+}
 document.addEventListener("click", (e) => {
   const link = e.target.closest("a[href^='#/']");
-  if (link && state.exam?.running && !$("#view-exam").hidden
-      && !confirm("Quitter le partiel ? Tes réponses seront perdues.")) e.preventDefault();
+  if (!link || e.defaultPrevented) return;
+  const question = leaveQuestion();
+  if (question && !confirm(question)) return e.preventDefault();
+  // Quiz ou révision lancés depuis une page : son lien a la même adresse, le navigateur ne ferait rien.
+  if (link.getAttribute("href") === location.hash) {
+    e.preventDefault();
+    route();
+  }
 }, true);
 
 // ---- Rendre la copie : correction automatique, puis réponses écrites ----

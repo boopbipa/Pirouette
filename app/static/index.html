@@ -19,7 +19,7 @@
     <symbol id="logo" viewBox="0 0 100 100"><path fill="currentColor" d="M17 47 C15 36 15 22 18.5 11.5 C19.5 10 21 10 22.5 11 C29 15.5 36 21 41.5 26.5 C47 25.2 53 25.2 58.5 26.5 C64 21 71 15.5 77.5 11 C79 10 80.5 10 81.5 11.5 C85 22 85 36 83 47 C87 55 87.5 63 84 71 C78 83 65 89 50 89 C35 89 22 83 16 71 C12.5 63 13 55 17 47 Z"/></symbol>
   </svg>
   <header class="topbar">
-    <a href="#/" class="brand"><span class="app-icon"><svg aria-hidden="true"><use href="#logo"/></svg></span>Pirouette</a>
+    <a href="#/" class="brand"><span class="app-icon"><svg aria-hidden="true"><use href="#logo"/></svg></span><span class="brand-name">Pirouette</span></a>
     <nav class="nav-pill" aria-label="Menu">
       <a href="#/" data-nav="accueil">Accueil</a>
       <a href="#/cours" data-nav="cours">Mes cours</a>
@@ -45,16 +45,10 @@
           <button class="ghost small" type="submit">OK</button>
           <button class="link-button" type="button" id="name-skip">Plus tard</button>
         </form>
-        <div class="today" id="today" hidden>
-          <a class="stat stat-main" href="#/reviser"><b id="stat-review">0</b><span id="stat-review-label">cartes du jour</span></a>
-          <div class="stat"><b id="stat-streak">0</b><span id="stat-streak-label">de révision d'affilée</span></div>
-          <div class="stat"><b id="stat-week">—</b><span id="stat-week-label">de réussite aux quiz (7 jours)</span></div>
-        </div>
       </div>
       <p class="exam-countdown" id="home-exam" hidden></p>
       <div class="home-actions">
         <button class="primary" type="button" id="home-start"></button>
-        <a class="button ghost" href="#/cours" id="home-courses">Mes cours →</a>
       </div>
     </section>
 
