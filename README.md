@@ -82,7 +82,11 @@ dans **Safari** → menu Fichier → **Ajouter au Dock** (ou, dans Chrome / Edge
 1. **Mes cours** : « + Nouveau cours » ouvre une petite fenêtre : glisse ton fichier (le nom du cours est repris
    du fichier), choisis éventuellement un dossier, et c'est créé (ex. « Biologie — chapitre 4 »). La page du cours a trois entrées :
    **Quiz**, **Flashcards** et **Fichiers**, chacune avec un bouton **+** pour en ajouter.
-2. **Fichiers** : dépose les fichiers du cours. Quand tu avances, redépose le fichier **sous le même nom** :
+2. **Tout préparer** : après le dépôt d'un cours (et le repérage des chapitres), Pirouette propose de créer d'un coup
+   un quiz et des flashcards par chapitre (10 questions et 10 cartes par défaut), en arrière-plan, chapitre après
+   chapitre ; « Plus tard » pour le faire soi-même. Pendant la création, le Mac peut chauffer un peu : mieux vaut
+   éviter les autres apps gourmandes.
+   **Fichiers** : dépose les fichiers du cours. Quand tu avances, redépose le fichier **sous le même nom** :
    la nouvelle version remplace l'ancienne (les quiz déjà créés sont conservés et marqués « cours mis à jour depuis »).
    Pirouette découpe chaque fichier en chapitres (titres « Chapitre 2 », « II. », titres Word…), puis l'IA affine
    le découpage (« Repérer avec l'IA » / « Relancer l'IA »). Les boutons « Quiz » et « Flashcards » d'un fichier
@@ -102,6 +106,8 @@ dans **Safari** → menu Fichier → **Ajouter au Dock** (ou, dans Chrome / Edge
    de questions choisi. Nouveau type **Texte à trous** : une phrase du cours avec un mot essentiel à retrouver
    (réponse tapée dans la phrase, petites fautes de frappe tolérées).
 4. **Quiz** : correction, explication et **mots-clés définis** après chaque réponse (la bonne réponse est surlignée).
+   « Question précédente » pour revoir une question déjà faite (avec sa correction). Signaler une erreur ou supprimer
+   une question hors sujet : la petite bulle à droite des boutons.
    À la fin : score, correction (tout ou mes erreurs seulement), « Refaire mes erreurs » ou « Refaire le quiz ».
    Un quiz se renomme en entier (y compris « Quiz 3 · ») avec le crayon dans la liste. Une question hors sujet se
    supprime (« Supprimer cette question », pendant le quiz, dans la correction ou en révision).

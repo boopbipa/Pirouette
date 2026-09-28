@@ -89,7 +89,8 @@ Règles :
 - "texte_a_trous" : "question" recopie une phrase importante du cours où UN mot ou groupe de mots essentiel (un terme
   technique, un nom, un chiffre ; jamais un petit mot) est remplacé par _____ ; "answer" est exactement ce qui manque,
   tel qu'écrit dans le cours (1 à 5 mots) ; "choices" est une liste vide ; "source" est la phrase complète.
-- "explanation" justifie la réponse en une ou deux phrases en s'appuyant sur le cours.
+- "explanation" justifie la réponse en une ou deux phrases, directement (sans « Le cours précise que… » ni
+  « Selon le cours… » : on sait que tout vient du cours).
 - "source" : recopie mot pour mot, sans rien changer, la phrase du cours qui contient la réponse. Si aucune phrase
   du cours ne contient la réponse, n'écris pas cette question. Chaque question est vérifiée : une source qui n'est
   pas dans le cours fait rejeter la question.
@@ -217,6 +218,18 @@ def plan_chunks(chunks: list[str], total_questions: int) -> list[tuple[str, int]
     return [(c, n) for c, n in zip(chunks, counts) if n > 0]
 
 
+COURSE_INTRO = re.compile(
+    r"^(?:(?:selon|d'après|d’après|dans) (?:le|ton|ce) cours,?\s*|(?:le|ton|ce) cours (?:précise|indique|explique|dit|"
+    r"stipule|mentionne|affirme|souligne|décrit|définit|rappelle|montre|note)(?: bien)? (?:que |qu'|qu’|:\s*)?)",
+    re.IGNORECASE)
+
+
+def strip_course_intro(text: str) -> str:
+    """« Le cours précise que les oligodendrocytes… » → « Les oligodendrocytes… »."""
+    rest = COURSE_INTRO.sub("", text, count=1).strip()
+    return rest[:1].upper() + rest[1:] if rest and rest != text else text
+
+
 def plain_text(value) -> str:
     """Sans les marques de gras / italique du cours (« ***GABA*** » → « GABA »), que le modèle recopie parfois."""
     text = re.sub(r"\*{2,3}(?=\S)(.+?)(?<=\S)\*{2,3}", r"\1", str(value or ""))
@@ -229,7 +242,7 @@ def normalize_question(raw: dict, allowed_types: list[str]) -> dict | None:
     qtype = str(raw.get("type", "")).strip().lower().replace("-", "_").replace(" ", "_")
     question = plain_text(raw.get("question", ""))
     answer = plain_text(raw.get("answer", ""))
-    explanation = plain_text(raw.get("explanation", ""))
+    explanation = strip_course_intro(plain_text(raw.get("explanation", "")))
     source = plain_text(raw.get("source", ""))
     kind = "cours" if str(raw.get("kind", "")).strip().lower() == "cours" else "reflexion"
     choices = [plain_text(c) for c in raw.get("choices") or [] if plain_text(c)]

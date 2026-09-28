@@ -22,7 +22,7 @@ class Jobs:
         self.worker: asyncio.Task | None = None
 
     def submit(self, info: dict, factory) -> dict:
-        """Ajoute un travail : `factory(on_progress)` renvoie le quiz créé."""
+        """Ajoute un travail : `factory(on_progress)` renvoie le quiz créé (ou les cartes ajoutées)."""
         job = {"id": uuid.uuid4().hex[:10], "status": "queued", "message": "En attente…",
                "created_at": datetime.now().isoformat(timespec="seconds")} | info
         self.jobs[job["id"]] = job
@@ -42,9 +42,13 @@ class Jobs:
                 job["message"] = message
 
             try:
-                quiz = await factory(on_progress)
-                job.update(status="done", message=f"{len(quiz['questions'])} questions",
-                           result={"quiz_id": quiz["id"], "title": quiz["title"], "count": len(quiz["questions"])})
+                made = await factory(on_progress)
+                if job.get("kind") == "cards":
+                    job.update(status="done", message=f"{made['count']} cartes ajoutées",
+                               result={"title": made["title"], "count": made["count"]})
+                else:
+                    job.update(status="done", message=f"{len(made['questions'])} questions",
+                               result={"quiz_id": made["id"], "title": made["title"], "count": len(made["questions"])})
             except ProviderError as exc:
                 job.update(status="error", message=str(exc))
             except Exception as exc:  # une erreur ne doit pas arrêter les travaux suivants

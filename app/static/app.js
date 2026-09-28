@@ -5,6 +5,7 @@ const BLANK = "_____";
 const svgIcon = (path) => `<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${path}</svg>`;
 const ICON_EDIT = svgIcon('<path d="M4 20h4L19 9l-4-4L4 16z"/><path d="m13.5 6.5 4 4"/>');
 const ICON_CALENDAR = svgIcon('<rect x="3.5" y="5" width="17" height="15" rx="2"/><path d="M3.5 10h17M8 3v4M16 3v4"/>');
+const ICON_ALERT = svgIcon('<path d="M4 5.5A1.5 1.5 0 0 1 5.5 4h13A1.5 1.5 0 0 1 20 5.5v9a1.5 1.5 0 0 1-1.5 1.5H10l-4.5 4v-4A1.5 1.5 0 0 1 4 14.5z"/><path d="M12 7.5v3.5M12 13.6h.01"/>');
 const ICON_TRASH = svgIcon('<path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/>');
 
 const state = {
@@ -29,6 +30,9 @@ const state = {
   detecting: false, // l'IA est en train de repérer des chapitres
 };
 
+// Suivi des créations en arrière-plan (voir plus bas) : déclaré ici, la navigation s'en sert dès le démarrage.
+const jobsState = { list: [], timer: null, open: false, keepOpen: false, seen: new Set() };
+
 // ---------- Navigation ----------
 function show(view) {
   document.querySelectorAll(".view").forEach((v) => (v.hidden = v.id !== `view-${view}`));
@@ -39,6 +43,9 @@ function show(view) {
 // #/cours/<id>/nouveau/quiz|cartes création · #/reviser (choix) · #/reviser/tout|dossier/<id>|cours/<id> · #/reglages
 async function route() {
   const hash = location.hash;
+  // Le suivi des créations se replie quand on change de page (sauf juste après avoir lancé une création).
+  if (jobsState.keepOpen) jobsState.keepOpen = false;
+  else foldJobs();
   const match = hash.match(/^#\/cours\/([0-9a-f]{12})(?:\/(nouveau\/)?([a-z]+))?/);
   // Lien actif du menu du haut
   const section = !hash || hash === "#/" ? "accueil"
@@ -1109,6 +1116,7 @@ async function openCourse(id, tab, { keepScroll = false } = {}) {
   show("course");
   if (keepScroll) window.scrollTo(0, scroll);
   $("#course-overview").hidden = Boolean(tab);
+  renderPrepare(course, tab);
   // Nouvelle version d'un fichier : questions et cartes à vérifier (sur la page du cours et ses fichiers).
   $("#outdated-note").hidden = !course.outdated || !(tab === null || tab === "fichiers");
   $("#outdated-text").textContent = `Ton cours a changé : ${plural(course.outdated, "question ou carte ne correspond", "questions ou cartes ne correspondent")} plus au cours.`;
@@ -1295,6 +1303,9 @@ async function uploadFiles(fileList) {
     const names = Object.keys(results).map((n) => n.toLowerCase());
     const ids = course.files.filter((f) => names.includes(f.name.toLowerCase())).map((f) => f.id);
     await detectChapters(ids, { quiet: true });
+    // Chapitres repérés : Pirouette propose de tout préparer (un quiz et des flashcards par chapitre).
+    state.offerPrepare = state.course.id;
+    await refreshCourse();
   } catch (err) {
     status.textContent = err.message;
     status.className = "status ko";
@@ -1593,6 +1604,7 @@ async function generateQuiz() {
   try {
     const { jobs } = await api(`/api/courses/${state.course.id}/quizzes/background`, { method: "POST", body: form });
     jobsState.open = true;
+    jobsState.keepOpen = true;
     await refreshJobs();
     go(courseHash("quiz"));
     const status = $("#cards-status");
@@ -1882,6 +1894,7 @@ async function startSession(params, { title, back }) {
 }
 
 function runSession(items, { title, back, params = null }) {
+  foldJobs();
   state.session = { items, index: 0, flipped: false, results: [], title, back, params };
   $("#session-correction").hidden = true;
   $("#cards-title").textContent = title;
@@ -2054,7 +2067,8 @@ function recordSessionAnswer(item, given, correct) {
   api(`/api/quizzes/${item.quiz_id}/answers`, jsonBody("POST", { answers: [{ index: item.index, correct }] })).catch(() => {});
 }
 
-const SQ_DELETE = `<p class="question-tools"><button class="link-button danger" type="button" data-sq-delete>Supprimer cette question (hors sujet)</button></p>`;
+const SQ_DELETE_ITEM = `<button type="button" class="danger" data-sq-delete><strong>Supprimer cette question</strong><small>Hors sujet : elle ne sera plus posée</small></button>`;
+const SQ_DELETE = `<div class="question-tools end">${qtoolsHtml([SQ_DELETE_ITEM])}</div>`;
 
 $("#sq-feedback").addEventListener("click", async (e) => {
   if (!e.target.closest("[data-sq-delete]")) return;
@@ -2070,7 +2084,7 @@ $("#sq-feedback").addEventListener("click", async (e) => {
 function sessionFeedback(q, correct, verdict = "") {
   const fb = $("#sq-feedback");
   fb.className = `feedback ${correct ? "ok" : "ko"}`;
-  fb.innerHTML = `${verdict}${q.explanation ? `<p>${escapeHtml(q.explanation)}</p>` : ""}${sourceHtml(q)}${keyTermsHtml(q)}${SQ_DELETE}`;
+  fb.innerHTML = `${verdict}${q.explanation ? `<p>${escapeHtml(cleanExplanation(q.explanation))}</p>` : ""}${sourceHtml(q)}${keyTermsHtml(q)}${SQ_DELETE}`;
   fb.hidden = false;
   $("#sq-validate").hidden = true;
   $("#sq-next").hidden = false;
@@ -2093,7 +2107,7 @@ function validateSessionQuestion() {
     const fb = $("#sq-feedback");
     fb.className = "feedback neutral";
     fb.innerHTML = `<p><strong>Réponse attendue :</strong> ${escapeHtml(q.answer)}</p>
-      ${q.explanation ? `<p>${escapeHtml(q.explanation)}</p>` : ""}${sourceHtml(q)}
+      ${q.explanation ? `<p>${escapeHtml(cleanExplanation(q.explanation))}</p>` : ""}${sourceHtml(q)}
       <div class="actions"><button class="primary" id="sq-right">J'avais bon</button><button class="ghost" id="sq-wrong">J'avais faux</button></div>${SQ_DELETE}`;
     fb.hidden = false;
     $("#sq-validate").hidden = true;
@@ -2165,7 +2179,7 @@ function showSessionCorrection(filter = "all") {
       <p class="q">${escapeHtml(q.question)}</p>
       <p class="${ok ? "given-ok" : "given-ko"}">${ok ? "✓" : "✗"} Ta réponse : ${escapeHtml(r.given || "")}</p>
       ${ok ? "" : `<p>Bonne réponse : <strong>${escapeHtml(q.answer)}</strong></p>`}
-      ${q.explanation ? `<p class="muted">${escapeHtml(q.explanation)}</p>` : ""}
+      ${q.explanation ? `<p class="muted">${escapeHtml(cleanExplanation(q.explanation))}</p>` : ""}
       ${sourceHtml(q)}
       <p class="question-tools">${explainButton({ course_id: r.item.course_id, question: q.question, expected: q.answer, given: r.given, source: q.source })}</p>
     </li>`;
@@ -2373,7 +2387,13 @@ $("#start-weak").addEventListener("click", () => startSession({ mode: "weak", ..
   { title: "Points faibles", back: state.reviewScope.hash }));
 
 // ---------- Déroulé du quiz ----------
+// Pendant un quiz ou une révision, le suivi des créations se replie (il ne cache plus les boutons).
+function foldJobs() {
+  if (jobsState.open) { jobsState.open = false; renderJobs(); }
+}
+
 function startQuiz(quiz, questions = quiz.questions) {
+  foldJobs();
   state.quiz = quiz;
   state.questions = questions;
   state.fullRun = questions.length === quiz.questions.length;
@@ -2427,7 +2447,40 @@ function renderQuestion() {
       <label class="choice"><input type="radio" name="choice" value="${i}">
       <span>${escapeHtml(c)}</span></label>`).join("");
   }
+  $("#prev-btn").hidden = state.index === 0;
+  // Question déjà faite (retour en arrière) : on la revoit avec sa correction.
+  const done = state.results.find((r) => r.question === q);
+  if (done) showAnswered(q, done);
 }
+
+function showAnswered(q, result) {
+  state.answered = true;
+  const input = $("#short-answer");
+  if (input) { input.value = result.given; input.disabled = true; }
+  document.querySelectorAll(".choice").forEach((label, i) => {
+    const radio = label.querySelector("input");
+    radio.disabled = true;
+    radio.checked = q.choices[i] === result.given;
+    if (q.choices[i] === q.answer) label.classList.add("right");
+    else if (q.choices[i] === result.given) label.classList.add("wrong");
+  });
+  const fb = $("#feedback");
+  fb.className = `feedback ${result.correct ? "ok" : "ko"}`;
+  fb.innerHTML = `${q.choices?.length ? "" : `<p><strong>${result.correct ? "Bonne réponse" : "Réponse attendue"} :</strong> ${escapeHtml(q.answer)}</p>`}
+    ${q.explanation ? `<p>${escapeHtml(cleanExplanation(q.explanation))}</p>` : ""}${sourceHtml(q)}${keyTermsHtml(q)}`;
+  fb.hidden = false;
+  showReportButton(q, result.given);
+  $("#validate-btn").hidden = true;
+  $("#next-btn").hidden = false;
+  const last = state.index + 1 >= state.questions.length;
+  $("#next-btn").textContent = last ? "Voir le résultat" : "Question suivante";
+}
+
+$("#prev-btn").addEventListener("click", () => {
+  if (state.index === 0) return;
+  state.index -= 1;
+  renderQuestion();
+});
 
 function sessionKeys(e) {
   const s = state.session;
@@ -2512,7 +2565,7 @@ function validateShort(q) {
   const fb = $("#feedback");
   fb.className = "feedback neutral";
   fb.innerHTML = `<p><strong>Réponse attendue :</strong> ${escapeHtml(q.answer)}</p>
-    ${q.explanation ? `<p>${escapeHtml(q.explanation)}</p>` : ""}
+    ${q.explanation ? `<p>${escapeHtml(cleanExplanation(q.explanation))}</p>` : ""}
     ${sourceHtml(q)}
     ${keyTermsHtml(q)}
     <div class="actions"><button class="primary" id="self-right">J'avais bon</button>
@@ -2543,7 +2596,7 @@ function record(q, given, correct) {
   const verdict = q.type === "reponse_courte" || q.type === "texte_a_trous"
     ? `<p><strong>Bonne réponse !</strong>${q.type === "texte_a_trous" && given !== q.answer ? ` (${escapeHtml(q.answer)})` : ""}</p>` : "";
   fb.innerHTML = `${verdict}
-    ${q.explanation ? `<p>${escapeHtml(q.explanation)}</p>` : ""}
+    ${q.explanation ? `<p>${escapeHtml(cleanExplanation(q.explanation))}</p>` : ""}
     ${sourceHtml(q)}
     ${keyTermsHtml(q)}
 `;
@@ -2558,6 +2611,13 @@ function record(q, given, correct) {
 // Sans les marques de gras / italique du cours (« ***GABA*** » → « GABA »).
 function plainMd(text) {
   return String(text ?? "").replace(/\*{2,3}(?=\S)(.+?)(?<=\S)\*{2,3}/g, "$1").replace(/(?<![\w*])\*(?=\S)([^*\n]+?)(?<=\S)\*(?![\w*])/g, "$1");
+}
+
+// Explications déjà enregistrées : sans « Le cours précise que… » (on sait que tout vient du cours).
+function cleanExplanation(text) {
+  const raw = plainMd(text);
+  const rest = raw.replace(/^(?:(?:selon|d['’]après|dans) (?:le|ton|ce) cours,?\s*|(?:le|ton|ce) cours (?:précise|indique|explique|dit|stipule|mentionne|affirme|souligne|décrit|définit|rappelle|montre|note)(?: bien)? (?:que |qu['’]|:\s*)?)/i, "").trim();
+  return rest && rest !== raw ? rest[0].toUpperCase() + rest.slice(1) : raw;
 }
 
 function sourceHtml(item) {
@@ -2603,14 +2663,15 @@ function renderResults() {
       <p class="q">${escapeHtml(r.question.question)}</p>
       <p class="${r.correct ? "given-ok" : "given-ko"}">${r.correct ? "✓" : "✗"} Ta réponse : ${escapeHtml(r.given)}</p>
       ${r.correct ? "" : `<p>Bonne réponse : <strong>${escapeHtml(r.question.answer)}</strong></p>`}
-      ${r.question.explanation ? `<p class="muted">${escapeHtml(r.question.explanation)}</p>` : ""}
+      ${r.question.explanation ? `<p class="muted">${escapeHtml(cleanExplanation(r.question.explanation))}</p>` : ""}
       ${sourceHtml(r.question)}
       ${keyTermsHtml(r.question)}
-      <p class="question-tools">
+      <div class="question-tools">
         ${explainButton({ course_id: state.quiz.course_id, question: r.question.question, expected: r.question.answer, given: r.given, source: r.question.source })}
-        <button class="link-button" data-report="${state.results.indexOf(r)}">Signaler un problème</button>
-        <button class="link-button danger" data-delete-result="${state.results.indexOf(r)}">Supprimer cette question</button>
-      </p>
+        ${qtoolsHtml([
+          `<button type="button" data-report="${state.results.indexOf(r)}"><strong>Signaler une erreur</strong><small>La question ou sa réponse est incorrecte</small></button>`,
+          `<button type="button" class="danger" data-delete-result="${state.results.indexOf(r)}"><strong>Supprimer cette question</strong><small>Hors sujet : elle ne sera plus posée</small></button>`])}
+      </div>
     </li>`).join("") : `<li class="empty muted">Aucune erreur : tout était juste.</li>`;
 }
 
@@ -2673,6 +2734,7 @@ $("#defs-close").addEventListener("click", () => $("#defs-dialog").close());
 function showReportButton(q, given) {
   state.reporting = { question: q, given };
   $("#question-tools").hidden = false;
+  $("#question-tools .qtools-menu").hidden = true;
 }
 
 function openReport(question, given) {
@@ -2965,6 +3027,7 @@ $("#partiel-go").addEventListener("click", async () => {
 });
 
 function startExam(course, items, { timer, minutes }) {
+  foldJobs();
   clearInterval(state.exam?.tick);
   state.exam = { course, items, answers: items.map(() => ""), doubts: items.map(() => false), index: 0,
                  timer, limit: timer === "down" ? minutes * 60 : null, started: Date.now(), running: true, hideClock: false };
@@ -3223,7 +3286,7 @@ function renderExamResult() {
       <p class="${r.verdict === "juste" ? "given-ok" : "given-ko"}">${VERDICT_NAMES[r.verdict]} · Ta réponse : ${given ? escapeHtml(given) : "<em>pas de réponse</em>"}</p>
       ${r.verdict === "juste" && q?.choices?.length ? "" : `<p>Réponse attendue : <strong>${escapeHtml(examExpected(item))}</strong></p>`}
       ${r.reason ? `<p class="ai-reason"><span>Correction de l'IA</span>${escapeHtml(r.reason)}</p>` : ""}
-      ${q?.explanation ? `<p class="muted">${escapeHtml(q.explanation)}</p>` : ""}
+      ${q?.explanation ? `<p class="muted">${escapeHtml(cleanExplanation(q.explanation))}</p>` : ""}
       ${sourceHtml(q || item.card)}
       <p class="question-tools">${explainButton({ course_id: exam.course.id, question: examPrompt(item), expected: examExpected(item), given, source: examSource(item) })}</p>
       ${contestable ? `<div class="contest"><span class="muted small-text">${r.by === "ai" ? "Pas d'accord ?" : "Changer :"}</span>
@@ -3505,7 +3568,6 @@ window.pirouetteMenu = async (action) => {
 };
 
 // ---------- Suivi des quiz créés en arrière-plan (en bas à gauche, sur toutes les pages) ----------
-const jobsState = { list: [], timer: null, open: true, seen: new Set() };
 
 async function refreshJobs() {
   let list;
@@ -3516,6 +3578,7 @@ async function refreshJobs() {
   renderJobs();
   // Un quiz vient d'être prêt : la liste du cours affiché se met à jour.
   if (finishedNow.length && state.course && !$("#view-course").hidden && finishedNow.some((j) => j.course_id === state.course.id)) {
+    state.deck = null;
     refreshCourse();
   }
   const busy = list.some((j) => j.status === "queued" || j.status === "running");
@@ -3530,24 +3593,33 @@ function renderJobs() {
   const busy = list.filter((j) => j.status === "queued" || j.status === "running").length;
   const done = list.filter((j) => j.status === "done").length;
   $("#jobs-title").textContent = busy
-    ? `Création de ${plural(busy, "quiz", "quiz")} en cours${done ? ` · ${done} prêt${done > 1 ? "s" : ""}` : ""}`
-    : `${plural(done, "quiz prêt", "quiz prêts")}${list.some((j) => j.status === "error") ? " · erreur" : ""}`;
+    ? `Création en cours · ${busy} restant${busy > 1 ? "s" : ""}${done ? ` · ${done} prêt${done > 1 ? "s" : ""}` : ""}`
+    : `${done} prêt${done > 1 ? "s" : ""}${list.some((j) => j.status === "error") ? " · erreur" : ""}`;
+  $("#jobs-heat").hidden = !busy || !jobsState.open;
   $("#jobs-dot").className = `jobs-dot ${busy ? "busy" : "ready"}`;
   $("#jobs").classList.toggle("open", jobsState.open);
   $("#jobs-list").innerHTML = list.map((j) => `
     <li class="job ${j.status}">
       <span class="job-state" aria-hidden="true"></span>
       <span class="job-main">
-        <strong>${escapeHtml(j.status === "done" ? j.result.title : j.label)}</strong>
+        <strong>${j.kind === "cards" ? "Flashcards · " : "Quiz · "}${escapeHtml(j.status === "done" ? j.result.title : j.label)}</strong>
         <small class="muted">${escapeHtml(j.course_name)} · ${escapeHtml(j.status === "queued" ? "en attente" : j.message)}</small>
       </span>
-      ${j.status === "done" ? `<button class="primary small" type="button" data-job-start="${j.result.quiz_id}" data-job="${j.id}">Commencer</button>` : ""}
+      ${j.status === "done" && j.kind !== "cards" ? `<button class="primary small" type="button" data-job-start="${j.result.quiz_id}" data-job="${j.id}">Commencer</button>` : ""}
+      ${j.status === "done" && j.kind === "cards" ? `<button class="ghost small" type="button" data-job-cards="${j.course_id}" data-job="${j.id}">Voir</button>` : ""}
       ${j.status === "done" || j.status === "error" ? `<button class="icon" type="button" data-job-dismiss="${j.id}" aria-label="Retirer de la liste" title="Retirer">✕</button>` : ""}
     </li>`).join("");
 }
 
 $("#jobs-head").addEventListener("click", () => { jobsState.open = !jobsState.open; renderJobs(); });
 $("#jobs-list").addEventListener("click", async (e) => {
+  const cards = e.target.closest("[data-job-cards]");
+  if (cards) {
+    await api(`/api/jobs/${cards.dataset.job}`, { method: "DELETE" }).catch(() => {});
+    state.deck = null;
+    go(`#/cours/${cards.dataset.jobCards}/cartes`);
+    return refreshJobs();
+  }
   const start = e.target.closest("[data-job-start]");
   const dismiss = e.target.closest("[data-job-dismiss]")?.dataset.jobDismiss;
   if (start) {
@@ -3564,3 +3636,65 @@ $("#jobs-list").addEventListener("click", async (e) => {
   }
 });
 refreshJobs();
+
+// ---------- « Un problème avec cette question ? » : signaler ou supprimer, rangés derrière une petite bulle ----------
+function qtoolsHtml(items) {
+  return `<span class="qtools">
+    <button class="icon qtools-btn" type="button" aria-label="Un problème avec cette question ?" title="Un problème avec cette question ?">${ICON_ALERT}</button>
+    <span class="plus-menu qtools-menu" hidden>${items.join("")}</span>
+  </span>`;
+}
+document.addEventListener("click", (e) => {
+  const toggle = e.target.closest(".qtools-btn");
+  document.querySelectorAll(".qtools-menu").forEach((menu) => {
+    if (!toggle || menu !== toggle.nextElementSibling) menu.hidden = true;
+  });
+  if (toggle) {
+    const menu = toggle.nextElementSibling;
+    menu.hidden = !menu.hidden;
+  }
+}, true);
+
+// ---------- Au dépôt d'un cours : tout préparer (un quiz et des flashcards par chapitre) ----------
+function prepareDismissed(id) {
+  try { return JSON.parse(localStorage.getItem("pirouette.prepareLater") || "[]").includes(id); } catch { return false; }
+}
+function renderPrepare(course, tab) {
+  const units = course.files.length ? chapterUnits(course) : [];
+  const fresh = !course.quizzes.length && !course.cards.total && !prepareDismissed(course.id);
+  const show = units.length > 0 && (tab === null || tab === "fichiers") && (state.offerPrepare === course.id || fresh);
+  $("#prepare-panel").hidden = !show;
+  if (!show) return;
+  $("#prepare-text").textContent = units.length > 1
+    ? `${units.length} chapitres repérés. Pirouette peut tout créer maintenant, chapitre par chapitre :`
+    : "Pirouette peut tout créer maintenant pour ce cours :";
+  showError("#prepare-error", "");
+}
+$("#prepare-later").addEventListener("click", () => {
+  try {
+    const list = JSON.parse(localStorage.getItem("pirouette.prepareLater") || "[]");
+    localStorage.setItem("pirouette.prepareLater", JSON.stringify([...list, state.course.id]));
+  } catch {}
+  state.offerPrepare = null;
+  $("#prepare-panel").hidden = true;
+});
+$("#prepare-go").addEventListener("click", async () => {
+  const quizzes = $("#prepare-quizzes").checked, cards = $("#prepare-cards").checked;
+  if (!quizzes && !cards) return showError("#prepare-error", "Coche au moins les quiz ou les flashcards.");
+  const form = new FormData();
+  form.append("provider", "local");
+  form.append("model", state.config?.local?.default_model || "");
+  form.append("quizzes", quizzes ? "1" : "");
+  form.append("cards", cards ? "1" : "");
+  form.append("num_questions", $("#prepare-nq").value || "10");
+  form.append("cards_count", $("#prepare-nc").value || "10");
+  try {
+    await api(`/api/courses/${state.course.id}/prepare`, { method: "POST", body: form });
+    state.offerPrepare = null;
+    $("#prepare-panel").hidden = true;
+    jobsState.open = true;
+    refreshJobs();
+  } catch (err) {
+    showError("#prepare-error", err.message);
+  }
+});

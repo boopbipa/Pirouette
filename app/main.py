@@ -636,6 +636,38 @@ def _units(course: dict, chapters: str) -> list[tuple[str, str]]:
     return units
 
 
+@app.post("/api/courses/{course_id}/prepare")
+async def prepare_course(
+    course_id: str,
+    provider: str = Form("local"),
+    model: str = Form(""),
+    quizzes: bool = Form(True),
+    cards: bool = Form(True),
+    num_questions: int = Form(10),
+    cards_count: int = Form(10),
+    types: str = Form("qcm,vrai_faux,reponse_courte"),
+    chapters: str = Form(""),
+    language: str = Form("français"),
+) -> dict:
+    """Tout préparer au dépôt d'un cours : un quiz et des flashcards par chapitre, en arrière-plan,
+    chapitre après chapitre (le premier chapitre est prêt en premier)."""
+    course = store.get_course(course_id)
+    if not course["files"]:
+        raise HTTPException(400, "Ce cours n'a encore aucun fichier : dépose ton cours d'abord.")
+    created = []
+    for key, label in _units(course, chapters):
+        if quizzes:
+            _, _, _, job = _quiz_job(course_id, provider, model, num_questions, "moyen", types, language, key,
+                                     "equilibre", "", "", title=label)
+            created.append(jobs.submit({"kind": "quiz", "course_id": course_id, "course_name": course["name"],
+                                        "label": label}, job))
+        if cards:
+            _, _, _, job = _cards_job(course_id, provider, model, language, cards_count, key, title=label)
+            created.append(jobs.submit({"kind": "cards", "course_id": course_id, "course_name": course["name"],
+                                        "label": label}, job))
+    return {"jobs": created}
+
+
 @app.get("/api/jobs")
 async def list_jobs() -> list[dict]:
     return jobs.list()
@@ -779,6 +811,13 @@ async def generate_cards(course_id: str, provider: str = Form("local"), model: s
                          language: str = Form("français"), count: int = Form(20),
                          chapters: str = Form(""), focus: str = Form("")) -> StreamingResponse:
     """Ajoute des cartes au paquet du cours, sans doublon avec celles qui existent déjà."""
+    course, sources, course_text, job = _cards_job(course_id, provider, model, language, count, chapters, focus)
+    return _stream(course, sources, course_text, job)
+
+
+def _cards_job(course_id: str, provider: str, model: str, language: str, count: int, chapters: str, focus: str = "",
+               title: str = ""):
+    """Prépare l'ajout de cartes : (cours, sources, texte, job) ; `job(on_progress)` crée et enregistre les cartes."""
     course, sources, course_text, model = _prepare(course_id, provider, model, chapters)
     focus = focus.strip()[:200]
     ai_text = focus_text(course_text, focus)[0] if focus else course_text
@@ -813,11 +852,13 @@ async def generate_cards(course_id: str, provider: str = Form("local"), model: s
         meta = _meta(course, provider, model, language, sources, chapters)
         for card in new:
             card.update(scope=meta["scope"], created_at=datetime.now().isoformat(timespec="seconds"))
-        deck.update(course_name=course["name"], course_id=course_id, cards=[*existing, *new])
+        # Relu juste avant d'enregistrer : on a pu réviser des cartes pendant la création.
+        deck = store.get_doc(course_id, "cards") or {"cards": []}
+        deck.update(course_name=course["name"], course_id=course_id, cards=[*deck["cards"], *new])
         store.save_doc(course_id, "cards", deck)
-        return deck | {"added": len(new)}
+        return deck | {"added": len(new), "title": title or "Flashcards", "count": len(new)}
 
-    return _stream(course, sources, course_text, job)
+    return course, sources, course_text, job
 
 
 @app.get("/api/courses/{course_id}/cards")

@@ -172,3 +172,13 @@ def test_formatting_marks_are_removed():
     q = normalize_question({"type": "qcm", "question": "Quel est le rôle du **GABA** ?", "choices": ["**Inhibiteur**", "Excitateur"],
                             "answer": "Inhibiteur", "explanation": "", "source": "***GABA*** Inhibiteur"}, ALL)
     assert q["question"] == "Quel est le rôle du GABA ?" and q["answer"] == "Inhibiteur" and q["source"] == "GABA Inhibiteur"
+
+
+def test_explanations_start_directly():
+    from app.quiz import strip_course_intro
+
+    assert strip_course_intro("Le cours précise que les oligodendrocytes produisent la myéline.") == \
+        "Les oligodendrocytes produisent la myéline."
+    assert strip_course_intro("Selon le cours, le GABA est inhibiteur.") == "Le GABA est inhibiteur."
+    assert strip_course_intro("Le cours stipule qu'il ralentit l'activité.") == "Il ralentit l'activité."
+    assert strip_course_intro("Le cortex est la couche externe.") == "Le cortex est la couche externe."

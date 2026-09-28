@@ -482,6 +482,22 @@
       </div>
       </div>
 
+      <div class="card prepare" id="prepare-panel" hidden>
+        <h2>Tout préparer pour ce cours ?</h2>
+        <p class="muted" id="prepare-text"></p>
+        <label class="option-row"><input type="checkbox" id="prepare-quizzes" checked>
+          <span>Un quiz par chapitre, de <input type="number" id="prepare-nq" min="3" max="30" value="10"> questions</span></label>
+        <label class="option-row"><input type="checkbox" id="prepare-cards" checked>
+          <span>Des flashcards par chapitre : <input type="number" id="prepare-nc" min="3" max="40" value="10"> cartes</span></label>
+        <p class="heat-note">Tout se crée en arrière-plan, chapitre après chapitre : tu peux commencer à réviser dès que le premier
+          est prêt. Ton Mac peut chauffer un peu pendant ce temps : évite d'ouvrir d'autres apps gourmandes.</p>
+        <p class="error" id="prepare-error" hidden></p>
+        <div class="actions">
+          <button class="primary" type="button" id="prepare-go">Tout préparer</button>
+          <button class="ghost" type="button" id="prepare-later">Plus tard</button>
+        </div>
+      </div>
+
       <div class="outdated-note" id="outdated-note" hidden>
         <span id="outdated-text"></span>
         <button class="ghost small" type="button" id="outdated-open">Vérifier</button>
@@ -642,6 +658,8 @@
       </div>
 
       <p id="create-error" class="error" hidden></p>
+      <p class="heat-note">Pendant la création, ton Mac peut chauffer un peu et ventiler pendant plusieurs minutes : c'est normal.
+        Évite d'ouvrir d'autres apps gourmandes en attendant (navigateur avec beaucoup d'onglets, jeux, montage vidéo…).</p>
       <button id="create-btn" class="primary">Générer le quiz</button>
     </section>
 
@@ -737,12 +755,16 @@
         <div id="feedback" class="feedback" hidden></div>
       </div>
       <div class="actions">
+        <button id="prev-btn" class="ghost" hidden>Question précédente</button>
         <button id="validate-btn" class="primary">Valider</button>
         <button id="next-btn" class="primary" hidden>Question suivante</button>
-      </div>
-      <div class="question-tools" id="question-tools" hidden>
-        <button class="link-button" id="report-btn">Cette question ou sa réponse est incorrecte ? Signaler</button>
-        <button class="link-button danger" id="delete-q-btn">Supprimer cette question (hors sujet)</button>
+        <div class="qtools" id="question-tools" hidden>
+          <button class="icon qtools-btn" type="button" aria-label="Un problème avec cette question ?" title="Un problème avec cette question ?"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 5.5A1.5 1.5 0 0 1 5.5 4h13A1.5 1.5 0 0 1 20 5.5v9a1.5 1.5 0 0 1-1.5 1.5H10l-4.5 4v-4h0A1.5 1.5 0 0 1 4 14.5z"/><path d="M12 7.5v3.5M12 13.6h.01"/></svg></button>
+          <div class="plus-menu qtools-menu" hidden>
+            <button type="button" id="report-btn"><strong>Signaler une erreur</strong><small>La question ou sa réponse est incorrecte</small></button>
+            <button type="button" id="delete-q-btn" class="danger"><strong>Supprimer cette question</strong><small>Hors sujet : elle ne sera plus posée</small></button>
+          </div>
+        </div>
       </div>
     </section>
 
@@ -915,6 +937,7 @@
       <span class="jobs-dot" id="jobs-dot"></span><strong id="jobs-title"></strong><span class="jobs-toggle" aria-hidden="true"></span>
     </button>
     <ul class="jobs-list" id="jobs-list"></ul>
+    <p class="jobs-heat" id="jobs-heat" hidden>Ton Mac peut chauffer un peu : évite les autres apps gourmandes pendant la création.</p>
   </aside>
 
   <!-- Nouvelle version disponible -->
