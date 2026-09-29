@@ -224,6 +224,11 @@ une notion. **Pirouette n'a pas besoin d'être ouverte** : l'app Claude la lance
 fenêtre. Techniquement : Pirouette s'inscrit dans `~/Library/Application Support/Claude/claude_desktop_config.json`
 (clé `mcpServers`, sans toucher aux autres outils) et l'app Claude lance `Pirouette --mcp`.
 
+**Rien de nouveau ?** Si un chapitre est déjà bien couvert (toutes les questions proposées ressemblent à celles de
+tes quiz), la création se met en pause (« Déjà bien couvert ») au lieu d'échouer, et les suivantes continuent. Un
+bouton « Plus faciles » crée alors des questions plus faciles et les ajoute au quiz du chapitre (« Réessayer » pour
+des flashcards), ou ✕ pour laisser tomber.
+
 **Annuler une création** : dans le suivi (en bas à gauche), « Annuler » sur chaque création en attente ou en cours,
 et « Tout annuler ». Rien de ce qui n'est pas terminé n'est gardé. L'écran de création en direct a aussi son bouton
 « Annuler ». Si le crédit ou la limite de l'API Claude est atteint, la création s'arrête avec un message clair et les

@@ -33,7 +33,7 @@ from .definitions import RULE_IDS, analyse, definitions_for  # noqa: E402
 from .explain import EXPLAIN_SCHEMA, EXPLAIN_SYSTEM, build_explain_prompt, course_excerpt  # noqa: E402
 from .extract import EXTRACT_VERSION, ConversionError, UnsupportedFileError, extract_text  # noqa: E402
 from .providers import claude_provider, ollama_provider  # noqa: E402
-from .providers.base import ProviderError  # noqa: E402
+from .providers.base import NothingNew, ProviderError  # noqa: E402
 from .focus import (MANUAL_SCHEMA, MANUAL_SYSTEM, best_chunk, build_manual_prompt, focus_text,  # noqa: E402
                     parse_manual_lines)
 from .partiel import BATCH, GRADE_SCHEMA, GRADE_SYSTEM, build_grade_prompt, read_grades  # noqa: E402
@@ -678,11 +678,27 @@ async def generate_quiz_background(
     plan = units if len(units) > 1 else [(chapters, "")]
     created = []
     for key, label in plan:
-        _, _, _, job = _quiz_job(course_id, provider, model, num_questions, difficulty, types, language, key,
-                                 course_share, focus, "" if label else manual, title=label)
-        created.append(jobs.submit({"kind": "quiz", "course_id": course_id, "course_name": course["name"],
-                                    "provider": provider, "label": label or focus or "Nouveau quiz"}, job))
+        created.append(_submit_quiz(course, provider, model, num_questions, difficulty, types, language, key,
+                                    course_share, focus, "" if label else manual, label))
     return {"jobs": created}
+
+
+def _submit_quiz(course: dict, provider: str, model: str, num_questions: int, difficulty: str, types: str,
+                 language: str, chapters: str, course_share: str, focus: str, manual: str, label: str) -> dict:
+    """Met un quiz en file. En pause (« rien de nouveau »), il peut être relancé en plus facile."""
+    def make(variant: str = ""):
+        level = "facile" if variant == "facile" else difficulty
+        return _quiz_job(course["id"], provider, model, num_questions, level, types, language, chapters,
+                         course_share, focus, manual, title=label)[3]
+    return jobs.submit({"kind": "quiz", "course_id": course["id"], "course_name": course["name"], "provider": provider,
+                        "label": label or focus or "Nouveau quiz"}, make(), retry=make)
+
+
+def _submit_cards(course: dict, provider: str, model: str, language: str, count: int, chapters: str, label: str) -> dict:
+    def make(variant: str = ""):
+        return _cards_job(course["id"], provider, model, language, count, chapters, title=label)[3]
+    return jobs.submit({"kind": "cards", "course_id": course["id"], "course_name": course["name"], "provider": provider,
+                        "label": label}, make(), retry=make)
 
 
 def _units(course: dict, chapters: str) -> list[tuple[str, str]]:
@@ -721,14 +737,10 @@ async def prepare_course(
     created = []
     for key, label in _units(course, chapters):
         if quizzes:
-            _, _, _, job = _quiz_job(course_id, provider, model, num_questions, "moyen", types, language, key,
-                                     "equilibre", "", "", title=label)
-            created.append(jobs.submit({"kind": "quiz", "course_id": course_id, "course_name": course["name"],
-                                        "provider": provider, "label": label}, job))
+            created.append(_submit_quiz(course, provider, model, num_questions, "moyen", types, language, key,
+                                        "equilibre", "", "", label))
         if cards:
-            _, _, _, job = _cards_job(course_id, provider, model, language, cards_count, key, title=label)
-            created.append(jobs.submit({"kind": "cards", "course_id": course_id, "course_name": course["name"],
-                                        "provider": provider, "label": label}, job))
+            created.append(_submit_cards(course, provider, model, language, cards_count, key, label))
     return {"jobs": created}
 
 
@@ -747,6 +759,19 @@ async def dismiss_job(job_id: str) -> dict:
 async def cancel_job(job_id: str) -> dict:
     jobs.cancel(job_id)
     return {"cancelled": job_id}
+
+
+class RetryIn(BaseModel):
+    variant: str = ""   # "facile" : des questions plus faciles
+
+
+@app.post("/api/jobs/{job_id}/retry")
+async def retry_job(job_id: str, body: RetryIn) -> dict:
+    """Une création en pause (« rien de nouveau ») : on la relance (en plus facile pour un quiz), en fin de file."""
+    job = jobs.retry(job_id, body.variant)
+    if job is None:
+        raise HTTPException(404, "Cette création ne peut pas être relancée.")
+    return job
 
 
 @app.post("/api/jobs/cancel")
@@ -816,8 +841,7 @@ def _quiz_job(course_id: str, provider: str, model: str, num_questions: int, dif
         quiz.pop("rejected")
         quiz.pop("missing_course")
         if not quiz["questions"] and not own:
-            raise ProviderError("Aucune nouvelle question valable : celles proposées étaient déjà dans tes quiz, "
-                                "hors du cours ou trop faciles. Réessaie, choisis d'autres chapitres ou un autre modèle.")
+            raise NothingNew("Déjà bien couvert : rien de nouveau.")
         quiz["questions"] = own + quiz["questions"]
         if title:
             quiz["title"] = title  # un quiz par chapitre : le titre du chapitre
@@ -841,8 +865,7 @@ def _save_quiz_result(quiz: dict, course: dict, provider: str, model: str, optio
     if existing:
         merged, added = store.add_to_quiz(existing["id"], quiz["questions"])
         if not added:
-            raise ProviderError("Toutes les questions proposées ressemblaient à celles déjà dans le quiz de ce chapitre. "
-                                "Réessaie, ou choisis un autre niveau de difficulté.")
+            raise NothingNew("Déjà bien couvert : rien de nouveau.")
         return merged | {"added": added, "new_questions": list(range(len(merged["questions"]) - added, len(merged["questions"])))}
     return store.save_quiz(quiz)
 
@@ -932,8 +955,7 @@ def _cards_job(course_id: str, provider: str, model: str, language: str, count: 
             outside = len(rejected) - before
             new += added
         if not new:
-            raise ProviderError("Le modèle n'a produit aucune nouvelle carte tirée de ton cours. "
-                                "Choisis d'autres chapitres, ou change de modèle.")
+            raise NothingNew("Ces cartes existent déjà.")
         meta = _meta(course, provider, model, language, sources, chapters)
         for card in new:
             card.update(scope=meta["scope"], created_at=datetime.now().isoformat(timespec="seconds"))

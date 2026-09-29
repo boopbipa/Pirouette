@@ -1050,3 +1050,8 @@ main { padding-bottom: 120px; }
 #loading-cancel { margin-top: 18px; }
 .job.cancelled .job-state { background: var(--border); }
 .job.cancelled small { white-space: normal; }
+.job.paused .job-state { background: var(--warn); }
+.job.paused small { color: var(--text); }
+/* Messages longs : deux lignes, le reste au survol */
+.job small { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; white-space: normal; }
+.jobs-dot.wait { background: var(--warn); }

@@ -4061,25 +4061,29 @@ function renderJobs() {
   if (!list.length) return;
   const busy = list.filter((j) => j.status === "queued" || j.status === "running").length;
   const done = list.filter((j) => j.status === "done").length;
+  const paused = list.filter((j) => j.status === "paused").length;
+  const waiting = paused ? ` · ${paused} à décider` : "";
   $("#jobs-title").textContent = busy
-    ? `Création en cours · ${busy} restant${busy > 1 ? "s" : ""}${done ? ` · ${done} prêt${done > 1 ? "s" : ""}` : ""}`
-    : `${done} prêt${done > 1 ? "s" : ""}${list.some((j) => j.status === "error") ? " · erreur" : ""}${
+    ? `Création en cours · ${busy} restant${busy > 1 ? "s" : ""}${done ? ` · ${done} prêt${done > 1 ? "s" : ""}` : ""}${waiting}`
+    : `${done || !paused ? `${done} prêt${done > 1 ? "s" : ""}` : ""}${done ? waiting : waiting.slice(3)}${list.some((j) => j.status === "error") ? " · erreur" : ""}${
       list.some((j) => j.status === "cancelled") ? " · annulé" : ""}`;
   $("#jobs-heat").hidden = !busy || !jobsState.open;
   $("#jobs-foot").hidden = busy < 2 || !jobsState.open;
-  $("#jobs-dot").className = `jobs-dot ${busy ? "busy" : "ready"}`;
+  $("#jobs-dot").className = `jobs-dot ${busy ? "busy" : paused ? "wait" : "ready"}`;
   $("#jobs").classList.toggle("open", jobsState.open);
   $("#jobs-list").innerHTML = list.map((j) => `
     <li class="job ${j.status}">
       <span class="job-state" aria-hidden="true"></span>
       <span class="job-main">
         <strong>${j.kind === "cards" ? "Flashcards · " : "Quiz · "}${escapeHtml(j.status === "done" ? j.result.title : j.label)}</strong>
-        <small class="muted">${escapeHtml(j.course_name)} · ${escapeHtml(j.status === "queued" ? "en attente" : j.message)}</small>
+        <small class="muted" title="${escapeHtml(j.message)}">${j.status === "paused" ? "" : `${escapeHtml(j.course_name)} · `}${escapeHtml(j.status === "queued" ? "en attente" : j.message)}</small>
       </span>
       ${j.status === "done" && j.kind !== "cards" ? `<button class="primary small" type="button" data-job-start="${j.result.quiz_id}" data-job="${j.id}">Commencer</button>` : ""}
       ${j.status === "done" && j.kind === "cards" ? `<button class="ghost small" type="button" data-job-cards="${j.course_id}" data-job="${j.id}">Voir</button>` : ""}
       ${j.status === "queued" || j.status === "running" ? `<button class="ghost small" type="button" data-job-cancel="${j.id}">Annuler</button>` : ""}
-      ${["done", "error", "cancelled"].includes(j.status) ? `<button class="icon" type="button" data-job-dismiss="${j.id}" aria-label="Retirer de la liste" title="Retirer">✕</button>` : ""}
+      ${j.status === "paused" ? `<button class="primary small" type="button" data-job-retry="${j.id}" data-variant="${j.kind === "cards" ? "" : "facile"}"
+        title="${j.kind === "cards" ? "Relancer la création" : "Créer des questions plus faciles et les ajouter au quiz du chapitre"}">${j.kind === "cards" ? "Réessayer" : "Plus faciles"}</button>` : ""}
+      ${["done", "error", "cancelled", "paused"].includes(j.status) ? `<button class="icon" type="button" data-job-dismiss="${j.id}" aria-label="Retirer de la liste" title="Retirer">✕</button>` : ""}
     </li>`).join("");
 }
 
@@ -4090,6 +4094,12 @@ $("#jobs-list").addEventListener("click", async (e) => {
     await api(`/api/jobs/${cards.dataset.job}`, { method: "DELETE" }).catch(() => {});
     state.deck = null;
     go(`#/cours/${cards.dataset.jobCards}/cartes`);
+    return refreshJobs();
+  }
+  const retry = e.target.closest("[data-job-retry]");
+  if (retry) {
+    retry.disabled = true;
+    await api(`/api/jobs/${retry.dataset.jobRetry}/retry`, jsonBody("POST", { variant: retry.dataset.variant })).catch((err) => alert(err.message));
     return refreshJobs();
   }
   const cancel = e.target.closest("[data-job-cancel]")?.dataset.jobCancel;

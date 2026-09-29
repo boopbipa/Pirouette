@@ -139,3 +139,40 @@ def test_cancel_one_or_all_and_quota_stops_the_same_engine():
         assert d["id"] not in jobs.jobs
 
     asyncio.run(scenario())
+
+
+def test_nothing_new_pauses_and_can_retry_easier_while_the_queue_goes_on():
+    import asyncio
+
+    from app.jobs import Jobs
+    from app.providers.base import NothingNew
+
+    async def scenario():
+        jobs = Jobs()
+        asked = []
+
+        def make(variant=""):
+            asked.append(variant)
+
+            async def factory(on_progress):
+                if variant != "facile":
+                    raise NothingNew("Déjà bien couvert : rien de nouveau.")
+                return {"id": "q", "title": "Chapitre 3", "questions": [{}, {}], "added": 2}
+            return factory
+
+        async def next_one(on_progress):
+            return {"id": "q2", "title": "Chapitre 4", "questions": [{}]}
+
+        paused = jobs.submit({"kind": "quiz", "label": "Chapitre 3", "provider": "local"}, make(), retry=make)
+        following = jobs.submit({"kind": "quiz", "label": "Chapitre 4", "provider": "local"}, next_one)
+        await asyncio.sleep(0.05)
+        assert paused["status"] == "paused" and paused["message"].startswith("Déjà")
+        assert following["status"] == "done"  # la file a continué
+        again = jobs.retry(paused["id"], "facile")
+        assert again["label"] == "Chapitre 3 (plus facile)" and paused["id"] not in jobs.jobs
+        await asyncio.sleep(0.05)
+        assert again["status"] == "done" and again["message"] == "2 questions ajoutées au quiz du chapitre"
+        assert asked == ["", "facile"]
+        assert jobs.retry(following["id"]) is None  # une création réussie ne se relance pas
+
+    asyncio.run(scenario())

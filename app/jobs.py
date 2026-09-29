@@ -10,7 +10,7 @@ import asyncio
 import uuid
 from datetime import datetime
 
-from .providers.base import ProviderError, QuotaError
+from .providers.base import NothingNew, ProviderError, QuotaError
 
 KEEP = 30  # travaux gardés dans la liste (les plus récents)
 
@@ -21,12 +21,17 @@ class Jobs:
         self.queue: asyncio.Queue | None = None
         self.worker: asyncio.Task | None = None
         self.current: tuple[dict, asyncio.Task] | None = None  # (travail, tâche) en cours
+        self.retries: dict[str, object] = {}
 
-    def submit(self, info: dict, factory) -> dict:
-        """Ajoute un travail : `factory(on_progress)` renvoie le quiz créé (ou les cartes ajoutées)."""
+    def submit(self, info: dict, factory, retry=None) -> dict:
+        """Ajoute un travail : `factory(on_progress)` renvoie le quiz créé (ou les cartes ajoutées). `retry(variant)`
+        refabrique le travail, pour le relancer s'il se met en pause (« rien de nouveau »)."""
         job = {"id": uuid.uuid4().hex[:10], "status": "queued", "message": "En attente…",
                "created_at": datetime.now().isoformat(timespec="seconds")} | info
+        job.pop("retried", None)
         self.jobs[job["id"]] = job
+        if retry:
+            self.retries[job["id"]] = retry
         if self.queue is None or self.worker is None or self.worker.done():
             self.queue = asyncio.Queue()
             self.worker = asyncio.get_running_loop().create_task(self._work())
@@ -64,6 +69,9 @@ class Jobs:
                 for other in self.jobs.values():
                     if other["status"] == "queued" and other.get("provider") == job.get("provider"):
                         other.update(status="cancelled", message=f"Annulée : {exc}")
+            except NothingNew as exc:
+                # En pause : l'étudiant choisit (plus facile, réessayer, laisser) ; les créations suivantes continuent.
+                job.update(status="paused", message=str(exc))
             except ProviderError as exc:
                 job.update(status="error", message=str(exc))
             except Exception as exc:  # une erreur ne doit pas arrêter les travaux suivants
@@ -80,6 +88,18 @@ class Jobs:
         if self.current and self.current[0] is job:
             self.current[1].cancel()
 
+    def retry(self, job_id: str, variant: str = "") -> dict | None:
+        """Relance une création en pause (ou en erreur) : elle repart en fin de file, l'ancienne ligne disparaît."""
+        job, make = self.jobs.get(job_id), self.retries.get(job_id)
+        if not job or not make or job["status"] not in {"paused", "error"}:
+            return None
+        info = {k: v for k, v in job.items() if k not in {"id", "status", "message", "created_at", "result"}}
+        if variant == "facile" and job.get("kind") == "quiz":
+            info["label"] = f"{job['label']} (plus facile)" if "(plus facile)" not in job["label"] else job["label"]
+        del self.jobs[job_id]
+        self.retries.pop(job_id, None)
+        return self.submit(info, make(variant), retry=make)
+
     def cancel_all(self) -> int:
         active = [j["id"] for j in self.jobs.values() if j["status"] in {"queued", "running"}]
         for job_id in active:
@@ -91,10 +111,12 @@ class Jobs:
 
     def dismiss(self, job_id: str) -> None:
         job = self.jobs.get(job_id)
-        if job and job["status"] in {"done", "error", "cancelled"}:
+        if job and job["status"] in {"done", "error", "cancelled", "paused"}:
             del self.jobs[job_id]
+            self.retries.pop(job_id, None)
 
     def _trim(self) -> None:
         finished = [j for j in self.list() if j["status"] in {"done", "error", "cancelled"}]
         for job in finished[: max(0, len(self.jobs) - KEEP)]:
             del self.jobs[job["id"]]
+            self.retries.pop(job["id"], None)
