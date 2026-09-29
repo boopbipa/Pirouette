@@ -758,10 +758,26 @@
           <label class="engine">
             <input type="radio" name="provider" value="claude">
             <span>
-              <strong>Claude (API)</strong>
-              <small id="claude-status" class="muted">Meilleure qualité, nécessite une clé API</small>
+              <strong>Claude (clé API)</strong>
+              <small id="claude-status" class="muted">Meilleure qualité, payant à l'usage</small>
             </span>
           </label>
+          <label class="engine">
+            <input type="radio" name="provider" value="app">
+            <span>
+              <strong>L'app Claude</strong>
+              <small id="app-status" class="muted">Avec ton abonnement Claude</small>
+            </span>
+          </label>
+        </div>
+        <div class="app-request" id="app-request" hidden>
+          <p class="small-text">Copie cette demande et colle-la dans l'app Claude : il lit ton cours dans Pirouette et y
+            enregistre le résultat. Pas besoin de garder Pirouette ouverte.</p>
+          <p class="app-request-text" id="app-request-text"></p>
+          <div class="actions">
+            <button class="primary small" type="button" id="app-request-copy">Copier la demande</button>
+          </div>
+          <p class="status" id="app-request-status" hidden></p>
         </div>
         <div class="grid">
           <div class="field" id="local-model-field">

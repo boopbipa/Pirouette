@@ -55,3 +55,12 @@ def test_update_check(client, monkeypatch):
     fake_github(monkeypatch, 404)
     assert client.get("/api/update").json()["error"] == "private"
     assert client.post("/api/update/install", json={"url": "https://exemple.com/x.dmg"}).status_code == 400
+
+
+def test_quit_stops_the_desktop_app(client, monkeypatch):
+    started = []
+    monkeypatch.setattr(main.threading, "Timer", lambda delay, fn: type("T", (), {"start": lambda self: started.append(delay)})())
+    monkeypatch.delenv("PIROUETTE_DESKTOP", raising=False)
+    assert client.post("/api/quit").status_code == 400 and not started  # pas dans un navigateur
+    monkeypatch.setenv("PIROUETTE_DESKTOP", "1")
+    assert client.post("/api/quit").json() == {"quitting": True} and started == [0.4]

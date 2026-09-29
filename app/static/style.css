@@ -1037,3 +1037,9 @@ main { padding-bottom: 120px; }
 
 /* Réglages : l'app Claude, en trois étapes */
 .claude-steps { margin: 10px 0; padding-left: 20px; display: grid; gap: 6px; }
+
+/* Créer : passer par l'app Claude */
+.engines { grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); }
+.app-request { margin-top: 14px; padding: 14px 16px; border-radius: 12px; background: var(--accent-soft); }
+.app-request p { margin: 0 0 8px; }
+.app-request-text { padding: 10px 12px; border-radius: 10px; background: var(--surface); font-size: 15px; user-select: text; }

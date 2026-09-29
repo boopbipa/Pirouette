@@ -1608,7 +1608,6 @@ async function loadConfig({ keepSelection = false } = {}) {
   } else {
     localStatus.innerHTML = `Ollama n'est pas ouvert ou pas installé : <a href="#/reglages">configurer l'IA locale</a>`;
   }
-  // Claude est mis de côté pour l'instant : seule l'IA locale est proposée.
   const claudeOn = config.claude.enabled;
   $("#engines").hidden = !claudeOn;
   $("#engine-title").textContent = claudeOn ? "Moteur IA" : "IA locale";
@@ -1635,15 +1634,69 @@ async function loadConfig({ keepSelection = false } = {}) {
   if (!config.local.available) state.configTimer = setTimeout(() => loadConfig({ keepSelection: true }), 5000);
   if (keepSelection) return;
 
-  const provider = claudeOn && config.default_provider === "claude" ? "claude" : "local";
+  // Dernier moteur choisi (ou celui par défaut).
+  let saved = null;
+  try { saved = localStorage.getItem("pirouette.provider"); } catch {}
+  const provider = ["local", "claude", "app"].includes(saved) && (saved !== "claude" || claudeOn) ? saved
+    : claudeOn && config.default_provider === "claude" ? "claude" : "local";
   document.querySelector(`input[name=provider][value=${provider}]`).checked = true;
+  api("/api/claude-app").then((info) => {
+    $("#app-status").innerHTML = info.installed ? "Avec ton abonnement Claude · branchée"
+      : `À brancher d'abord dans <a href="#/reglages">Réglages</a>`;
+    $("#app-status").classList.toggle("warn", !info.installed);
+  }).catch(() => {});
   updateProviderUi();
 }
 
 document.querySelectorAll("input[name=provider]").forEach((r) => r.addEventListener("change", updateProviderUi));
 function updateProviderUi() {
-  $("#local-model-field").hidden = selectedProvider() !== "local";
+  const provider = selectedProvider();
+  try { localStorage.setItem("pirouette.provider", provider); } catch {}
+  $("#local-model-field").hidden = provider !== "local";
+  // L'app Claude : Pirouette ne peut pas la piloter ; on prépare la demande à y coller.
+  const viaApp = provider === "app";
+  $("#app-request").hidden = !viaApp;
+  $("#create-btn").hidden = viaApp;
+  document.querySelector(".heat-note").hidden = provider !== "local";
+  if (viaApp) renderAppRequest();
 }
+
+function appRequest() {
+  const course = state.course;
+  const units = chapterUnits(course);
+  const chosen = units.filter((u) => isChecked(u.key));
+  const where = !chosen.length || chosen.length === units.length ? `tout le cours « ${course.name} »`
+    : `${chosen.length > 1 ? "les chapitres" : "le chapitre"} ${chosen.map((u) => `« ${u.title} »`).join(", ")} du cours « ${course.name} »`;
+  const focus = $("#focus").value.trim();
+  const theme = focus ? `, uniquement sur le thème « ${focus} »` : "";
+  if (state.createKind !== "quiz") {
+    return `Dans Pirouette, ajoute ${$("#cards-count").value || 20} flashcards sur ${where}${theme}.`;
+  }
+  const names = { qcm: "QCM", vrai_faux: "vrai/faux", reponse_courte: "réponse courte", texte_a_trous: "texte à trous" };
+  const types = [...document.querySelectorAll("input[name=types]:checked")].map((b) => names[b.value]);
+  return `Dans Pirouette, fais-moi un quiz de ${$("#num-questions").value || 10} questions sur ${where}${theme}`
+    + (types.length ? ` (${types.join(", ")})` : "") + ".";
+}
+function renderAppRequest() {
+  if (!$("#app-request").hidden) $("#app-request-text").textContent = appRequest();
+}
+// La demande suit les réglages de la page (nombre, types, chapitres, thème).
+["#num-questions", "#cards-count", "#focus"].forEach((id) => $(id).addEventListener("input", renderAppRequest));
+$("#view-create").addEventListener("change", renderAppRequest);
+$("#view-create").addEventListener("click", () => setTimeout(renderAppRequest, 0));
+$("#app-request-copy").addEventListener("click", async () => {
+  const text = appRequest();
+  try {
+    await navigator.clipboard.writeText(text);
+  } catch {
+    const area = Object.assign(document.createElement("textarea"), { value: text });
+    document.body.append(area);
+    area.select();
+    document.execCommand("copy");
+    area.remove();
+  }
+  setStatus("#app-request-status", "Copié. Colle-la dans l'app Claude (⌘V).", true);
+});
 const selectedProvider = () => document.querySelector("input[name=provider]:checked")?.value || "local";
 
 // ---------- Créer un quiz ou des flashcards ----------
@@ -3787,6 +3840,7 @@ async function checkUpdate({ quiet = false } = {}) {
     return;
   }
   state.update = info;
+  state.desktop = Boolean(info.desktop);
   if (info.ready) {
     if (!quiet) setStatus("#update-status", "La mise à jour est prête : quitte Pirouette puis rouvre-la.", true);
     return showUpdateReady({ popup: !quiet });
@@ -3818,12 +3872,20 @@ $("#update-later").addEventListener("click", () => {
   $("#update-toast").hidden = true;
 });
 
+// Quitter Pirouette (pour que la mise à jour s'installe). Le serveur de l'app arrête le programme lui-même :
+// fermer la fenêtre depuis l'interface pouvait laisser l'app bloquée (il fallait forcer à quitter).
+function quitApp() {
+  $("#update-text").textContent = "Pirouette se ferme…";
+  fetch("/api/quit", { method: "POST" }).catch(() => {});
+  setTimeout(() => window.pywebview?.api?.quit?.(), 300);
+}
+
 // La nouvelle version est téléchargée : on ne relance pas l'app nous-mêmes (source de bugs). Une fenêtre invite
 // à quitter puis rouvrir ; « Plus tard » laisse un rappel discret en bas de l'écran.
 function showUpdateReady({ popup = true } = {}) {
   $("#update-text").innerHTML = "<b>La mise à jour est prête.</b> Quitte Pirouette (⌘Q) puis rouvre-la.";
   $("#update-progress").hidden = true;
-  $("#update-go").hidden = !window.pywebview?.api?.quit;
+  $("#update-go").hidden = !state.desktop;
   $("#update-go").disabled = false;
   $("#update-go").textContent = "Quitter Pirouette";
   $("#update-later").hidden = false;
@@ -3831,10 +3893,10 @@ function showUpdateReady({ popup = true } = {}) {
   $("#update-toast").hidden = popup;
   if (!popup) return;
   $("#update-dialog-text b").textContent = state.update?.latest || "";
-  $("#update-dialog-quit").hidden = !window.pywebview?.api?.quit;
+  $("#update-dialog-quit").hidden = !state.desktop;
   if (!$("#update-dialog").open) $("#update-dialog").showModal();
 }
-$("#update-dialog-quit").addEventListener("click", () => window.pywebview?.api?.quit());
+$("#update-dialog-quit").addEventListener("click", quitApp);
 $("#update-dialog-later").addEventListener("click", () => {
   $("#update-dialog").close();
   $("#update-toast").hidden = false;
@@ -3843,7 +3905,7 @@ $("#update-dialog-later").addEventListener("click", () => {
 $("#update-go").addEventListener("click", async () => {
   const info = state.update;
   if (info.ready) {
-    window.pywebview?.api?.quit();
+    quitApp();
     return;
   }
   if (!info.can_install) {
@@ -3903,6 +3965,7 @@ window.pirouetteMenu = async (action) => {
     return updateNotice(escapeHtml(err.message));
   }
   state.update = info;
+  state.desktop = Boolean(info.desktop);
   if (info.ready) return showUpdateReady();
   if (info.error) return updateNotice(escapeHtml(UPDATE_ERRORS[info.error] || info.error));
   if (!info.available) return updateNotice(`Tu as la dernière version : <b>Pirouette ${escapeHtml(info.current)}</b>.`);

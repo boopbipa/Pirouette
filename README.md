@@ -209,6 +209,11 @@ premier jour de la semaine d'examens. L'accueil et Réviser affichent « Partiel
 tombent toujours avant la semaine, se resserrent les deux dernières semaines, puis reviennent chaque jour pendant la
 semaine ; les nouvelles cartes sont étalées pour être toutes vues à temps.
 
+**Choisir le moteur** : en créant un quiz ou des flashcards, trois choix — **Local (Ollama)** (gratuit, hors ligne),
+**Claude (clé API)** (payant à l'usage, clé dans Réglages) ou **L'app Claude** (ton abonnement) : Pirouette prépare
+alors la demande (nombre de questions, types, chapitres, thème) à copier-coller dans l'app Claude. Le dernier choix est
+retenu.
+
 **L'app Claude** (Mac) : Réglages → L'app Claude → « Brancher l'app Claude », puis quitter et rouvrir l'app Claude.
 Pirouette apparaît dans ses outils (protocole MCP) : on demande par exemple « Fais-moi un quiz de 10 questions sur le
 chapitre 2 de Neuro dans Pirouette » ou « Ajoute 15 flashcards sur la myéline ». Claude liste les cours, lit les

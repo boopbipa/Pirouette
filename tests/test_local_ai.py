@@ -126,14 +126,15 @@ def test_thinking_is_off_by_default_and_only_sent_to_thinking_models(client, mon
     client.put("/api/settings", json={"local_thinking": False})
 
 
-def test_claude_is_hidden_for_now(client):
+def test_claude_is_offered_next_to_the_local_ai(client, monkeypatch):
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
     config = client.get("/api/config").json()
-    assert config["claude"]["enabled"] is False and config["default_provider"] == "local"
-    assert client.get("/api/settings").json()["claude_enabled"] is False
+    assert config["claude"]["enabled"] is True and config["default_provider"] == "local"
+    assert config["claude"]["available"] is False  # pas de clé : proposé, mais à configurer
+    assert client.get("/api/settings").json()["claude_enabled"] is True
     cid = client.post("/api/courses", json={"name": "Bio"}).json()["id"]
     client.post(f"/api/courses/{cid}/files", files=[("files", ("a.txt", b"du texte", "text/plain"))])
-    response = client.post(f"/api/courses/{cid}/quizzes", data={"provider": "claude"})
-    assert response.status_code == 400
+    assert client.post(f"/api/courses/{cid}/quizzes", data={"provider": "inconnu"}).status_code == 400
 
 
 def test_context_is_automatic_for_18_gb_and_can_be_chosen(client, monkeypatch):

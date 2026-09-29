@@ -9,6 +9,7 @@ import random
 import re
 import subprocess
 import sys
+import threading
 from dataclasses import replace
 from datetime import date, datetime, timedelta
 from pathlib import Path
@@ -41,7 +42,7 @@ from .storage import NotFound, Store  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent
 # Claude est mis de côté pour l'instant : seule l'IA locale est proposée. PIROUETTE_CLAUDE=1 le réactive.
-CLAUDE_ENABLED = os.getenv("PIROUETTE_CLAUDE") == "1"
+CLAUDE_ENABLED = os.getenv("PIROUETTE_CLAUDE", "1") != "0"  # Claude (clé API) proposé à côté de l'IA locale
 PROVIDERS = {"local": ollama_provider} | ({"claude": claude_provider} if CLAUDE_ENABLED else {})
 MAX_TOP_UPS = 3  # demandes supplémentaires au plus quand il manque des questions ou des cartes
 
@@ -1441,9 +1442,19 @@ async def grade_answers(body: GradeIn) -> dict:
 
 # ---------- Mises à jour de l'app ----------
 
+@app.post("/api/quit")
+async def quit_app() -> dict:
+    """Arrête l'app Mac (après une mise à jour). Réponse d'abord, puis arrêt net un instant plus tard : les données
+    sont déjà sur le disque, et rien ne peut plus bloquer la fermeture."""
+    if os.getenv("PIROUETTE_DESKTOP") != "1":
+        raise HTTPException(400, "Seulement dans l'app Mac.")
+    threading.Timer(0.4, lambda: os._exit(0)).start()
+    return {"quitting": True}
+
+
 @app.get("/api/update")
 async def update_check() -> dict:
-    return await updater.check()
+    return await updater.check() | {"desktop": os.getenv("PIROUETTE_DESKTOP") == "1"}
 
 
 class InstallIn(BaseModel):
