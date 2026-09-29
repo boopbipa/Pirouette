@@ -91,3 +91,51 @@ def test_prepare_everything_when_a_course_is_added(tmp_path, monkeypatch):
         assert listed[1]["message"] == "3 cartes ajoutées"
         course = client.get(f"/api/courses/{cid}").json()
         assert len(course["quizzes"]) == 3 and course["cards"]["total"] == 9
+
+
+def test_cancel_one_or_all_and_quota_stops_the_same_engine():
+    import asyncio
+
+    from app.jobs import Jobs
+    from app.providers.base import QuotaError
+
+    async def scenario():
+        jobs = Jobs()
+        started = asyncio.Event()
+
+        async def slow(on_progress):
+            started.set()
+            await asyncio.sleep(30)
+            return {"id": "q", "title": "t", "questions": []}
+
+        async def quota(on_progress):
+            raise QuotaError("Ton crédit Claude API est épuisé.")
+
+        async def quick(on_progress):
+            return {"id": "q2", "title": "t2", "questions": [{}]}
+
+        running = jobs.submit({"kind": "quiz", "provider": "local"}, slow)
+        waiting = jobs.submit({"kind": "quiz", "provider": "local"}, quick)
+        await started.wait()
+        jobs.cancel(running["id"])      # arrêt de celle en cours
+        await asyncio.sleep(0.05)
+        assert running["status"] == "cancelled" and waiting["status"] == "done"
+
+        a = jobs.submit({"kind": "quiz", "provider": "claude"}, quota)
+        b = jobs.submit({"kind": "quiz", "provider": "claude"}, quick)
+        c = jobs.submit({"kind": "cards", "provider": "local"}, lambda p: quick(p) if False else asyncio.sleep(0, {"title": "x", "count": 3}))
+        await asyncio.sleep(0.05)
+        assert a["status"] == "error" and "crédit" in a["message"]
+        assert b["status"] == "cancelled" and b["message"].startswith("Annulée : Ton crédit")  # même moteur : annulée
+        assert c["status"] == "done"                                                       # autre moteur : faite
+
+        d = jobs.submit({"kind": "quiz", "provider": "local"}, slow)
+        e = jobs.submit({"kind": "quiz", "provider": "local"}, quick)
+        await asyncio.sleep(0.01)
+        assert jobs.cancel_all() == 2
+        await asyncio.sleep(0.05)
+        assert d["status"] == e["status"] == "cancelled"
+        jobs.dismiss(d["id"])
+        assert d["id"] not in jobs.jobs
+
+    asyncio.run(scenario())

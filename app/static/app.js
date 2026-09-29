@@ -6,6 +6,7 @@ const svgIcon = (path) => `<svg class="ico" viewBox="0 0 24 24" fill="none" stro
 const ICON_EDIT = svgIcon('<path d="M4 20h4L19 9l-4-4L4 16z"/><path d="m13.5 6.5 4 4"/>');
 const ICON_CALENDAR = svgIcon('<rect x="3.5" y="5" width="17" height="15" rx="2"/><path d="M3.5 10h17M8 3v4M16 3v4"/>');
 const ICON_ALERT = svgIcon('<path d="M4 5.5A1.5 1.5 0 0 1 5.5 4h13A1.5 1.5 0 0 1 20 5.5v9a1.5 1.5 0 0 1-1.5 1.5H10l-4.5 4v-4A1.5 1.5 0 0 1 4 14.5z"/><path d="M12 7.5v3.5M12 13.6h.01"/>');
+const ICON_SHARE = svgIcon('<path d="M12 15V4M8 8l4-4 4 4"/><path d="M5 12v6.5A1.5 1.5 0 0 0 6.5 20h11a1.5 1.5 0 0 0 1.5-1.5V12"/>');
 const ICON_TRASH = svgIcon('<path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/>');
 
 const state = {
@@ -1301,11 +1302,58 @@ function quizItem(q, course, number = null, { play = false } = {}) {
           ${outdated ? ` <span class="badge warn-badge" title="Le cours a été modifié depuis la création de ce quiz">cours mis à jour depuis</span>` : ""}</small>
       </button>
       ${play ? `<button class="primary small" data-open-quiz="${q.id}">Passer</button>` : `
+      <button class="icon" data-export-quiz="${q.id}" aria-label="Exporter ce quiz (fichier texte)" title="Exporter (fichier texte à envoyer)">${ICON_SHARE}</button>
       <button class="icon" data-rename-quiz="${q.id}" data-title="${escapeHtml(label)}" aria-label="Renommer ce quiz" title="Renommer">${ICON_EDIT}</button>
       <button class="icon" data-delete-quiz="${q.id}" aria-label="Supprimer ce quiz" title="Supprimer">${ICON_TRASH}</button>`}
       ${play ? "" : `<div class="quiz-preview" id="preview-${q.id}" hidden></div>`}
     </li>`;
 }
+
+// ---------- S'échanger quiz et flashcards : fichier texte à envoyer (Messages, mail…), à importer ailleurs ----------
+async function exportItem(kind, id, statusSelector) {
+  try {
+    if (state.desktop) {
+      const { name } = await api(`/api/export/${kind}/${id}`, { method: "POST" });
+      setStatus(statusSelector, `Enregistré dans Téléchargements : « ${name} ». Envoie-le (Messages, mail…) : il s'importe dans Pirouette${kind === "cards" ? ", Anki ou Quizlet" : ""}.`, true);
+    } else {
+      location.href = `/api/export/${kind}/${id}`;
+    }
+  } catch (err) {
+    setStatus(statusSelector, err.message, false);
+  }
+}
+document.addEventListener("click", (e) => {
+  const button = e.target.closest("[data-export-quiz]");
+  if (button) exportItem("quiz", button.dataset.exportQuiz, "#quiz-status");
+  if (e.target.closest("[data-import]")) $("#import-input").click();
+});
+$("#cards-export").addEventListener("click", () => exportItem("cards", state.course.id, "#cards-status"));
+$("#import-input").addEventListener("change", async (e) => {
+  const file = e.target.files[0];
+  e.target.value = "";
+  if (!file) return;
+  const onCards = state.tab === "cartes";
+  const status = onCards ? "#cards-status" : "#quiz-status";
+  const form = new FormData();
+  form.append("file", file);
+  try {
+    const r = await api(`/api/courses/${state.course.id}/import`, { method: "POST", body: form });
+    const skipped = r.skipped ? ` (${r.skipped} ignorée${r.skipped > 1 ? "s" : ""} : illisible${r.skipped > 1 ? "s" : ""} ou déjà là)` : "";
+    state.deck = null;
+    await refreshCourse();
+    const tab = r.kind === "cards" ? "cartes" : "quiz";
+    if (state.tab !== tab) {  // un fichier de cartes importé depuis la page Quiz (ou l'inverse) : on y va
+      history.replaceState(null, "", courseHash(tab));
+      await openCourse(state.course.id, tab);
+    }
+    setStatus(r.kind === "cards" ? "#cards-status" : "#quiz-status", r.kind === "cards"
+      ? `${plural(r.added, "carte ajoutée", "cartes ajoutées")}${skipped}.`
+      : r.merged ? `${plural(r.added, "question ajoutée", "questions ajoutées")} au quiz « ${r.title} » (même chapitre)${skipped}.`
+        : `Quiz « ${r.title} » importé : ${plural(r.added, "question", "questions")}${skipped}.`, true);
+  } catch (err) {
+    setStatus(status, err.message, false);
+  }
+});
 
 // Aperçu d'un quiz dans le cours : ses questions et leurs réponses, sans le passer.
 document.addEventListener("click", async (e) => {
@@ -1739,19 +1787,32 @@ async function runJob(path, form, title) {
   $("#loading-title").textContent = title;
   $("#progress-log").innerHTML = "";
   show("loading");
-  const response = await fetch(`/api/courses/${state.course.id}/${path}`, { method: "POST", body: form });
+  state.loadingAbort = new AbortController();
+  let response;
+  try {
+    response = await fetch(`/api/courses/${state.course.id}/${path}`, { method: "POST", body: form, signal: state.loadingAbort.signal });
+  } catch (err) {
+    if (err.name === "AbortError") throw new Error("Création annulée.");
+    throw err;
+  }
   if (!response.ok) {
     const body = await response.json().catch(() => ({}));
     throw new Error(body.detail || `Erreur ${response.status}`);
   }
-  for await (const event of ndjson(response)) {
-    if (event.type === "progress") logProgress(event.message);
-    if (event.type === "error") throw new Error(event.message);
-    if (event.type === "done") return event.result;
+  try {
+    for await (const event of ndjson(response)) {
+      if (event.type === "progress") logProgress(event.message);
+      if (event.type === "error") throw new Error(event.message);
+      if (event.type === "done") return event.result;
+    }
+  } catch (err) {
+    if (err.name === "AbortError") throw new Error("Création annulée.");
+    throw err;
   }
   throw new Error("La génération s'est interrompue.");
 }
 
+$("#loading-cancel").addEventListener("click", () => state.loadingAbort?.abort());
 $("#create-btn").addEventListener("click", () => (state.createKind === "quiz" ? generateQuiz() : createCards()));
 
 async function generateQuiz() {
@@ -3938,6 +3999,7 @@ $("#update-go").addEventListener("click", async () => {
 
 $("#update-check").addEventListener("click", () => checkUpdate());
 setTimeout(() => checkUpdate({ quiet: true }), 2500);
+api("/api/settings").then((settings) => { state.desktop = Boolean(settings.desktop); }).catch(() => {});
 
 // Menu « Mise à jour » de la barre des menus du Mac (voir desktop.py) : il appelle window.pirouetteMenu(…).
 function updateNotice(html, { install = false } = {}) {
@@ -4001,8 +4063,10 @@ function renderJobs() {
   const done = list.filter((j) => j.status === "done").length;
   $("#jobs-title").textContent = busy
     ? `Création en cours · ${busy} restant${busy > 1 ? "s" : ""}${done ? ` · ${done} prêt${done > 1 ? "s" : ""}` : ""}`
-    : `${done} prêt${done > 1 ? "s" : ""}${list.some((j) => j.status === "error") ? " · erreur" : ""}`;
+    : `${done} prêt${done > 1 ? "s" : ""}${list.some((j) => j.status === "error") ? " · erreur" : ""}${
+      list.some((j) => j.status === "cancelled") ? " · annulé" : ""}`;
   $("#jobs-heat").hidden = !busy || !jobsState.open;
+  $("#jobs-foot").hidden = busy < 2 || !jobsState.open;
   $("#jobs-dot").className = `jobs-dot ${busy ? "busy" : "ready"}`;
   $("#jobs").classList.toggle("open", jobsState.open);
   $("#jobs-list").innerHTML = list.map((j) => `
@@ -4014,7 +4078,8 @@ function renderJobs() {
       </span>
       ${j.status === "done" && j.kind !== "cards" ? `<button class="primary small" type="button" data-job-start="${j.result.quiz_id}" data-job="${j.id}">Commencer</button>` : ""}
       ${j.status === "done" && j.kind === "cards" ? `<button class="ghost small" type="button" data-job-cards="${j.course_id}" data-job="${j.id}">Voir</button>` : ""}
-      ${j.status === "done" || j.status === "error" ? `<button class="icon" type="button" data-job-dismiss="${j.id}" aria-label="Retirer de la liste" title="Retirer">✕</button>` : ""}
+      ${j.status === "queued" || j.status === "running" ? `<button class="ghost small" type="button" data-job-cancel="${j.id}">Annuler</button>` : ""}
+      ${["done", "error", "cancelled"].includes(j.status) ? `<button class="icon" type="button" data-job-dismiss="${j.id}" aria-label="Retirer de la liste" title="Retirer">✕</button>` : ""}
     </li>`).join("");
 }
 
@@ -4025,6 +4090,11 @@ $("#jobs-list").addEventListener("click", async (e) => {
     await api(`/api/jobs/${cards.dataset.job}`, { method: "DELETE" }).catch(() => {});
     state.deck = null;
     go(`#/cours/${cards.dataset.jobCards}/cartes`);
+    return refreshJobs();
+  }
+  const cancel = e.target.closest("[data-job-cancel]")?.dataset.jobCancel;
+  if (cancel) {
+    await api(`/api/jobs/${cancel}/cancel`, { method: "POST" }).catch(() => {});
     return refreshJobs();
   }
   const start = e.target.closest("[data-job-start]");
@@ -4041,6 +4111,11 @@ $("#jobs-list").addEventListener("click", async (e) => {
     await api(`/api/jobs/${dismiss}`, { method: "DELETE" }).catch(() => {});
     refreshJobs();
   }
+});
+$("#jobs-cancel-all").addEventListener("click", async () => {
+  if (!confirm("Annuler toutes les créations en cours et en attente ? Rien de ce qui n'est pas terminé ne sera gardé.")) return;
+  await api("/api/jobs/cancel", { method: "POST" }).catch(() => {});
+  refreshJobs();
 });
 refreshJobs();
 

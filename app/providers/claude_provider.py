@@ -10,7 +10,7 @@ import anthropic
 
 from ..quiz import SYSTEM_PROMPT, QuizOptions, build_user_prompt, quiz_schema
 from ..revision import CARDS_SCHEMA, CARDS_SYSTEM, build_cards_prompt
-from .base import ProviderError
+from .base import ProviderError, QuotaError
 
 # Claude lit jusqu'à ~1M tokens : un cours entier tient en un seul appel.
 # Au-delà de cette taille on préfère prévenir plutôt que tronquer le cours en silence.
@@ -118,9 +118,15 @@ async def _api_errors(model: str | None):
     except anthropic.NotFoundError as exc:
         raise ProviderError(f"Modèle Claude introuvable : {model or default_model()}.") from exc
     except anthropic.RateLimitError as exc:
-        raise ProviderError("Limite de requêtes atteinte sur l'API Claude. Réessaie dans un instant.") from exc
+        raise QuotaError("Limite d'utilisation de l'API Claude atteinte : réessaie dans quelques minutes, ou passe à "
+                         "l'IA locale.") from exc
     except anthropic.APIStatusError as exc:
         detail = exc.body.get("error", {}).get("message") if isinstance(exc.body, dict) else None
+        if "credit balance" in (detail or exc.message or "").lower() or exc.status_code == 402:
+            raise QuotaError("Ton crédit Claude API est épuisé : recharge-le sur console.anthropic.com (Billing), ou "
+                             "passe à l'IA locale.") from exc
+        if exc.status_code in (529, 503):
+            raise QuotaError("Claude est surchargé en ce moment : réessaie dans quelques minutes, ou passe à l'IA locale.") from exc
         raise ProviderError(f"Erreur de l'API Claude ({exc.status_code}) : {detail or exc.message}") from exc
     except anthropic.APIConnectionError as exc:
         raise ProviderError("Impossible de joindre l'API Claude. Vérifie ta connexion internet.") from exc

@@ -224,6 +224,18 @@ une notion. **Pirouette n'a pas besoin d'être ouverte** : l'app Claude la lance
 fenêtre. Techniquement : Pirouette s'inscrit dans `~/Library/Application Support/Claude/claude_desktop_config.json`
 (clé `mcpServers`, sans toucher aux autres outils) et l'app Claude lance `Pirouette --mcp`.
 
+**Annuler une création** : dans le suivi (en bas à gauche), « Annuler » sur chaque création en attente ou en cours,
+et « Tout annuler ». Rien de ce qui n'est pas terminé n'est gardé. L'écran de création en direct a aussi son bouton
+« Annuler ». Si le crédit ou la limite de l'API Claude est atteint, la création s'arrête avec un message clair et les
+autres créations Claude en attente sont annulées (celles de l'IA locale continuent).
+
+**S'échanger des quiz et des flashcards** : dans un cours, l'icône « exporter » d'un quiz (ou « Exporter » sur la page
+Flashcards) enregistre un .txt dans Téléchargements, à envoyer par Messages ou mail. « Importer » (pages Quiz et
+Flashcards) le relit : un quiz Pirouette, un quiz écrit à la main (« 1. Question ? », « a) … ✓ » ou « Réponse : b »),
+ou des flashcards d'Anki, de Quizlet ou d'un tableur (« recto ; verso », tabulation, « :: », « Q : / R : »). Un quiz
+dont les chapitres existent dans le cours rejoint le quiz de ces chapitres, sans les questions déjà présentes. Les
+flashcards exportées s'importent aussi dans Anki et Quizlet.
+
 **Sauvegardes** : Réglages → Tes données → « Sauvegarde automatique » à chaque ouverture, chaque semaine (par défaut)
 ou jamais, et « Sauvegarder maintenant ». Chaque sauvegarde est un dossier daté dans `Documents/Pirouette - Sauvegardes`
 avec `pirouette-donnees.zip` (tout, pour tout récupérer ; sans la clé API) et `flashcards.csv` / `quiz.csv` (Numbers,

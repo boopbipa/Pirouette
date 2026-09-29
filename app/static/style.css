@@ -1043,3 +1043,10 @@ main { padding-bottom: 120px; }
 .app-request { margin-top: 14px; padding: 14px 16px; border-radius: 12px; background: var(--accent-soft); }
 .app-request p { margin: 0 0 8px; }
 .app-request-text { padding: 10px 12px; border-radius: 10px; background: var(--surface); font-size: 15px; user-select: text; }
+
+/* Suivi des créations : annuler */
+.jobs-foot { padding: 4px 14px 10px; text-align: right; }
+.job.cancelled { opacity: .6; }
+#loading-cancel { margin-top: 18px; }
+.job.cancelled .job-state { background: var(--border); }
+.job.cancelled small { white-space: normal; }

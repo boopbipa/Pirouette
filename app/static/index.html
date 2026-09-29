@@ -629,8 +629,12 @@
       <section class="panel" id="panel-quiz" hidden>
         <div class="panel-head">
           <h1>Quiz</h1>
-          <button class="primary small" data-create="quiz">+ Nouveau quiz</button>
+          <div class="head-actions">
+            <button class="ghost small" type="button" data-import>Importer</button>
+            <button class="primary small" data-create="quiz">+ Nouveau quiz</button>
+          </div>
         </div>
+        <p class="status" id="quiz-status" hidden></p>
         <p class="muted small-text">Clique sur un quiz pour voir ses questions. Pour t'entraîner, passe-le depuis Réviser.</p>
         <ul id="quiz-list" class="quiz-list"></ul>
       </section>
@@ -639,12 +643,15 @@
         <div class="panel-head">
           <h1>Flashcards <span class="muted count" id="cards-count"></span></h1>
           <div class="head-actions">
+            <button class="ghost small" type="button" data-import>Importer</button>
+            <button class="ghost small" type="button" id="cards-export">Exporter</button>
             <button class="ghost small" id="card-write">Écrire une carte</button>
             <button class="primary small" data-create="cartes">+ Ajouter des cartes</button>
           </div>
         </div>
         <p class="muted small-text" id="cards-help">Clique sur une carte pour la retourner. Pour les apprendre, révise-les depuis Réviser.</p>
         <p id="cards-status" class="status ok" hidden></p>
+        <input type="file" id="import-input" accept=".txt,.csv,.tsv,.md,text/plain" hidden>
         <div id="card-grid" class="card-grid"></div>
         <p id="cards-empty" class="empty-state muted" hidden></p>
         <div class="panel-foot" id="cards-foot"><button class="link-button danger" id="cards-clear">Effacer toutes les cartes</button></div>
@@ -802,6 +809,7 @@
       <div class="spinner"></div>
       <h2 id="loading-title">Génération du quiz…</h2>
       <ul id="progress-log" class="progress-log"></ul>
+      <button class="ghost small" type="button" id="loading-cancel">Annuler</button>
     </section>
 
     <!-- Séance de révision : flashcards (et questions de quiz mélangées) -->
@@ -1081,6 +1089,7 @@
       <span class="jobs-dot" id="jobs-dot"></span><strong id="jobs-title"></strong><span class="jobs-toggle" aria-hidden="true"></span>
     </button>
     <ul class="jobs-list" id="jobs-list"></ul>
+    <div class="jobs-foot" id="jobs-foot" hidden><button class="link-button danger" type="button" id="jobs-cancel-all">Tout annuler</button></div>
     <p class="jobs-heat" id="jobs-heat" hidden>Ton Mac peut chauffer un peu : évite les autres apps gourmandes pendant la création.</p>
   </aside>
 

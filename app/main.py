@@ -10,6 +10,7 @@ import re
 import subprocess
 import sys
 import threading
+import urllib.parse
 from dataclasses import replace
 from datetime import date, datetime, timedelta
 from pathlib import Path
@@ -17,13 +18,13 @@ from pathlib import Path
 from dotenv import load_dotenv
 from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.concurrency import run_in_threadpool
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, StreamingResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, PlainTextResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 load_dotenv()
 
-from . import backup, claude_desktop, local_ai, plan as plans, reminder, srs, updater  # noqa: E402
+from . import backup, claude_desktop, exchange, local_ai, plan as plans, reminder, srs, updater  # noqa: E402
 from .grounding import Grounding  # noqa: E402
 from .jobs import Jobs  # noqa: E402
 from .chapters import (CHAPTERS_SCHEMA, CHAPTERS_SYSTEM, ai_candidates, build_chapters_prompt,  # noqa: E402
@@ -615,12 +616,16 @@ def _stream(course: dict, sources: list, course_text: str, job) -> StreamingResp
         chars = f"{len(course_text):,}".replace(",", " ")
         await queue.put({"type": "progress", "message": f"Cours « {course['name']} » : {chars} caractères, {len(sources)} fichier(s)"})
         task = asyncio.create_task(run())
-        while True:
-            event = await queue.get()
-            yield json.dumps(event, ensure_ascii=False) + "\n"
-            if event["type"] in {"done", "error"}:
-                break
-        await task
+        try:
+            while True:
+                event = await queue.get()
+                yield json.dumps(event, ensure_ascii=False) + "\n"
+                if event["type"] in {"done", "error"}:
+                    break
+            await task
+        finally:
+            if not task.done():  # « Annuler » (la page a coupé la connexion) : on arrête la création, rien n'est gardé
+                task.cancel()
 
     return StreamingResponse(events(), media_type="application/x-ndjson")
 
@@ -676,7 +681,7 @@ async def generate_quiz_background(
         _, _, _, job = _quiz_job(course_id, provider, model, num_questions, difficulty, types, language, key,
                                  course_share, focus, "" if label else manual, title=label)
         created.append(jobs.submit({"kind": "quiz", "course_id": course_id, "course_name": course["name"],
-                                    "label": label or focus or "Nouveau quiz"}, job))
+                                    "provider": provider, "label": label or focus or "Nouveau quiz"}, job))
     return {"jobs": created}
 
 
@@ -719,11 +724,11 @@ async def prepare_course(
             _, _, _, job = _quiz_job(course_id, provider, model, num_questions, "moyen", types, language, key,
                                      "equilibre", "", "", title=label)
             created.append(jobs.submit({"kind": "quiz", "course_id": course_id, "course_name": course["name"],
-                                        "label": label}, job))
+                                        "provider": provider, "label": label}, job))
         if cards:
             _, _, _, job = _cards_job(course_id, provider, model, language, cards_count, key, title=label)
             created.append(jobs.submit({"kind": "cards", "course_id": course_id, "course_name": course["name"],
-                                        "label": label}, job))
+                                        "provider": provider, "label": label}, job))
     return {"jobs": created}
 
 
@@ -736,6 +741,17 @@ async def list_jobs() -> list[dict]:
 async def dismiss_job(job_id: str) -> dict:
     jobs.dismiss(job_id)
     return {"deleted": job_id}
+
+
+@app.post("/api/jobs/{job_id}/cancel")
+async def cancel_job(job_id: str) -> dict:
+    jobs.cancel(job_id)
+    return {"cancelled": job_id}
+
+
+@app.post("/api/jobs/cancel")
+async def cancel_all_jobs() -> dict:
+    return {"cancelled": jobs.cancel_all()}
 
 
 def _quiz_job(course_id: str, provider: str, model: str, num_questions: int, difficulty: str, types: str,
@@ -1442,6 +1458,95 @@ async def grade_answers(body: GradeIn) -> dict:
 
 # ---------- Mises à jour de l'app ----------
 
+# ---------- S'échanger des quiz et des flashcards (fichier texte) ----------
+
+def _safe_name(name: str) -> str:
+    return re.sub(r"[\\/:*?\"<>|]+", "-", name).strip(" .-")[:80] or "Pirouette"
+
+
+def _export(kind: str, item_id: str) -> tuple[str, str]:
+    """(nom du fichier, texte) d'un quiz (`quiz`) ou des flashcards d'un cours (`cards`)."""
+    if kind == "quiz":
+        quiz = store.get_quiz(item_id)
+        course = quiz.get("course_name") or ""
+        return f"{_safe_name('Quiz - ' + (quiz.get('custom_title') or quiz['title']))}.txt", exchange.quiz_to_text(quiz, course)
+    course = store.get_course(item_id)
+    cards = (store.get_doc(item_id, "cards") or {}).get("cards", [])
+    if not cards:
+        raise HTTPException(400, "Ce cours n'a pas encore de flashcards.")
+    return f"{_safe_name('Flashcards - ' + course['name'])}.txt", exchange.cards_to_text(cards, course["name"])
+
+
+@app.get("/api/export/{kind}/{item_id}")
+async def export_file(kind: str, item_id: str) -> PlainTextResponse:
+    """Téléchargement (dans un navigateur)."""
+    if kind not in {"quiz", "cards"}:
+        raise HTTPException(404, "Export inconnu.")
+    name, text = _export(kind, item_id)
+    return PlainTextResponse(text, headers={"Content-Disposition": f"attachment; filename*=UTF-8''{urllib.parse.quote(name)}"})
+
+
+@app.post("/api/export/{kind}/{item_id}")
+async def export_to_downloads(kind: str, item_id: str) -> dict:
+    """App Mac : enregistre le fichier dans Téléchargements et le montre dans le Finder."""
+    if kind not in {"quiz", "cards"}:
+        raise HTTPException(404, "Export inconnu.")
+    name, text = _export(kind, item_id)
+    folder = Path.home() / "Downloads"
+    folder.mkdir(parents=True, exist_ok=True)
+    path = folder / name
+    for n in range(2, 100):
+        if not path.exists():
+            break
+        path = folder / f"{Path(name).stem} ({n}).txt"
+    path.write_text(text, encoding="utf-8")
+    if sys.platform == "darwin":
+        subprocess.run(["open", "-R", str(path)], capture_output=True, timeout=10)
+    return {"path": str(path), "name": path.name}
+
+
+@app.post("/api/courses/{course_id}/import")
+async def import_file(course_id: str, file: UploadFile = File(...)) -> dict:
+    """Un quiz ou des flashcards reçus en .txt (de Pirouette, écrits à la main, d'Anki, de Quizlet…)."""
+    course = store.get_course(course_id)
+    raw = await file.read()
+    try:
+        text = raw.decode("utf-8")
+    except UnicodeDecodeError:
+        text = raw.decode("latin-1")
+    found = exchange.parse(text)
+    if found["kind"] == "quiz":
+        if not found["questions"]:
+            raise HTTPException(400, "Aucune question lisible dans ce fichier.")
+        # Chapitres du fichier retrouvés dans ce cours : le quiz s'y rattache (et rejoint le quiz de ces chapitres).
+        titles = [title for _, title in _units(course, "")]
+        scope = [t for t in titles if any(_same_title(t, [c]) for c in found["chapters"])]
+        quiz = {"title": found["title"] or Path(file.filename or "Quiz").stem, "questions": found["questions"],
+                "provider": "import", "model": "", "language": "français", "course_id": course_id,
+                "course_name": course["name"], "course_version": course["version"], "sources": [], "scope": scope,
+                "difficulty": "moyen"}
+        key = store.chapter_key(quiz)
+        existing = store.chapter_quiz(key) if key else None
+        if existing:
+            merged, added = store.add_to_quiz(existing["id"], quiz["questions"])
+            return {"kind": "quiz", "quiz_id": merged["id"], "title": merged["title"], "added": added,
+                    "skipped": found["skipped"] + len(quiz["questions"]) - added, "merged": True}
+        saved = store.save_quiz(quiz)
+        return {"kind": "quiz", "quiz_id": saved["id"], "title": saved["title"], "added": len(saved["questions"]),
+                "skipped": found["skipped"], "merged": False}
+    if found["kind"] == "cards":
+        deck = store.get_doc(course_id, "cards") or {"cards": []}
+        new = normalize_cards([{"cards": found["cards"]}], 1000, deck["cards"])
+        now = datetime.now().isoformat(timespec="seconds")
+        for card in new:
+            card.update(scope=[], created_at=now)
+        deck.update(course_name=course["name"], course_id=course_id, cards=[*deck["cards"], *new])
+        store.save_doc(course_id, "cards", deck)
+        return {"kind": "cards", "added": len(new), "skipped": found["skipped"] + len(found["cards"]) - len(new)}
+    raise HTTPException(400, "Rien de reconnu dans ce fichier : il faut un quiz Pirouette, des questions numérotées "
+                             "avec leurs propositions, ou des flashcards « recto ; verso » (une par ligne).")
+
+
 @app.post("/api/quit")
 async def quit_app() -> dict:
     """Arrête l'app Mac (après une mise à jour). Réponse d'abord, puis arrêt net un instant plus tard : les données
@@ -1481,12 +1586,16 @@ async def update_install(body: InstallIn) -> StreamingResponse:
                 await queue.put({"type": "error", "message": f"La mise à jour n'a pas pu se faire : {exc}"})
 
         task = asyncio.create_task(run())
-        while True:
-            event = await queue.get()
-            yield json.dumps(event, ensure_ascii=False) + "\n"
-            if event["type"] in {"done", "error"}:
-                break
-        await task
+        try:
+            while True:
+                event = await queue.get()
+                yield json.dumps(event, ensure_ascii=False) + "\n"
+                if event["type"] in {"done", "error"}:
+                    break
+            await task
+        finally:
+            if not task.done():  # « Annuler » (la page a coupé la connexion) : on arrête la création, rien n'est gardé
+                task.cancel()
 
     return StreamingResponse(events(), media_type="application/x-ndjson")
 
