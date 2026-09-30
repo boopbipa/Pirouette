@@ -404,6 +404,21 @@
         <p class="status" id="revision-status" hidden></p>
       </div>
 
+      <div class="card" id="keys-card">
+        <h2>Clavier</h2>
+        <p class="muted small-text">Fais tes quiz, tes révisions et tes partiels blancs sans la souris. Clique sur une touche pour la changer,
+          puis appuie sur la nouvelle (Échap pour annuler). Les touches sont aussi rappelées à l'écran.</p>
+        <label class="toggle-row first">
+          <input type="checkbox" id="keys-instant">
+          <span><strong>Valider dès que je choisis une réponse</strong>
+            <small class="muted">Sinon : la touche de la réponse, puis Entrée.</small></span>
+        </label>
+        <div class="keys-list" id="keys-list"></div>
+        <div class="actions"><button class="ghost small" type="button" id="keys-reset">Rétablir les touches par défaut</button>
+          <button class="ghost small" type="button" id="welcome-replay">Revoir la présentation de Pirouette</button></div>
+        <p class="status" id="keys-status" hidden></p>
+      </div>
+
       <div class="card" id="appearance-card">
         <h2>Couleur de l'app</h2>
         <p class="muted small-text">Choisis la couleur des repères (icônes, chiffres, barres de progression…). L'aperçu montre le résultat avant d'enregistrer.</p>
@@ -1019,7 +1034,7 @@
       </div>
       <div class="actions">
         <button id="prev-btn" class="ghost" hidden>Question précédente</button>
-        <button id="validate-btn" class="primary">Valider</button>
+        <button id="validate-btn" class="primary">Valider <kbd class="key-hint on-accent" id="validate-key">Entrée</kbd></button>
         <button id="next-btn" class="primary" hidden>Question suivante</button>
         <div class="qtools" id="question-tools" hidden>
           <button class="icon qtools-btn" type="button" aria-label="Un problème avec cette question ?" title="Un problème avec cette question ?"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 5.5A1.5 1.5 0 0 1 5.5 4h13A1.5 1.5 0 0 1 20 5.5v9a1.5 1.5 0 0 1-1.5 1.5H10l-4.5 4v-4h0A1.5 1.5 0 0 1 4 14.5z"/><path d="M12 7.5v3.5M12 13.6h.01"/></svg></button>
@@ -1132,6 +1147,19 @@
         <button class="ghost" type="button" id="ask-cancel">Annuler</button>
       </div>
     </form>
+  </dialog>
+
+  <!-- Cartons de bienvenue (premier lancement) et « Quoi de neuf » (après une mise à jour) -->
+  <dialog id="welcome-dialog" class="welcome" aria-label="Présentation de Pirouette">
+    <div class="welcome-art" id="welcome-art"></div>
+    <div class="welcome-body" id="welcome-body"></div>
+    <div class="welcome-foot">
+      <div class="welcome-dots" id="welcome-dots"></div>
+      <div class="welcome-btns">
+        <button class="link-button" type="button" id="welcome-skip">Passer</button>
+        <button class="primary" type="button" id="welcome-next">Suivant</button>
+      </div>
+    </div>
   </dialog>
 
   <!-- Importer un paquet : à quel cours rattacher chaque cours du paquet -->

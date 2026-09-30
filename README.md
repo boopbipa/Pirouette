@@ -191,6 +191,20 @@ chapitre ; ce qui existait n'est pas refait.
 Un **fil d'Ariane** en haut (Mes cours › Cours › Quiz › …) permet de remonter d'un clic. Les menus déroulants
 sont aux couleurs de l'app.
 
+**Cartons de bienvenue** : au tout premier lancement, 5 cartons à faire défiler (« Suivant », flèches ← →, ou
+« Passer ») : ce que fait Pirouette, déposer son cours (découpé en chapitres), créer ses quiz avec l'app Claude (la
+demande à copier, et comment ménager son forfait), réviser un peu chaque jour (cartes argent, or, holo), préparer
+ses partiels (rétroplanning, partiels blancs) ; le dernier mène à la création du premier cours. Après une mise à
+jour, un seul carton « **Quoi de neuf** » avec les nouveautés de la version. Réglages → Clavier → « Revoir la
+présentation de Pirouette ».
+
+**Tout au clavier** : quiz, révisions et partiels blancs se font sans la souris. Par défaut : **1 à 6** choisit une
+réponse (**V** / **F** pour vrai/faux), **Entrée** valide puis passe à la suite, **←** / **→** question précédente /
+suivante, **Espace** retourne une flashcard puis **1 / 2 / 3** (je ne savais pas / à moitié / je savais), **Échap**
+quitte (avec confirmation). Les touches sont rappelées à l'écran (pastilles à côté des réponses et des boutons).
+**Réglages → Clavier** : un clic sur une touche, puis la nouvelle ; Pirouette refuse une touche déjà utilisée au même
+moment ; « Valider dès que je choisis une réponse » ; « Rétablir les touches par défaut ».
+
 **Mes cours et Réviser : la même grille, pas le même contenu.** Les deux pages montrent les semestres (dépliables,
 même icône) et leurs cours en cartes. Dans **Mes cours** (l'atelier), une carte dit ce que contient le cours
 (« 1 fichier · 4 chapitres · 12 quiz · 80 cartes ») et mène à ses réglages (icône crayon). Dans **Réviser**, elle dit

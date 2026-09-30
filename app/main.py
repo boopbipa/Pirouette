@@ -130,6 +130,9 @@ class SettingsIn(BaseModel):
     reminder_time: str | None = None    # rappel quotidien « HH:MM » (Mac) ; "" pour l'arrêter
     new_per_day: int | None = None      # nouvelles cartes par jour dans la révision du jour
     quiz_size: int | None = None        # questions tirées quand on lance un grand quiz ; 0 = toutes
+    shortcuts: dict[str, str] | None = None  # touches du clavier choisies (action → touche) ; {} = par défaut
+    keys_instant: bool | None = None    # au clavier, valider dès qu'on choisit une réponse
+    welcome_seen: str | None = None     # cartons de bienvenue vus (« 1 ») / dernière version dont on a vu les nouveautés
     backup_mode: str | None = None      # sauvegarde automatique : "open" (à l'ouverture), "week", "off"
 
 
@@ -153,6 +156,10 @@ def _settings_view() -> dict:
         "reminder_supported": reminder.supported(),
         "new_per_day": store.new_per_day(),
         "quiz_size": int(store.get_settings().get("quiz_size", 10)),
+        "shortcuts": store.get_settings().get("shortcuts") or {},
+        "keys_instant": bool(store.get_settings().get("keys_instant", False)),
+        "welcome_seen": store.get_settings().get("welcome_seen") or "",
+        "news_seen": store.get_settings().get("news_seen") or "",
         "data_dir": str(store.root.resolve()),
         "backup_mode": store.get_settings().get("backup_mode", "week"),
         "backup_dir": str(backup.backup_dir(store)),
@@ -195,6 +202,17 @@ async def save_settings(body: SettingsIn) -> dict:
         store.save_settings(new_per_day=max(0, min(body.new_per_day, 200)))
     if body.quiz_size is not None:
         store.save_settings(quiz_size=max(0, min(body.quiz_size, 50)))
+    if body.shortcuts is not None:
+        clean = {str(k)[:20]: str(v)[:20] for k, v in list(body.shortcuts.items())[:40] if v}
+        store.save_settings(shortcuts=clean)
+    if body.keys_instant is not None:
+        store.save_settings(keys_instant=body.keys_instant)
+    if body.welcome_seen is not None:
+        # « 1 » : les cartons de bienvenue ont été vus ; une version (« 0.39.0 ») : ses nouveautés ont été vues
+        if body.welcome_seen == "1":
+            store.save_settings(welcome_seen="1", news_seen=updater.__version__)
+        else:
+            store.save_settings(news_seen=body.welcome_seen[:20])
     if body.backup_mode is not None:
         if body.backup_mode not in backup.MODES:
             raise HTTPException(400, "Fréquence de sauvegarde inconnue.")

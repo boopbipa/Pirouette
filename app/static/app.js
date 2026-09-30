@@ -551,6 +551,8 @@ function renderReminder(settings) {
     : "Disponible dans l'app Mac (Pirouette.app).";
   $("#new-per-day").value = settings.new_per_day;
   $("#quiz-size").value = settings.quiz_size;
+  applyShortcuts(settings);
+  renderKeysSettings();
   $("#revision-status").hidden = true;
 }
 
@@ -2464,8 +2466,7 @@ function showCard() {
   $("#typed-answer").disabled = false;
   $("#typed-result").hidden = true;
   $("#ratings").hidden = true;
-  $("#card-keys-text").textContent = typing ? "Entrée pour vérifier, puis 1, 2 ou 3 pour répondre"
-    : "Espace pour retourner la carte, puis 1, 2 ou 3 pour répondre";
+  renderKeyHints();
   (typing ? $("#typed-answer") : $("#flashcard")).focus();
 }
 
@@ -2660,7 +2661,7 @@ function showSessionQuestion(item) {
     $("#sq-short").focus();
   } else {
     area.innerHTML = q.choices.map((c, i) => `
-      <label class="choice"><input type="radio" name="sq-choice" value="${i}"><span>${escapeHtml(c)}</span></label>`).join("");
+      <label class="choice"><input type="radio" name="sq-choice" value="${i}"><span>${escapeHtml(c)}</span>${keyBadge(q.choices, i)}</label>`).join("");
   }
 }
 
@@ -3438,7 +3439,7 @@ function renderQuestion() {
   } else {
     area.innerHTML = q.choices.map((c, i) => `
       <label class="choice"><input type="radio" name="choice" value="${i}">
-      <span>${escapeHtml(c)}</span></label>`).join("");
+      <span>${escapeHtml(c)}</span>${keyBadge(q.choices, i)}</label>`).join("");
   }
   $("#prev-btn").hidden = state.index === 0;
   // Question déjà faite (retour en arrière) : on la revoit avec sa correction.
@@ -3475,34 +3476,315 @@ $("#prev-btn").addEventListener("click", () => {
   renderQuestion();
 });
 
+// ---------- Tout au clavier : quiz, révision, partiel. Chaque touche se règle dans Réglages → Clavier ----------
+const KEY_ACTIONS = [
+  { id: "choice1", group: "Répondre", label: "Réponse 1", key: "1" },
+  { id: "choice2", group: "Répondre", label: "Réponse 2", key: "2" },
+  { id: "choice3", group: "Répondre", label: "Réponse 3", key: "3" },
+  { id: "choice4", group: "Répondre", label: "Réponse 4", key: "4" },
+  { id: "choice5", group: "Répondre", label: "Réponse 5", key: "5" },
+  { id: "choice6", group: "Répondre", label: "Réponse 6", key: "6" },
+  { id: "vrai", group: "Répondre", label: "Vrai", key: "v" },
+  { id: "faux", group: "Répondre", label: "Faux", key: "f" },
+  { id: "validate", group: "Répondre", label: "Valider, puis question suivante", key: "Enter" },
+  { id: "previous", group: "Répondre", label: "Question précédente", key: "ArrowLeft" },
+  { id: "next", group: "Répondre", label: "Question suivante", key: "ArrowRight" },
+  { id: "flip", group: "Flashcards", label: "Retourner la carte", key: " " },
+  { id: "again", group: "Flashcards", label: "Je ne savais pas", key: "1" },
+  { id: "hard", group: "Flashcards", label: "À moitié", key: "2" },
+  { id: "good", group: "Flashcards", label: "Je savais", key: "3" },
+  { id: "quit", group: "Partout", label: "Quitter (quiz, révision, partiel)", key: "Escape" },
+];
+const DEFAULT_KEYS = Object.fromEntries(KEY_ACTIONS.map((a) => [a.id, a.key]));
+state.keys = { ...DEFAULT_KEYS };
+state.keysInstant = false;
+function applyShortcuts(settings) {
+  state.keys = { ...DEFAULT_KEYS, ...(settings.shortcuts || {}) };
+  state.keysInstant = Boolean(settings.keys_instant);
+  renderKeyHints();
+}
+api("/api/settings").then(applyShortcuts).catch(() => {});
+
+const KEY_NAMES = { " ": "Espace", Enter: "Entrée", Escape: "Échap", ArrowLeft: "←", ArrowRight: "→", ArrowUp: "↑",
+                    ArrowDown: "↓", Backspace: "⌫", Tab: "Tab", Delete: "Suppr" };
+const keyName = (key) => KEY_NAMES[key] || (key?.length === 1 ? key.toUpperCase() : key || "—");
+const pressedKey = (e) => (e.key.length === 1 ? e.key.toLowerCase() : e.key);
+const isKey = (e, id) => pressedKey(e) === state.keys[id];
+
+// Les touches rappelées sur l'écran : sous les boutons et devant les réponses
+function renderKeyHints() {
+  $("#validate-key").textContent = keyName(state.keys.validate);
+  $("#card-keys-text").textContent = cardMode() === "type"
+    ? `${keyName(state.keys.validate)} pour vérifier, puis ${["again", "hard", "good"].map((a) => keyName(state.keys[a])).join(", ")} pour répondre`
+    : `${keyName(state.keys.flip)} pour retourner la carte, puis ${["again", "hard", "good"].map((a) => keyName(state.keys[a])).join(", ")} pour répondre`;
+  document.querySelectorAll("#ratings [data-rating]").forEach((b) => {
+    let hint = b.querySelector("kbd");
+    if (!hint) b.append(hint = Object.assign(document.createElement("kbd"), { className: "key-hint" }));
+    hint.textContent = keyName(state.keys[b.dataset.rating]);
+  });
+}
+// Pastille de touche devant chaque réponse (QCM : 1, 2, 3… ; vrai/faux : V, F)
+function choiceKey(choices, i) {
+  const word = normalize(choices[i]);
+  if (choices.length === 2 && (word === "vrai" || word === "faux")) return keyName(state.keys[word]);
+  return i < 6 ? keyName(state.keys[`choice${i + 1}`]) : "";
+}
+const keyBadge = (choices, i) => { const k = choiceKey(choices, i); return k ? `<kbd class="key-hint">${escapeHtml(k)}</kbd>` : ""; };
+
+// La réponse qui correspond à la touche (numéro, ou V / F pour vrai/faux), -1 sinon
+function pickedChoice(e, choices) {
+  if (!choices?.length) return -1;
+  for (let i = 0; i < Math.min(6, choices.length); i++) if (isKey(e, `choice${i + 1}`)) return i;
+  if (isKey(e, "vrai")) return choices.findIndex((c) => normalize(c) === "vrai");
+  if (isKey(e, "faux")) return choices.findIndex((c) => normalize(c) === "faux");
+  return -1;
+}
+function chooseByKey(selector, index, submit) {
+  const radio = document.querySelectorAll(selector)[index];
+  if (!radio || radio.disabled) return;
+  radio.click();
+  radio.focus();
+  if (state.keysInstant && submit) submit();
+}
+
+// Quitter au clavier : même question que depuis le menu
+function quitByKey() {
+  const question = leaveQuestion();
+  if (question && !confirm(question)) return;
+  if (!$("#view-quiz").hidden) return backToCourse();
+  if (!$("#view-cards").hidden) { state.sessionBack = state.session?.back; return leaveSession(); }
+  if (!$("#view-exam").hidden) {
+    clearInterval(state.exam?.tick);
+    if (state.exam) state.exam.running = false;
+    return go(state.exam?.course ? `#/reviser/cours/${state.exam.course.id}` : "#/reviser");
+  }
+}
+
+// Réglages → Clavier : chaque action et sa touche ; un clic, puis la nouvelle touche
+function renderKeysSettings() {
+  const groups = [...new Set(KEY_ACTIONS.map((a) => a.group))];
+  $("#keys-list").innerHTML = groups.map((g) => `<h3>${g === "Répondre" ? "Quiz, questions et partiel" : g}</h3>
+    <ul>${KEY_ACTIONS.filter((a) => a.group === g).map((a) => `<li><span>${a.label}</span>
+      <button class="key-btn${state.keys[a.id] !== a.key ? " changed" : ""}" type="button" data-key-action="${a.id}">${escapeHtml(keyName(state.keys[a.id]))}</button></li>`).join("")}</ul>`).join("");
+  $("#keys-instant").checked = state.keysInstant;
+}
+// Deux actions qui peuvent servir en même temps ne doivent pas avoir la même touche
+const KEY_TOGETHER = { "Répondre": ["Répondre", "Partout"], Flashcards: ["Flashcards", "Partout", "Répondre"], Partout: ["Répondre", "Flashcards", "Partout"] };
+function keyConflict(id, key) {
+  const action = KEY_ACTIONS.find((a) => a.id === id);
+  return KEY_ACTIONS.find((other) => other.id !== id && state.keys[other.id] === key
+    && KEY_TOGETHER[action.group].includes(other.group)
+    // les numéros des réponses et les notes des flashcards ne servent jamais au même moment
+    && !(action.group === "Flashcards" && other.group === "Répondre" && !["validate", "quit"].includes(other.id)));
+}
+async function saveShortcuts(message) {
+  const changed = Object.fromEntries(Object.entries(state.keys).filter(([id, key]) => DEFAULT_KEYS[id] !== key));
+  try {
+    applyShortcuts(await api("/api/settings", jsonBody("PUT", { shortcuts: changed, keys_instant: state.keysInstant })));
+    renderKeysSettings();
+    if (message) setStatus("#keys-status", message, true);
+  } catch (err) {
+    setStatus("#keys-status", err.message, false);
+  }
+}
+$("#keys-list").addEventListener("click", (e) => {
+  const button = e.target.closest("[data-key-action]");
+  if (!button) return;
+  document.querySelectorAll(".key-btn.listening").forEach((b) => b.classList.remove("listening"));
+  button.classList.add("listening");
+  button.textContent = "Appuie sur une touche…";
+  state.capturingKey = button.dataset.keyAction;
+});
+document.addEventListener("keydown", (e) => {
+  const id = state.capturingKey;
+  if (!id) return;
+  e.preventDefault();
+  e.stopPropagation();
+  state.capturingKey = null;
+  if (e.key === "Escape" && id !== "quit") return renderKeysSettings();  // annuler
+  if (["Shift", "Meta", "Control", "Alt", "CapsLock"].includes(e.key)) return renderKeysSettings();
+  const key = pressedKey(e);
+  const clash = keyConflict(id, key);
+  if (clash) {
+    renderKeysSettings();
+    return setStatus("#keys-status", `« ${keyName(key)} » sert déjà à « ${clash.label} » : choisis une autre touche (ou change d'abord celle-là).`, false);
+  }
+  state.keys[id] = key;
+  saveShortcuts(`« ${KEY_ACTIONS.find((a) => a.id === id).label} » : ${keyName(key)}.`);
+}, true);
+$("#keys-instant").addEventListener("change", (e) => {
+  state.keysInstant = e.target.checked;
+  saveShortcuts(e.target.checked ? "Une réponse choisie au clavier est validée tout de suite." : "Choisis la réponse, puis Entrée pour valider.");
+});
+$("#keys-reset").addEventListener("click", () => {
+  state.keys = { ...DEFAULT_KEYS };
+  saveShortcuts("Touches par défaut rétablies.");
+});
+
+// ---------- Cartons de bienvenue (premier lancement) et « Quoi de neuf » (après une mise à jour) ----------
+const LOGO_SVG = `<svg aria-hidden="true"><use href="#logo"/></svg>`;
+const WELCOME = [
+  { art: `<span class="w-spark" style="left:30%;top:24%">✦</span><span class="w-spark" style="right:30%;bottom:22%">✦</span>
+          <div class="w-logo">${LOGO_SVG}</div>`,
+    title: "Bienvenue dans Pirouette",
+    text: "Tes cours deviennent des <b>quiz</b> et des <b>flashcards</b>, et Pirouette organise tes révisions jusqu'aux partiels. Tout reste sur ton Mac." },
+  { art: `<div class="w-file"><b>PDF</b><i></i><i></i><i style="width:70%"></i><i></i><i style="width:55%"></i></div><span class="w-arrow">→</span>
+          <div class="w-chaps"><div>Chapitre 1 <span>· La cellule</span></div><div>Chapitre 2 <span>· L'ADN</span></div><div>Chapitre 3 <span>· …</span></div></div>`,
+    title: "Dépose ton cours",
+    text: "PDF, Word, PowerPoint, Pages ou Keynote : Pirouette le lit et le <b>découpe en chapitres</b>. Ton cours avance ? Dépose la <b>nouvelle version</b> : seules les nouveautés auront de nouvelles questions." },
+  { art: `<div class="w-col"><div class="w-bubble"><div class="w-who"><i></i>À coller dans l'app Claude</div>
+          Pirouette : crée un quiz qui couvre tout le chapitre « L'ADN » du cours « Biologie »…<span class="w-copy">Copier la demande</span></div>
+          <span class="w-check">✓ Chaque question vérifiée dans ton cours</span></div>`,
+    title: "Des quiz faits par Claude",
+    text: "Branche l'app Claude (Réglages), puis sur un chapitre : <b>Créer</b> → <b>Copier la demande</b> → colle-la dans Claude. Il lit le chapitre et range le quiz dans Pirouette.",
+    tips: ["Un chapitre à la fois, une conversation par cours", "Quiz puis flashcards dans la même conversation", "Forfait épuisé ? L'IA locale prend le relais"] },
+  { art: `<div class="w-cards"><div class="w-mini silver"><div>◇ NOUVELLE<em>L'ADN ?</em><span>001</span></div></div>
+          <div class="w-mini gold"><div>◆◆ EN COURS<em>La mitochondrie ?</em><span>002</span></div></div>
+          <div class="w-mini holo"><div>★ ACQUISE<em>Le neurone ?</em><span>003</span></div></div></div>`,
+    title: "Un peu chaque jour",
+    text: "Tes flashcards reviennent <b>au bon moment</b>, avec des questions de tes quiz. Chaque carte gagne en rareté quand tu la sais : argent, or, puis <b>holographique</b>. Tout se fait aussi au clavier." },
+  { art: `<div class="w-col"><div class="w-cal">${"l1 . l2 l1 . l3 . l2 l1 . l3 l2 . l1 . l2 l3 l1 l2 exam exam".split(" ").map((c) => `<i class="${c === "." ? "" : c}"></i>`).join("")}</div>
+          <span class="w-flag">Partiels dans <b>26 jours</b></span></div>`,
+    title: "Prêt le jour J",
+    text: "Indique ta <b>semaine de partiels</b> : Pirouette prépare un <b>rétroplanning</b> chapitre par chapitre, et tu t'entraînes avec des <b>partiels blancs</b> notés sur 20.",
+    last: "Importer un cours" },
+];
+// Les nouveautés de chaque version (le carton « Quoi de neuf » ne s'affiche que si la version en a)
+const WHATS_NEW = {
+  "0.39.0": [
+    ["⌨", "Tout au clavier", "Quiz, révisions et partiels sans la souris ; touches réglables dans Réglages"],
+    ["✦", "Cartons de bienvenue", "Pirouette se présente en 5 cartons (à revoir depuis Réglages)"],
+    ["▦", "Mes cours et Réviser se ressemblent", "Même grille ; Réviser montre ta maîtrise"],
+  ],
+};
+
+function openWelcome(slides, { onDone = null } = {}) {
+  state.welcome = { slides, index: 0, onDone };
+  renderWelcome();
+  $("#welcome-dialog").showModal();
+  $("#welcome-next").focus();
+}
+function renderWelcome() {
+  const { slides, index } = state.welcome;
+  const slide = slides[index];
+  const last = index === slides.length - 1;
+  $("#welcome-art").className = `welcome-art${slide.small ? " small" : ""}`;
+  $("#welcome-art").innerHTML = slide.art;
+  $("#welcome-body").innerHTML = `<h2>${slide.title}</h2>${slide.text ? `<p>${slide.text}</p>` : ""}${
+    slide.tips ? `<ul class="w-tips">${slide.tips.map((t) => `<li>${t}</li>`).join("")}</ul>` : ""}${slide.html || ""}`;
+  $("#welcome-dots").innerHTML = slides.length > 1 ? slides.map((_, i) => `<i class="${i === index ? "on" : ""}"></i>`).join("") : "";
+  $("#welcome-skip").hidden = last;
+  $("#welcome-next").textContent = last ? (slide.last && !state.welcome.hasCourses ? slide.last : slide.done || "C'est parti") : "Suivant";
+}
+function closeWelcome(finished) {
+  const { onDone, slides, index } = state.welcome || {};
+  $("#welcome-dialog").close();
+  if (onDone) onDone(finished && index === slides.length - 1);
+}
+$("#welcome-next").addEventListener("click", () => {
+  const w = state.welcome;
+  if (w.index < w.slides.length - 1) { w.index += 1; return renderWelcome(); }
+  closeWelcome(true);
+});
+$("#welcome-skip").addEventListener("click", () => closeWelcome(false));
+$("#welcome-dialog").addEventListener("keydown", (e) => {
+  const w = state.welcome;
+  if (e.key === "ArrowRight") { e.preventDefault(); $("#welcome-next").click(); }
+  if (e.key === "ArrowLeft" && w.index > 0) { e.preventDefault(); w.index -= 1; renderWelcome(); }
+});
+$("#welcome-dialog").addEventListener("cancel", () => closeWelcome(false));  // Échap
+
+function showWelcome(settings, { replay = false } = {}) {
+  api("/api/courses").then((courses) => {
+    openWelcome(WELCOME, { onDone: (finished) => {
+      if (!replay) api("/api/settings", jsonBody("PUT", { welcome_seen: "1" })).catch(() => {});
+      // Dernier carton, sans cours encore : on crée le premier
+      if (finished && !courses.length) { go("#/cours"); setTimeout(() => $("#new-course-btn")?.click(), 300); }
+    } });
+    state.welcome.hasCourses = courses.length > 0;
+    renderWelcome();
+  }).catch(() => {});
+}
+function showWhatsNew(version) {
+  const items = WHATS_NEW[version];
+  openWelcome([{ small: true, art: `<span class="w-new">VERSION ${escapeHtml(version.replace(/\.0$/, ""))}</span><div class="w-logo small">${LOGO_SVG}</div>`,
+    title: "Quoi de neuf", done: "C'est parti",
+    html: `<ul class="w-whatsnew">${items.map(([icon, title, text]) => `<li><span class="w-ic">${icon}</span><div>${title}<small>${text}</small></div></li>`).join("")}</ul>` }],
+  { onDone: () => api("/api/settings", jsonBody("PUT", { welcome_seen: version })).catch(() => {}) });
+}
+// Au lancement : les cartons une seule fois, puis le « Quoi de neuf » de chaque version qui en a
+api("/api/settings").then((settings) => {
+  if (!settings.welcome_seen) return showWelcome(settings);
+  if (settings.news_seen !== settings.version && WHATS_NEW[settings.version]) return showWhatsNew(settings.version);
+}).catch(() => {});
+$("#welcome-replay").addEventListener("click", () => showWelcome(null, { replay: true }));
+
+function quizKeys(e) {
+  const typing = e.target.matches?.("textarea, input[type=text]");
+  const q = state.questions[state.index];
+  if (isKey(e, "validate") && !e.shiftKey) {
+    e.preventDefault();
+    if (!$("#validate-btn").hidden) validate();
+    else if (!$("#next-btn").hidden) next();
+    return;
+  }
+  if (isKey(e, "quit")) { e.preventDefault(); return quitByKey(); }
+  if (typing) return;  // on écrit une réponse : les lettres et les flèches restent au champ
+  if (isKey(e, "previous") && !$("#prev-btn").hidden) { e.preventDefault(); return $("#prev-btn").click(); }
+  if (isKey(e, "next") && state.answered && !$("#next-btn").hidden) { e.preventDefault(); return next(); }
+  if (state.answered) return;
+  const index = pickedChoice(e, q?.choices);
+  if (index >= 0) { e.preventDefault(); chooseByKey("input[name=choice]", index, validate); }
+}
+
 function sessionKeys(e) {
   const s = state.session;
   const item = s?.items[s.index];
-  if (!item || !$("#cards-done").hidden || e.metaKey || e.ctrlKey) return;
+  if (!item || e.metaKey || e.ctrlKey) return;
+  if (isKey(e, "quit")) { e.preventDefault(); return quitByKey(); }
+  if (!$("#cards-done").hidden) return;
   if (item.kind === "card") {
     if (e.target.id === "typed-answer") return;
-    if ((e.key === " " || (e.key === "Enter" && !s.revealed)) && !e.target.closest?.("button")) { e.preventDefault(); flipCard(); }
-    else if (s.revealed && /^[1-3]$/.test(e.key)) { e.preventDefault(); rateCard(["again", "hard", "good"][e.key - 1]); }
+    const flip = isKey(e, "flip") || (isKey(e, "validate") && !s.revealed);
+    if (flip && !e.target.closest?.("button")) { e.preventDefault(); return flipCard(); }
+    const rating = ["again", "hard", "good"].find((r) => isKey(e, r));
+    if (s.revealed && rating) { e.preventDefault(); rateCard(rating); }
     return;
   }
-  if (/^[1-9]$/.test(e.key) && e.target.tagName !== "TEXTAREA" && !$("#sq-validate").hidden) {
-    document.querySelectorAll("input[name=sq-choice]")[e.key - 1]?.click();
-  } else if (e.key === "Enter" && !e.shiftKey && !e.target.closest?.("button")) {
+  const typing = e.target.matches?.("textarea, input[type=text]");
+  if (isKey(e, "validate") && !e.shiftKey && !e.target.closest?.("button")) {
     e.preventDefault();
     if (!$("#sq-validate").hidden) validateSessionQuestion();
     else if (!$("#sq-next").hidden) nextItem();
+    return;
   }
+  if (typing) return;
+  if (isKey(e, "next") && !$("#sq-next").hidden) { e.preventDefault(); return nextItem(); }
+  if ($("#sq-validate").hidden) return;
+  const index = pickedChoice(e, item.question.choices);
+  if (index >= 0) { e.preventDefault(); chooseByKey("input[name=sq-choice]", index, validateSessionQuestion); }
+}
+
+function examKeys(e) {
+  const exam = state.exam;
+  if (!exam?.running) return;
+  if (isKey(e, "quit")) { e.preventDefault(); return quitByKey(); }
+  if (e.target.matches?.("textarea, input[type=text]")) return;
+  if ((isKey(e, "previous")) && !$("#exam-prev").disabled && !$("#exam-prev").hidden) { e.preventDefault(); return $("#exam-prev").click(); }
+  if ((isKey(e, "next") || isKey(e, "validate")) && !$("#exam-next").disabled && !$("#exam-next").hidden) { e.preventDefault(); return $("#exam-next").click(); }
+  const item = exam.items[exam.index];
+  const index = pickedChoice(e, item?.question?.choices);
+  if (index >= 0) { e.preventDefault(); chooseByKey("input[name=exam-choice]", index, null); }
 }
 
 $("#validate-btn").addEventListener("click", validate);
 $("#next-btn").addEventListener("click", next);
 document.addEventListener("keydown", (e) => {
-  if (document.querySelector("dialog[open]")) return;  // on écrit dans une fenêtre (carte, signalement…)
+  if (document.querySelector("dialog[open]") || state.capturingKey) return;  // une fenêtre ouverte, ou on règle une touche
+  if (e.metaKey || e.ctrlKey || e.altKey) return;
   if (!$("#view-cards").hidden) return sessionKeys(e);
-  if ($("#view-quiz").hidden || e.key !== "Enter" || e.shiftKey) return;
-  e.preventDefault();
-  if (!$("#validate-btn").hidden) validate();
-  else if (!$("#next-btn").hidden) next();
+  if (!$("#view-exam").hidden) return examKeys(e);
+  if (!$("#view-quiz").hidden) return quizKeys(e);
 });
 
 // Texte à trous : la phrase du cours avec un champ à la place du trou.
@@ -4098,7 +4380,7 @@ function showExamItem() {
     } else {
       $("#exam-text").textContent = q.question;
       area.innerHTML = q.choices.map((c, i) => `<label class="choice"><input type="radio" name="exam-choice" value="${i}"
-        ${saved === c ? "checked" : ""}><span>${escapeHtml(c)}</span></label>`).join("");
+        ${saved === c ? "checked" : ""}><span>${escapeHtml(c)}</span>${keyBadge(q.choices, i)}</label>`).join("");
     }
   }
   const input = $("#exam-input");
