@@ -459,6 +459,18 @@
           <li>Le quiz ou les cartes arrivent dans Pirouette (Réviser et Mes cours), notés « App Claude ». Chaque question est
             vérifiée comme les autres : elle doit venir de ton cours.</li>
         </ol>
+        <details class="claude-tips-box">
+          <summary>Bien utiliser ton forfait Claude</summary>
+          <p class="small-text muted">Chaque création consomme une bonne part du forfait : Claude relit tout le contexte à
+            chaque étape. En gratuit, compte quelques quiz par tranche de 5 heures.</p>
+          <ul class="claude-tips">
+            <li><b>Un chapitre à la fois</b> plutôt que tout le cours : Claude lit moins de texte.</li>
+            <li><b>Colle la demande préparée par Pirouette</b> : elle évite à Claude de chercher tes cours.</li>
+            <li><b>Enchaîne dans la même conversation</b> (quiz puis flashcards du même chapitre) : le cours n'est lu qu'une fois.</li>
+            <li><b>Nouvelle conversation pour un autre cours</b> : une conversation qui s'allonge coûte plus cher à chaque message.</li>
+            <li>Forfait épuisé ? L'<b>IA locale</b> prend le relais, gratuitement. Ton compteur : app Claude › Réglages › Utilisation.</li>
+          </ul>
+        </details>
         <p class="muted small-text"><b>Pas besoin que Pirouette soit ouverte :</b> l'app Claude la lance toute seule, en
           arrière-plan et sans fenêtre, quand elle en a besoin. Si Pirouette est ouverte, change de page pour voir les
           nouveautés. Rien à chercher dans l'app Claude : pour vérifier, clique sur le « + » (ou l'icône d'outils) de la zone
@@ -784,8 +796,21 @@
           <p class="app-request-text" id="app-request-text"></p>
           <div class="actions">
             <button class="primary small" type="button" id="app-request-copy">Copier la demande</button>
+            <button class="ghost small" type="button" id="app-request-next" hidden>Copier la suite : les flashcards</button>
           </div>
           <p class="status" id="app-request-status" hidden></p>
+          <details class="claude-tips-box">
+            <summary>Bien utiliser ton forfait Claude</summary>
+            <p class="small-text muted">Chaque création consomme une bonne part du forfait : Claude relit tout le contexte à
+              chaque étape. En gratuit, compte quelques quiz par tranche de 5 heures.</p>
+            <ul class="claude-tips">
+            <li><b>Un chapitre à la fois</b> plutôt que tout le cours : Claude lit moins de texte.</li>
+            <li><b>Colle la demande préparée par Pirouette</b> : elle évite à Claude de chercher tes cours.</li>
+            <li><b>Enchaîne dans la même conversation</b> (quiz puis flashcards du même chapitre) : le cours n'est lu qu'une fois.</li>
+            <li><b>Nouvelle conversation pour un autre cours</b> : une conversation qui s'allonge coûte plus cher à chaque message.</li>
+            <li>Forfait épuisé ? L'<b>IA locale</b> prend le relais, gratuitement. Ton compteur : app Claude › Réglages › Utilisation.</li>
+          </ul>
+          </details>
         </div>
         <div class="grid">
           <div class="field" id="local-model-field">

@@ -1058,3 +1058,9 @@ main { padding-bottom: 120px; }
 /* Messages longs : deux lignes, le reste au survol */
 .job small { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; white-space: normal; }
 .jobs-dot.wait { background: var(--warn); }
+
+/* Bien utiliser son forfait Claude */
+.claude-tips-box { margin-top: 12px; }
+.claude-tips-box summary { cursor: pointer; font-size: 14px; font-weight: 600; color: var(--accent-ink); }
+.claude-tips-box p { margin: 8px 0 4px; }
+.claude-tips { margin: 6px 0 0; padding-left: 20px; display: grid; gap: 5px; font-size: 14px; }

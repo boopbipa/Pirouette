@@ -215,6 +215,11 @@ des chapitres pour que Claude ne lise que ce qu'il faut et économise ton forfai
 **Local (Ollama)** (gratuit, hors ligne). Le dernier choix est retenu. (Claude par clé API est mis de côté ;
 `PIROUETTE_CLAUDE=1` le réactive.)
 
+**Bien utiliser son forfait Claude** (encart dépliable sous la demande et dans Réglages) : un chapitre à la fois,
+la demande préparée par Pirouette, quiz puis flashcards dans la même conversation (« Copier la suite : les
+flashcards » : le cours n'est lu qu'une fois), une nouvelle conversation par cours, et l'IA locale quand le forfait
+est épuisé.
+
 **L'app Claude** (Mac) : Réglages → L'app Claude → « Brancher l'app Claude », puis quitter et rouvrir l'app Claude.
 Pirouette apparaît dans ses outils (protocole MCP) : on demande par exemple « Fais-moi un quiz de 10 questions sur le
 chapitre 2 de Neuro dans Pirouette » ou « Ajoute 15 flashcards sur la myéline ». Claude liste les cours, lit les

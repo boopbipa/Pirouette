@@ -1750,13 +1750,38 @@ function appRequest() {
     + `Va droit au but : ne liste pas les cours, ${read}, puis enregistre ${each
       ? "un quiz par chapitre (pirouette_creer_quiz, avec la clé du chapitre dans « chapitres »)" : "le quiz (pirouette_creer_quiz)"}. ${brief}`;
 }
+// La suite, à coller dans la même conversation : les flashcards des mêmes chapitres, sans relire le cours.
+function appFollowUp() {
+  const units = chapterUnits(state.course);
+  const chosen = units.filter((u) => isChecked(u.key));
+  const listed = chosen.length ? chosen : units;
+  return `Dans cette même conversation, ajoute aussi 15 flashcards sur ces mêmes chapitres (${listed.map((u) => u.key).join(", ")}). `
+    + "Tu as déjà lu le texte : ne le relis pas. Enregistre-les avec pirouette_ajouter_cartes, puis réponds par un résumé court.";
+}
 function renderAppRequest() {
-  if (!$("#app-request").hidden) $("#app-request-text").textContent = appRequest();
+  if ($("#app-request").hidden) return;
+  $("#app-request-text").textContent = appRequest();
+  $("#app-request-next").hidden = state.createKind !== "quiz";
 }
 // La demande suit les réglages de la page (nombre, types, chapitres, thème).
 ["#num-questions", "#cards-count", "#focus"].forEach((id) => $(id).addEventListener("input", renderAppRequest));
 $("#view-create").addEventListener("change", renderAppRequest);
 $("#view-create").addEventListener("click", () => setTimeout(renderAppRequest, 0));
+async function copyText(text) {
+  try {
+    await navigator.clipboard.writeText(text);
+  } catch {
+    const area = Object.assign(document.createElement("textarea"), { value: text });
+    document.body.append(area);
+    area.select();
+    document.execCommand("copy");
+    area.remove();
+  }
+}
+$("#app-request-next").addEventListener("click", async () => {
+  await copyText(appFollowUp());
+  setStatus("#app-request-status", "Suite copiée. Colle-la dans la même conversation, une fois le quiz enregistré.", true);
+});
 $("#app-request-copy").addEventListener("click", async () => {
   const text = appRequest();
   try {
