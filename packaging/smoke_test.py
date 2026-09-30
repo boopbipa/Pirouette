@@ -103,6 +103,11 @@ def main(binary: str) -> None:
             assert set(result["results"]) == {"cours.pdf", "cours.docx", "cours.pptx"}, result
             chars = {f["name"]: f["chars"] for f in result["course"]["files"]}
             assert all(n > 10 for n in chars.values()), chars
+            # Figures pour Claude : une page de PDF rendue en image (pdfium bien inclus dans l'app).
+            pdf_id = next(f["id"] for f in result["course"]["files"] if f["name"] == "cours.pdf")
+            status, image = request(f"{base}/api/courses/{course_id}/figure?ref={pdf_id}:1")
+            assert status == 200 and image[:2] == b"\xff\xd8", (status, image[:8])
+            print(f"Page de PDF rendue en image : {len(image)} octets")
             # Un vrai fichier Pages est lu directement, sans l'app Pages.
             pages = Path(__file__).resolve().parent.parent / "tests" / "data" / "iwork" / "testPages2013.pages"
             data, content_type = multipart([("vrai.pages", pages.read_bytes())])

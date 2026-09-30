@@ -511,6 +511,28 @@ class Store:
             entry.update(chapters=chapters)
         self._save_course(course)
 
+    def figure_index(self, course_id: str, file_id: str) -> dict:
+        """Les figures repérées dans un fichier (voir figures.py), calculées une fois puis gardées à côté du fichier."""
+        from . import figures
+
+        cache = self._course_dir(course_id) / "files" / f"{_check_id(file_id, 8)}.figures.json"
+        if cache.exists():
+            try:
+                index = json.loads(cache.read_text(encoding="utf-8"))
+                if index.get("version") == figures.INDEX_VERSION:
+                    return index
+            except (json.JSONDecodeError, OSError):
+                pass
+        original = self.original_file(course_id, file_id)
+        if original is None or not figures.supported(original[0]):
+            return {"version": figures.INDEX_VERSION, "pages": {}}
+        try:
+            index = figures.build_index(*original)
+        except Exception:  # fichier abîmé : pas de figures, le texte reste lisible
+            index = {"version": figures.INDEX_VERSION, "pages": {}}
+        cache.write_text(json.dumps(index), encoding="utf-8")
+        return index
+
     def file_text(self, course_id: str, file_id: str) -> str:
         return (self._course_dir(course_id) / "files" / f"{_check_id(file_id, 8)}.txt").read_text(encoding="utf-8")
 

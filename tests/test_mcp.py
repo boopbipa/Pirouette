@@ -46,7 +46,7 @@ def test_handshake_and_tool_list(tmp_path):
     assert replies[0]["result"]["protocolVersion"] == "2025-06-18"
     assert replies[0]["result"]["serverInfo"]["name"] == "pirouette"
     names = [t["name"] for t in replies[1]["result"]["tools"]]
-    assert names == ["pirouette_cours", "pirouette_lire", "pirouette_creer_quiz", "pirouette_ajouter_cartes", "pirouette_difficultes"]
+    assert names == ["pirouette_cours", "pirouette_lire", "pirouette_creer_quiz", "pirouette_ajouter_cartes", "pirouette_figure", "pirouette_difficultes"]
     assert replies[3]["error"]["code"] == -32601
 
 

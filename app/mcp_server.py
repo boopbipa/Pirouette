@@ -11,11 +11,13 @@ sont écartés, et Claude reçoit la raison pour corriger.
 
 from __future__ import annotations
 
+import base64
 import json
 import sys
 from datetime import datetime
 
 from . import __version__
+from . import figures as figures_module
 from .chapters import chapter_text
 from .grounding import Grounding, is_logistics
 from .quiz import QUESTION_TYPES, SYSTEM_PROMPT, giveaway, normalize_question
@@ -25,13 +27,16 @@ PROTOCOL_VERSIONS = ("2025-06-18", "2025-03-26", "2024-11-05")
 PART_CHARS = 40_000   # texte du cours renvoyé par appel (le reste avec « partie »)
 MAX_QUESTIONS = 40
 MAX_CARDS = 60
+MAX_FIGURES = 4
 
 INSTRUCTIONS = """Pirouette est l'app de révision de l'étudiant : ses cours (PDF, Word, Pages…) découpés en chapitres,
 ses quiz et ses flashcards. Pour créer un quiz ou des flashcards : 1) pirouette_cours pour trouver le cours et les
 chapitres, 2) pirouette_lire pour lire le texte des chapitres voulus, 3) pirouette_creer_quiz ou
 pirouette_ajouter_cartes. Si la demande donne déjà l'identifiant du cours et les clés des chapitres (demande copiée
 depuis Pirouette), saute l'étape 1 et ne lis que ces chapitres : c'est plus rapide et bien moins coûteux. Tout doit
-venir du texte du cours, avec une citation exacte (« source »). Écris en français sauf demande contraire, tutoie
+venir du texte du cours, avec une citation exacte (« source »). Le texte signale les schémas et images par
+« [Figure …] » : ne les regarde (pirouette_figure) que si le texte ne suffit pas ; une question qui a besoin de la
+figure la cite dans « figure » (Pirouette l'affichera). Écris en français sauf demande contraire, tutoie
 l'étudiant, et termine par un résumé court."""
 
 QUESTION_RULES = SYSTEM_PROMPT.split("Règles :", 1)[1].rsplit("- Réponds uniquement", 1)[0].strip()
@@ -84,6 +89,9 @@ TOOLS = [
                     "answer": {"type": "string"},
                     "explanation": {"type": "string"},
                     "source": {"type": "string", "description": "La phrase du cours, recopiée mot pour mot."},
+                    "figure": {"type": "string", "description": "Facultatif : repère d'une figure (« f1a2b3c4:12 ») "
+                                                                "que Pirouette affichera avec la question, si elle en "
+                                                                "a besoin (schéma à légender…)."},
                 },
                 "required": ["type", "question", "choices", "answer", "explanation", "source"],
             }},
@@ -103,6 +111,18 @@ TOOLS = [
                 "required": ["recto", "verso", "source"],
             }},
         }, "required": ["cours", "cartes"], "additionalProperties": False},
+    },
+    {
+        "name": "pirouette_figure",
+        "description": "Montre une ou plusieurs figures du cours (schéma, image, graphique, tableau), repérées dans le "
+                       "texte de pirouette_lire par « [Figure …] ». Chaque image coûte cher : ne la demande que si le "
+                       "texte autour ne suffit pas (schéma à légender, graphique à lire, étapes d'un cycle…). Pour un "
+                       "PDF, la figure est la page entière.",
+        "inputSchema": {"type": "object", "properties": {
+            "cours": {"type": "string", "description": "Identifiant du cours."},
+            "figures": {"type": "array", "minItems": 1, "maxItems": MAX_FIGURES, "items": {"type": "string"},
+                        "description": "Les repères, sans les crochets : « f1a2b3c4:12 »."},
+        }, "required": ["cours", "figures"], "additionalProperties": False},
     },
     {
         "name": "pirouette_difficultes",
@@ -131,23 +151,31 @@ class Pirouette:
         except Exception:
             raise ToolError(f"Cours introuvable : « {course_id} ». Utilise pirouette_cours pour voir les identifiants.")
 
-    def _sources(self, course: dict, chapters: list[str] | None) -> list[tuple[str, str]]:
+    def _sources(self, course: dict, chapters: list[str] | None, reading: bool = False) -> list[tuple[str, str]]:
+        """Les textes (nom, texte) des chapitres voulus. Pour la lecture par Claude (reading), le texte est allégé
+        (en-têtes répétés, numéros de page) et marque les figures ; pour vérifier les citations, il reste tel quel."""
         wanted = {str(c) for c in chapters or [] if str(c)}
         sources = []
         for f in course["files"]:
             text = self.store.file_text(course["id"], f["id"])
+            prepare = self._reader(course["id"], f["id"], text) if reading else (lambda body: body)
             if not wanted or f["id"] in wanted:
-                sources.append((f["name"], text))
+                sources.append((f["name"], prepare(text)))
                 continue
             chapters_list = f.get("chapters") or []
             for position, chapter in enumerate(chapters_list):
                 if f"{f['id']}-{position}" in wanted:
-                    sources.append((f"{f['name']} — {chapter['title']}", chapter_text(text, chapters_list, position)))
+                    sources.append((f"{f['name']} — {chapter['title']}", prepare(chapter_text(text, chapters_list, position))))
         if not course["files"]:
             raise ToolError("Ce cours n'a pas encore de fichier : l'étudiant doit d'abord y importer son cours.")
         if not sources:
             raise ToolError("Aucun de ces chapitres n'existe dans ce cours : vérifie les clés avec pirouette_cours.")
         return sources
+
+    def _reader(self, course_id: str, file_id: str, text: str):
+        repeated = figures_module.boilerplate(text)
+        pages = self.store.figure_index(course_id, file_id).get("pages", {})
+        return lambda body: figures_module.add_markers(figures_module.compact(body, repeated), file_id, pages)
 
     def _meta(self, course: dict, sources: list, chapters: list[str] | None) -> dict:
         scope = [name.split(" — ", 1)[-1] for name, _ in sources] if chapters else []
@@ -183,7 +211,7 @@ class Pirouette:
 
     def pirouette_lire(self, cours: str, chapitres: list[str] | None = None, partie: int = 1) -> str:
         course = self._course(cours)
-        text = "\n\n".join(f"=== {name} ===\n{body}" for name, body in self._sources(course, chapitres))
+        text = "\n\n".join(f"=== {name} ===\n{body}" for name, body in self._sources(course, chapitres, reading=True))
         parts = max(1, -(-len(text) // PART_CHARS))
         partie = min(max(1, int(partie or 1)), parts)
         chunk = text[(partie - 1) * PART_CHARS:partie * PART_CHARS]
@@ -230,6 +258,12 @@ class Pirouette:
             elif is_duplicate(**notion, others=previous):
                 refused.append((number, label, "déjà posée dans un autre quiz de ce cours"))
             else:
+                if raw.get("figure"):
+                    try:
+                        entry, figure_key = self._figure(course, raw["figure"])
+                        question["figure"] = f"{entry['id']}:{figure_key}"
+                    except ToolError:
+                        pass  # repère inconnu : la question reste, sans image
                 seen.add(key)
                 previous.append(notion)
                 kept.append(question)
@@ -279,6 +313,31 @@ class Pirouette:
             raise ToolError("\n".join(lines))
         return "\n".join(lines)
 
+    def _figure(self, course: dict, ref: str) -> tuple[dict, str]:
+        """Le fichier et la clé d'un repère « fichier:clé » ; ToolError s'il n'existe pas."""
+        file_id, _, key = str(ref).strip().strip("[]").removeprefix("Figure ").partition(":")
+        entry = next((f for f in course["files"] if f["id"] == file_id), None)
+        pages = self.store.figure_index(course["id"], file_id).get("pages", {}) if entry else {}
+        if not any(key in keys for keys in pages.values()):
+            raise ToolError(f"Figure introuvable : « {ref} ». Utilise un repère « [Figure …] » donné par pirouette_lire.")
+        return entry, key
+
+    def pirouette_figure(self, cours: str, figures: list) -> list:
+        course = self._course(cours)
+        content = []
+        for ref in list(figures)[:MAX_FIGURES]:
+            entry, key = self._figure(course, ref)
+            name, data = self.store.original_file(course["id"], entry["id"])
+            try:
+                image, mime = figures_module.render(name, data, key)
+            except ValueError as exc:
+                content.append({"type": "text", "text": f"Figure {ref} : impossible de l'afficher ({exc})."})
+                continue
+            where = f"page {key}" if "." not in key else f"diapo {key.split('.')[0]}"
+            content.append({"type": "text", "text": f"Figure {ref} — « {entry['name']} », {where} :"})
+            content.append({"type": "image", "data": base64.b64encode(image).decode(), "mimeType": mime})
+        return content
+
     def pirouette_difficultes(self, cours: str = "") -> str:
         ids = [self._course(cours)["id"]] if cours else self.store.active_course_ids()
         cards = self.store.weak_cards(ids)[:15]
@@ -325,14 +384,15 @@ def handle(tools: Pirouette, message: dict) -> dict | None:
         if name not in {t["name"] for t in TOOLS}:
             return {"jsonrpc": "2.0", "id": msg_id, "error": {"code": -32602, "message": f"Outil inconnu : {name}"}}
         try:
-            text, error = getattr(tools, name)(**args), False
+            result, error = getattr(tools, name)(**args), False
         except ToolError as exc:
-            text, error = str(exc), True
+            result, error = str(exc), True
         except TypeError as exc:
-            text, error = f"Paramètres invalides : {exc}", True
+            result, error = f"Paramètres invalides : {exc}", True
         except Exception as exc:  # une erreur inattendue ne doit pas couper la conversation
-            text, error = f"Erreur de Pirouette : {exc}", True
-        return ok({"content": [{"type": "text", "text": text}], "isError": error})
+            result, error = f"Erreur de Pirouette : {exc}", True
+        content = result if isinstance(result, list) else [{"type": "text", "text": result}]
+        return ok({"content": content, "isError": error})
     return {"jsonrpc": "2.0", "id": msg_id, "error": {"code": -32601, "message": f"Méthode inconnue : {method}"}}
 
 

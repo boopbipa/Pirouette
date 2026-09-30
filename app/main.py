@@ -18,13 +18,13 @@ from pathlib import Path
 from dotenv import load_dotenv
 from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.concurrency import run_in_threadpool
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, PlainTextResponse, StreamingResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, PlainTextResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 load_dotenv()
 
-from . import backup, claude_desktop, exchange, local_ai, plan as plans, reminder, srs, updater  # noqa: E402
+from . import backup, claude_desktop, exchange, figures, local_ai, plan as plans, reminder, srs, updater  # noqa: E402
 from .grounding import Grounding  # noqa: E402
 from .jobs import Jobs  # noqa: E402
 from .chapters import (CHAPTERS_SCHEMA, CHAPTERS_SYSTEM, ai_candidates, build_chapters_prompt,  # noqa: E402
@@ -544,6 +544,20 @@ async def resolve_outdated(course_id: str, body: OutdatedIn) -> dict:
     if body.questions or body.cards:
         store.remove_outdated(course_id, body.questions, body.cards)
     return store.outdated_items(course_id)
+
+
+@app.get("/api/courses/{course_id}/figure")
+async def course_figure(course_id: str, ref: str) -> Response:
+    """L'image d'une figure du cours (« fichier:clé »), montrée avec la question qui s'en sert."""
+    file_id, _, key = ref.partition(":")
+    original = store.original_file(course_id, file_id)
+    if original is None:
+        raise HTTPException(404, "Figure introuvable")
+    try:
+        image, mime = await run_in_threadpool(figures.render, *original, key)
+    except ValueError:
+        raise HTTPException(404, "Figure introuvable")
+    return Response(image, media_type=mime, headers={"Cache-Control": "max-age=86400"})
 
 
 @app.get("/api/courses/{course_id}/files/{file_id}/definitions")

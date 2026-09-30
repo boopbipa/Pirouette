@@ -234,6 +234,14 @@ double) ; Claude reçoit la raison des refus pour corriger. Une question refusé
 fenêtre. Techniquement : Pirouette s'inscrit dans `~/Library/Application Support/Claude/claude_desktop_config.json`
 (clé `mcpServers`, sans toucher aux autres outils) et l'app Claude lance `Pirouette --mcp`.
 
+**Figures et économie de jetons (app Claude)** : Claude ne lit que les chapitres demandés, et un texte allégé (les
+en-têtes et pieds de page répétés sur chaque page et les numéros de page sont retirés ; les phrases du cours restent
+exactes). Les images ne sont pas envoyées d'office : Pirouette repère les pages de PDF qui ont un schéma, une image ou
+un graphique, et les images des diapos PowerPoint, et laisse dans le texte un repère court « [Figure …] ». Claude ne
+demande l'image (outil `pirouette_figure`, réduite à 1 100 pixels) que si le texte ne suffit pas. Une question qui a
+besoin de la figure (schéma à légender) l'affiche au-dessus des réponses, dans le quiz comme en révision et en partiel
+(un clic l'agrandit). Pour Word, Pages et Keynote, exporte en PDF pour profiter des figures.
+
 **Réinitialiser les statistiques d'un cours** : menu « ••• » du cours. Scores des quiz, réussites par question,
 progression des flashcards (elles redeviennent nouvelles), historique des révisions et notes des partiels repartent
 de zéro ; les quiz, les cartes et les fichiers sont gardés.

@@ -1099,3 +1099,10 @@ main { padding-bottom: 120px; }
 .chapter-menu { position: absolute; right: auto; min-width: 210px; }
 .chapter-chip { display: flex; align-items: center; gap: 10px; margin: 0 0 12px; padding: 8px 12px; border-radius: 10px;
                 background: var(--accent-soft); font-size: 14px; }
+
+/* Figure du cours sous une question */
+.q-figure { display: block; max-width: 100%; max-height: 360px; margin: 4px 0 16px; border-radius: 10px;
+            border: 1px solid var(--border); background: #fff; object-fit: contain; }
+.q-figure[hidden] { display: none; }
+.q-figure { cursor: zoom-in; }
+.q-figure.zoomed { max-height: none; cursor: zoom-out; }

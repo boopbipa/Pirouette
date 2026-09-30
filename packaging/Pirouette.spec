@@ -4,7 +4,7 @@ import re
 import sys
 from pathlib import Path
 
-from PyInstaller.utils.hooks import collect_data_files, collect_submodules
+from PyInstaller.utils.hooks import collect_data_files, collect_dynamic_libs, collect_submodules
 
 ROOT = Path(SPECPATH).parent
 VERSION = re.search(r'__version__ = "(.+)"', (ROOT / "app" / "__init__.py").read_text()).group(1)
@@ -13,9 +13,13 @@ a = Analysis(
     [str(ROOT / "desktop.py")],
     pathex=[str(ROOT)],
     datas=[(str(ROOT / "app" / "static"), "app/static"),
-           *collect_data_files("docx"), *collect_data_files("pptx")],
+           *collect_data_files("docx"), *collect_data_files("pptx"),
+           *collect_data_files("pypdfium2"), *collect_data_files("pypdfium2_raw")],
+    # pdfium (rendu des pages de PDF en image, pour montrer les figures à Claude) : bibliothèque native.
+    binaries=collect_dynamic_libs("pypdfium2_raw"),
     # uvicorn charge sa boucle et son protocole HTTP par leur nom : on les inclut explicitement.
-    hiddenimports=[*collect_submodules("app"), *collect_submodules("uvicorn"), "python_multipart"],
+    hiddenimports=[*collect_submodules("app"), *collect_submodules("uvicorn"), "python_multipart",
+                   *collect_submodules("pypdfium2"), "pypdfium2_raw"],
     excludes=["tkinter", "pytest", "playwright", "IPython"],
     noarchive=False,
 )

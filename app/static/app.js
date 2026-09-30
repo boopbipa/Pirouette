@@ -2352,6 +2352,7 @@ function showSessionQuestion(item) {
   const q = item.question;
   $("#sq-type").textContent = (TYPE_LABELS[q.type] || q.type) + (q.kind === "cours" ? " · Question de cours" : "");
   $("#sq-text").textContent = q.question;
+  showFigure("#sq-figure", q, item.course_id);
   $("#sq-feedback").hidden = true;
   $("#sq-validate").hidden = false;
   $("#sq-next").hidden = true;
@@ -3011,6 +3012,17 @@ function backToCourse() {
 }
 $("#back-course-btn").addEventListener("click", backToCourse);
 
+// Figure du cours affichée sous la question (quiz écrits par Claude à partir d'un schéma)
+function showFigure(id, q, courseId) {
+  const img = $(id);
+  img.classList.remove("zoomed");
+  img.hidden = !(q.figure && courseId);
+  if (!img.hidden) img.src = `/api/courses/${courseId}/figure?ref=${encodeURIComponent(q.figure)}`;
+  else img.removeAttribute("src");
+}
+
+document.querySelectorAll(".q-figure").forEach((img) => img.addEventListener("click", () => img.classList.toggle("zoomed")));
+
 function renderQuestion() {
   const q = state.questions[state.index];
   const total = state.questions.length;
@@ -3022,6 +3034,7 @@ function renderQuestion() {
   $("#question-type").textContent = (TYPE_LABELS[q.type] || q.type) + (q.kind === "cours" ? " · Question de cours" : "")
     + (q.manual ? " · Ta question" : "");
   $("#question-text").textContent = q.question;
+  showFigure("#question-figure", q, state.quiz?.course_id);
   $("#feedback").hidden = true;
   $("#validate-btn").hidden = false;
   $("#next-btn").hidden = true;
@@ -3678,12 +3691,14 @@ function showExamItem() {
   const total = exam.items.length;
   const area = $("#exam-answer");
   if (item.kind === "card") {
+    $("#exam-figure").hidden = true;
     $("#exam-tag").textContent = `${exam.index + 1} / ${total} · Flashcard`;
     $("#exam-text").textContent = item.card.front;
     area.innerHTML = `<textarea id="exam-input" rows="3" placeholder="Ta réponse…"></textarea>`;
   } else {
     const q = item.question;
     $("#exam-tag").textContent = `${exam.index + 1} / ${total} · ${TYPE_LABELS[q.type] || q.type}`;
+    showFigure("#exam-figure", q, exam.course.id);
     if (q.type === "texte_a_trous") {
       $("#exam-text").innerHTML = clozeHtml(q, "exam-input");
       area.innerHTML = "";
