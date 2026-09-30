@@ -127,9 +127,10 @@ dans **Safari** → menu Fichier → **Ajouter au Dock** (ou, dans Chrome / Edge
    **Un seul quiz par chapitre** : recréer un quiz sur les mêmes chapitres alimente le quiz existant (nouvelles
    questions seulement, les semblables sont écartées) au lieu d'en créer un second. Au lancement, les quiz en double
    d'un même chapitre sont regroupés (questions semblables retirées, suivi des réussites et des ratés gardé).
-5. **Flashcards** : toutes les cartes du cours sont affichées, à regarder librement : un **clic** retourne la carte.
-   On les apprend dans **Réviser**. Ajouter des cartes complète le paquet sans doublon. Au survol d'une carte : ✎ pour la corriger, ✕ pour la
-   supprimer (✎ aussi pendant la révision). « ✎ Écrire une carte » en ajoute une à la main
+5. **Flashcards** (« Mes flashcards » à côté de « Réviser ce cours ») : un **classeur** de cartes à collectionner,
+   avec le même cadre qu'en révision (argent, or, holographique selon ta progression), à lire librement : un **clic**
+   retourne la carte, « Voir les réponses » les retourne toutes. Sous chaque carte, **Modifier** et **Supprimer**
+   (✎ aussi pendant la révision). On les apprend dans **Réviser**. Ajouter des cartes complète le paquet sans doublon. « ✎ Écrire une carte » en ajoute une à la main
    (« Écrire une carte » ; « Ajouter et en écrire une autre » pour en enchaîner plusieurs ; Pirouette prévient si elle ressemble à une carte existante).
 6. **Semestres** : « + Semestre » dans Mes cours. Glisse un cours sur un semestre pour l'y ranger,
    ou choisis son semestre en haut de la page du cours. Un semestre se replie, se renomme (✎) et s'**archive** une fois
@@ -160,12 +161,18 @@ Modelfile ni de Terminal. On peut la baisser (Mac qui peine) ou la monter si la 
 sans que ça se voie, ce qui rallonge beaucoup la génération et fait chauffer le Mac. Pirouette coupe cette
 réflexion par défaut ; Réglages → IA locale → « Laisser le modèle réfléchir avant de répondre » la réactive.
 
-**Menu du haut** : **Accueil** (logo, message de bienvenue, cartes du jour et un seul bouton « Réviser » ; au premier
+**Menu du haut** : **Accueil** (logo, message de bienvenue, cartes du jour et un seul bouton « Réviser », puis, en
+fondu dessous, **Ta régularité** : le calendrier des 12 dernières semaines, un carré par jour, plus foncé quand tu as
+plus révisé ; au premier
 lancement, un guide en 3 étapes : installer l'IA locale, créer son semestre, importer son premier cours), **Mes cours** (cours et semestres),
 **Réviser**, Réglages et **Feedback** (une idée, un bug : Pirouette prépare le mail).
-La page d'un cours sert à **ranger et fabriquer** : la liste de ses **chapitres**, avec pour chacun ce qu'il contient
+La page d'un cours sert à **ranger et fabriquer** : la liste de ses **chapitres**, groupés sous le **fichier** d'où
+ils viennent (nom, nombre de chapitres, date de mise à jour). « **Nouvelle version** » y dépose la version à jour du
+fichier : elle remplace l'ancienne (même un PDF à la place d'un Keynote) et les chapitres sont redécoupés, tes quiz et
+tes cartes gardés ; « **Redécouper** » relance le repérage des chapitres. Pour chaque chapitre : ce qu'il contient
 (« 12 questions · 20 cartes »), un bouton **Créer** (un quiz ou des flashcards sur ce seul chapitre) et un menu « ••• »
-(voir les questions, voir les cartes, exporter). En bas, « Tous les quiz · Toutes les flashcards · Fichiers » ouvrent
+(voir les questions, voir les cartes, exporter). En haut à droite, « **Gérer le cours** » : renommer, semaine des
+partiels, réinitialiser les statistiques, supprimer. En bas, « Tous les quiz · Toutes les flashcards · Fichiers » ouvrent
 les pages complètes, où l'on renomme et supprime les quiz et modifie les cartes ; on s'entraîne dans **Réviser**
 (lien « Réviser ce cours → »).
 Un **fil d'Ariane** en haut (Mes cours › Cours › Quiz › …) permet de remonter d'un clic. Les menus déroulants
@@ -177,7 +184,8 @@ puis trois onglets : **Réviser**, **Rétroplanning** et **Suivi**.
   15 / 30 / 45 minutes ». Pirouette affiche la séance à faire ou la prochaine date, les séances tenues (« 4 sur 5 ») et
   un mot d'encouragement ; chaque séance commence par les cartes où tu bloques, puis les cartes du jour, avec
   quelques questions de quiz. Un cours rangé dans un semestre suit le plan du semestre.
-- **Là où tu bloques** : les 5 cartes les plus souvent oubliées, et « Revoir ces cartes ».
+- **Là où tu bloques** (replié tout en bas, un clic le déplie) : les 5 cartes les plus souvent oubliées, et « Revoir
+  ces cartes ».
 - **Par chapitre** : une ligne par chapitre avec sa barre de maîtrise (Acquis, En cours, Fragile, À voir, d'après ses
   cartes — bien ancrées, rappel à 7 jours ou plus, ou difficiles — et le meilleur score de ses quiz) et trois boutons :
   **Quiz** (le quiz du chapitre ; s'il y en a plusieurs, Pirouette demande lequel), **Cartes** (les cartes du
@@ -257,7 +265,7 @@ demande l'image (outil `pirouette_figure`, réduite à 1 100 pixels) que si le t
 besoin de la figure (schéma à légender) l'affiche au-dessus des réponses, dans le quiz comme en révision et en partiel
 (un clic l'agrandit). Pour Word, Pages et Keynote, exporte en PDF pour profiter des figures.
 
-**Réinitialiser les statistiques d'un cours** : menu « ••• » du cours. Scores des quiz, réussites par question,
+**Réinitialiser les statistiques d'un cours** : « Gérer le cours ». Scores des quiz, réussites par question,
 progression des flashcards (elles redeviennent nouvelles), historique des révisions et notes des partiels repartent
 de zéro ; les quiz, les cartes et les fichiers sont gardés.
 

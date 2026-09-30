@@ -7,6 +7,7 @@ const ICON_EDIT = svgIcon('<path d="M4 20h4L19 9l-4-4L4 16z"/><path d="m13.5 6.5
 const ICON_CALENDAR = svgIcon('<rect x="3.5" y="5" width="17" height="15" rx="2"/><path d="M3.5 10h17M8 3v4M16 3v4"/>');
 const ICON_ALERT = svgIcon('<path d="M4 5.5A1.5 1.5 0 0 1 5.5 4h13A1.5 1.5 0 0 1 20 5.5v9a1.5 1.5 0 0 1-1.5 1.5H10l-4.5 4v-4A1.5 1.5 0 0 1 4 14.5z"/><path d="M12 7.5v3.5M12 13.6h.01"/>');
 const ICON_SHARE = svgIcon('<path d="M12 15V4M8 8l4-4 4 4"/><path d="M5 12v6.5A1.5 1.5 0 0 0 6.5 20h11a1.5 1.5 0 0 0 1.5-1.5V12"/>');
+const ICON_FILE = svgIcon('<path d="M14 3H6.5A1.5 1.5 0 0 0 5 4.5v15A1.5 1.5 0 0 0 6.5 21h11a1.5 1.5 0 0 0 1.5-1.5V8z"/><path d="M14 3v5h5M9 13h6M9 17h4"/>');
 const ICON_TRASH = svgIcon('<path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/>');
 
 const state = {
@@ -198,6 +199,7 @@ $("#home-guide").addEventListener("click", async (e) => {
 async function openHome() {
   const [profile, stats, config, folders] = await Promise.all([api("/api/profile"), api("/api/stats"), api("/api/config"), api("/api/folders")]);
   const guiding = renderGuide(config, folders, stats);
+  renderHomeHeat(guiding);
   $("#setup-banner").hidden = guiding || config.local.available || config.claude.available;
   $(".home-actions").hidden = guiding;
   state.course = null;
@@ -1253,11 +1255,18 @@ async function renderTiles(course) {
   document.querySelectorAll("[data-tab-link]").forEach((a) => { a.href = courseHash(a.dataset.tabLink); });
   const data = (await api(`/api/mastery?course=${course.id}`).catch(() => []))[0] || { chapters: [] };
   if (state.course?.id !== course.id) return;
-  const files = new Set(data.chapters.map((ch) => ch.file));
   state.courseChapters = data.chapters;
+  const fileOf = (ch) => course.files.find((f) => ch.key === f.id || ch.key.startsWith(`${f.id}-`));
   $("#chapter-list").innerHTML = data.chapters.map((ch, i) => {
-    const header = files.size > 1 && (i === 0 || data.chapters[i - 1].file !== ch.file)
-      ? `<li class="mastery-file">${escapeHtml(ch.file.replace(/\.[^.]+$/, ""))}</li>` : "";
+    // En tête des chapitres, le fichier d'où ils viennent : une nouvelle version les redécoupe tous
+    const f = fileOf(ch);
+    const header = f && (i === 0 || fileOf(data.chapters[i - 1]) !== f) ? `<li class="chapter-file-head">
+      <span class="chapter-file-name">${ICON_FILE}<strong title="${escapeHtml(f.name)}">${escapeHtml(f.name)}</strong>
+        <small class="muted">${f.chapters?.length ? plural(f.chapters.length, "chapitre", "chapitres") : "sans chapitres"} · mis à jour ${formatDate(f.updated_at)}</small></span>
+      <span class="chapter-file-actions">
+        <button class="ghost small" type="button" data-replace-file="${f.id}" title="Dépose la version à jour : les chapitres sont redécoupés, tes quiz et cartes gardés">Nouvelle version</button>
+        <button class="link-button inline" type="button" data-rechapter-file="${f.id}">Redécouper</button>
+      </span></li>` : "";
     const contents = [ch.questions ? plural(ch.questions, "question", "questions") : "", ch.cards ? plural(ch.cards, "carte", "cartes") : ""]
       .filter(Boolean).join(" · ") || "Rien encore";
     return `${header}<li class="chapter-item">
@@ -1268,6 +1277,37 @@ async function renderTiles(course) {
       </span></li>`;
   }).join("") || `<li class="empty muted">Ajoute un fichier pour voir ses chapitres.</li>`;
 }
+
+// Le fichier d'un groupe de chapitres : nouvelle version (même nom : elle remplace l'ancienne) ou redécoupage
+$("#chapter-list").addEventListener("click", async (e) => {
+  const replace = e.target.closest("[data-replace-file]")?.dataset.replaceFile;
+  if (replace) {
+    state.replacing = replace;
+    $("#replace-input").value = "";
+    return $("#replace-input").click();
+  }
+  const again = e.target.closest("[data-rechapter-file]")?.dataset.rechapterFile;
+  if (again) {
+    await openCourse(state.course.id, "fichiers");
+    history.replaceState(null, "", courseHash("fichiers"));
+    detectChapters([again]);
+  }
+});
+$("#replace-input").addEventListener("change", async () => {
+  const picked = $("#replace-input").files[0];
+  const old = state.course?.files.find((f) => f.id === state.replacing);
+  if (!picked || !old) return;
+  const ext = (name) => (name.match(/\.[^.]+$/)?.[0] || "").toLowerCase();
+  if (ext(picked.name) === ext(old.name)) {
+    // Même format : envoyé sous le nom de l'ancien fichier, il le remplace (nouvelle version)
+    return uploadFiles([new File([picked], old.name, { type: picked.type })]);
+  }
+  // Autre format (PDF au lieu de Keynote…) : on ajoute le nouveau fichier puis on retire l'ancien
+  if (!confirm(`Remplacer « ${old.name} » par « ${picked.name} » ? Tes quiz et tes cartes sont gardés.`)) return;
+  await uploadFiles([picked]);
+  await api(`/api/courses/${state.course.id}/files/${old.id}`, { method: "DELETE" }).catch(() => {});
+  refreshCourse();
+});
 
 // « Créer » et « … » d'un chapitre : un petit menu sous le bouton.
 $("#chapter-list").addEventListener("click", (e) => {
@@ -2055,10 +2095,13 @@ function renderCardGrid() {
   $("#cards-empty").textContent = "Pas encore de flashcards pour ce cours : clique sur « + Ajouter des cartes ».";
   $("#cards-chip").innerHTML = chapterChip();
   $("#card-grid").innerHTML = cards.filter((c) => inChapter(c.scope)).map((c) => fcardHtml(c, { removable: true })).join("");
+  $("#cards-flip-all").textContent = "Voir les réponses";
+  $("#cards-flip-all").hidden = none;
 }
 
 function fcardHtml(c, { removable = false } = {}) {
   const isNew = state.newCards?.has(c.id);
+  if (removable) return binderCardHtml(c, isNew);
   return `
     <div class="fcard" data-card="${c.id}" role="button" tabindex="0" aria-pressed="false" title="Cliquer pour retourner la carte">
       <div class="fcard-inner">
@@ -2066,10 +2109,31 @@ function fcardHtml(c, { removable = false } = {}) {
         <div class="fcard-face fcard-back"><small>${escapeHtml(c.front)}</small><p>${escapeHtml(c.back)}</p></div>
       </div>
       <span class="fcard-mark">${isNew ? "Nouvelle" : ""}</span>
-      ${removable ? `<span class="fcard-tools">
-        <button class="icon" data-edit-card="${c.id}" aria-label="Modifier cette carte" title="Modifier cette carte">${ICON_EDIT}</button>
-        <button class="icon fcard-delete" data-delete-card="${c.id}" aria-label="Supprimer cette carte" title="Supprimer cette carte">✕</button>
-      </span>` : ""}
+    </div>`;
+}
+
+// Le classeur du cours : chaque carte comme une carte à collectionner (rareté = ta progression), à retourner
+// librement, avec « Modifier » et « Supprimer » toujours visibles dessous.
+function binderCardHtml(c, isNew) {
+  const rarity = cardRarity(c);
+  const set = c.scope?.[0] || "";
+  return `
+    <div class="binder-slot">
+      <div class="fcard binder ${rarity.cls}" data-card="${c.id}" role="button" tabindex="0" aria-pressed="false" title="Cliquer pour retourner la carte">
+        <div class="fcard-inner">
+          <div class="fcard-face fcard-front"><div class="binder-body">
+            <span class="binder-head"><span class="binder-set">${escapeHtml(set)}</span><span class="binder-rarity">${isNew ? "Nouvelle !" : rarity.label}</span></span>
+            <p>${escapeHtml(c.front)}</p>
+          </div></div>
+          <div class="fcard-face fcard-back"><div class="binder-body">
+            <small>${escapeHtml(c.front)}</small><p>${escapeHtml(c.back)}</p>
+          </div></div>
+        </div>
+      </div>
+      <div class="binder-tools">
+        <button class="link-button inline" type="button" data-edit-card="${c.id}">${ICON_EDIT} Modifier</button>
+        <button class="link-button inline danger" type="button" data-delete-card="${c.id}">Supprimer</button>
+      </div>
     </div>`;
 }
 
@@ -2090,6 +2154,13 @@ $("#card-grid").addEventListener("click", async (e) => {
   }
   const el = e.target.closest("[data-card]");
   if (el) flipGridCard(el);
+});
+// Lire librement : toutes les cartes côté réponse, ou toutes côté question
+$("#cards-flip-all").addEventListener("click", () => {
+  const cards = [...document.querySelectorAll("#card-grid [data-card]")];
+  const show = !cards.every((el) => el.classList.contains("flipped"));
+  cards.forEach((el) => { el.classList.toggle("flipped", show); el.setAttribute("aria-pressed", String(show)); });
+  $("#cards-flip-all").textContent = show ? "Voir les questions" : "Voir les réponses";
 });
 $("#card-grid").addEventListener("keydown", (e) => {
   if (e.target.closest("button")) return;
@@ -2665,6 +2736,9 @@ function renderCourseRevise(course) {
   $("#course-revise").hidden = !course.cards.total && !course.quizzes.length;
   $("#course-revise-text").innerHTML = today ? `<b>${today}</b> carte${today > 1 ? "s" : ""} du jour` : "Tes cartes sont à jour.";
   $("#course-revise-link").href = `#/reviser/cours/${course.id}`;
+  $("#course-cards-link").href = courseHash("cartes");
+  $("#course-cards-link").hidden = !course.cards.total;
+  $("#course-cards-link").textContent = `Mes flashcards (${course.cards.total})`;
 }
 
 // ---------- Réviser : révision du jour, points faibles et suivi ----------
@@ -2779,6 +2853,7 @@ async function renderScopeMain() {
   // Là où tu bloques
   const hard = data.hard;
   $("#hard-card").hidden = !hard.length;
+  $("#hard-count").textContent = hard.length ? `· ${plural(hard.length, "carte", "cartes")}` : "";
   $("#hard-list").innerHTML = hard.map((h) => `<li><span>${escapeHtml(h.front)}</span>
     <small class="muted">${h.lapses ? `oubliée ${plural(h.lapses, "fois", "fois")}` : "ratée la dernière fois"}${
       scope.single ? "" : ` · ${escapeHtml(h.course)}`}</small></li>`).join("");
@@ -3021,6 +3096,30 @@ $("#retro-list").addEventListener("click", async (e) => {
   }
 });
 
+// Calendrier : une colonne par semaine (lundi en haut), plus foncé = plus de révisions.
+function heatmapHtml(days) {
+  const first = new Date(days[0].date);
+  const pad = (first.getDay() + 6) % 7;
+  const max = Math.max(1, ...days.map((d) => d.cards + d.questions));
+  const level = (n) => (!n ? 0 : Math.min(4, Math.ceil((4 * n) / max)));
+  return Array(pad).fill(`<span class="heat off"></span>`).join("") + days.map((d) => {
+    const n = d.cards + d.questions;
+    const label = `${new Date(d.date).toLocaleDateString("fr-FR", { weekday: "short", day: "numeric", month: "short" })} : `
+      + (n ? `${plural(d.cards, "carte", "cartes")}, ${plural(d.questions, "question", "questions")}` : "rien");
+    return `<span class="heat l${level(n)}" title="${label}"></span>`;
+  }).join("");
+}
+
+// Accueil : les jours où tu as révisé (12 dernières semaines), discret, sous le bouton
+async function renderHomeHeat(guiding) {
+  const box = $("#home-heat");
+  const data = guiding ? null : await api("/api/progress").catch(() => null);
+  box.hidden = !data?.active_days;
+  if (box.hidden) return;
+  $("#home-heat-note").textContent = `· ${plural(data.active_days, "jour", "jours")} en 12 semaines`;
+  $("#home-heatmap").innerHTML = heatmapHtml(data.days);
+}
+
 // ---- Onglet Suivi ----
 async function renderProgress() {
   const data = await api(`/api/progress?${new URLSearchParams(reviewScope())}`);
@@ -3033,17 +3132,7 @@ async function renderProgress() {
   $("#pg-questions-success").textContent = pctText(week.questions_success);
   $("#progress-note").textContent = `· ${plural(data.active_days, "jour", "jours")} de révision`;
 
-  // Calendrier : une colonne par semaine (lundi en haut), plus foncé = plus de révisions.
-  const first = new Date(data.days[0].date);
-  const pad = (first.getDay() + 6) % 7;
-  const max = Math.max(1, ...data.days.map((d) => d.cards + d.questions));
-  const level = (n) => (!n ? 0 : Math.min(4, Math.ceil((4 * n) / max)));
-  $("#heatmap").innerHTML = Array(pad).fill(`<span class="heat off"></span>`).join("") + data.days.map((d) => {
-    const n = d.cards + d.questions;
-    const label = `${new Date(d.date).toLocaleDateString("fr-FR", { weekday: "short", day: "numeric", month: "short" })} : `
-      + (n ? `${plural(d.cards, "carte", "cartes")}, ${plural(d.questions, "question", "questions")}` : "rien");
-    return `<span class="heat l${level(n)}" title="${label}"></span>`;
-  }).join("");
+  $("#heatmap").innerHTML = heatmapHtml(data.days);
 
   const top = Math.max(1, ...data.forecast);
   const dayName = (i) => (i === 0 ? "Auj." : i === 1 ? "Dem." : new Date(Date.now() + i * 86400000).toLocaleDateString("fr-FR", { weekday: "short" }));

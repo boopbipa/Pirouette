@@ -52,6 +52,10 @@
       <div class="home-actions">
         <button class="primary" type="button" id="home-start"></button>
       </div>
+      <div class="home-heat" id="home-heat" hidden>
+        <p class="home-heat-title">Ta régularité <span id="home-heat-note"></span></p>
+        <div class="heatmap" id="home-heatmap" aria-label="Jours de révision des 12 dernières semaines"></div>
+      </div>
     </section>
 
     <!-- Mes cours : cours et dossiers -->
@@ -137,15 +141,6 @@
           <button class="primary" id="start-today">Commencer</button>
         </div>
 
-        <div class="card hard-card" id="hard-card" hidden>
-          <div class="plan-head">
-            <h2>Là où tu bloques</h2>
-            <button class="ghost small" type="button" id="start-weak">Revoir ces cartes</button>
-          </div>
-          <p class="muted small-text">Les cartes que tu oublies le plus souvent. Chaque séance du plan commence par elles.</p>
-          <ol class="hard-list" id="hard-list"></ol>
-        </div>
-
         <!-- Par chapitre : sa maîtrise, son quiz, ses cartes, ou les deux mélangés -->
         <div class="card mastery-card" id="mastery-card" hidden>
           <h2>Par chapitre</h2>
@@ -169,6 +164,14 @@
           </div>
           <button class="ghost" id="start-partiel">Préparer un partiel</button>
         </div>
+
+        <!-- Là où tu bloques : replié tout en bas, à déplier si besoin -->
+        <details class="card hard-card fold-card" id="hard-card" hidden>
+          <summary><span>Là où tu bloques <span class="muted" id="hard-count"></span></span></summary>
+          <p class="muted small-text">Les cartes que tu oublies le plus souvent. Chaque séance du plan commence par elles.</p>
+          <ol class="hard-list" id="hard-list"></ol>
+          <button class="ghost small" type="button" id="start-weak">Revoir ces cartes</button>
+        </details>
 
         <div class="revise-options">
           <div class="option-row">
@@ -585,7 +588,9 @@
           </div>
         </div>
         <div class="more">
-          <button class="icon more-btn" type="button" id="course-more" aria-label="Plus d'actions" aria-haspopup="menu">•••</button>
+          <button class="ghost small manage-btn" type="button" id="course-more" aria-haspopup="menu">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
+            Gérer le cours <span class="caret" aria-hidden="true">▾</span></button>
           <div class="plus-menu more-menu" id="course-more-menu" role="menu" hidden>
             <button type="button" role="menuitem" id="rename-course"><strong>Renommer le cours</strong></button>
             <button type="button" role="menuitem" id="course-exam"><strong>Semaine des partiels</strong></button>
@@ -619,7 +624,10 @@
 
       <div class="revise-strip" id="course-revise">
         <span id="course-revise-text"></span>
-        <a class="button primary small" id="course-revise-link" href="#/reviser">Réviser ce cours →</a>
+        <span class="revise-strip-actions">
+          <a class="button ghost small" id="course-cards-link" href="#">Mes flashcards</a>
+          <a class="button primary small" id="course-revise-link" href="#/reviser">Réviser ce cours →</a>
+        </span>
       </div>
       </div>
 
@@ -664,11 +672,12 @@
           <div class="head-actions">
             <button class="ghost small" type="button" data-import>Importer</button>
             <button class="ghost small" type="button" id="cards-export">Exporter</button>
+            <button class="ghost small" type="button" id="cards-flip-all">Voir les réponses</button>
             <button class="ghost small" id="card-write">Écrire une carte</button>
             <button class="primary small" data-create="cartes">+ Ajouter des cartes</button>
           </div>
         </div>
-        <p class="muted small-text" id="cards-help">Clique sur une carte pour la retourner. Pour les apprendre, révise-les depuis Réviser.</p>
+        <p class="muted small-text" id="cards-help">Ton classeur : clique sur une carte pour la retourner, « Modifier » pour la corriger. Le cadre montre où tu en es : argent (nouvelle), or (en cours), holographique (acquise).</p>
         <p id="cards-status" class="status ok" hidden></p>
         <input type="file" id="import-input" accept=".txt,.csv,.tsv,.md,text/plain" hidden>
         <div id="cards-chip"></div>
@@ -681,6 +690,7 @@
         <div class="panel-head"><h1>Fichiers</h1></div>
         <label id="dropzone" class="dropzone" for="file-input">
           <input type="file" id="file-input" multiple accept=".pdf,.docx,.pptx,.pages,.key,.txt,.md,.markdown" hidden>
+          <input type="file" id="replace-input" accept=".pdf,.docx,.pptx,.pages,.key,.txt,.md,.markdown" hidden>
           <strong>Glisse ton cours ici</strong>
           <span class="muted">PDF, Word, PowerPoint, Pages, Keynote, texte ou Markdown.
             Un fichier du même nom qu'un fichier déjà présent le <strong>remplace</strong> (nouvelle version).</span>

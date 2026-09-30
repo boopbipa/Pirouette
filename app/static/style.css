@@ -222,6 +222,8 @@ button:disabled { opacity: .4; cursor: not-allowed; }
 a.button { text-decoration: none; display: inline-block; border-radius: 999px; padding: 10px 20px; border: 1px solid transparent; }
 a.button.small { padding: 6px 12px; font-size: 14px; }
 a.button.primary { color: var(--on-accent); font-weight: 600; }
+a.button.ghost { border-color: var(--border); background: var(--surface); color: var(--text); }
+a.button.ghost:hover { border-color: var(--text); }
 button.small { padding: 6px 12px; font-size: 14px; }
 .danger { color: var(--ko); }
 .small-text { font-size: 14px; }
@@ -1182,3 +1184,68 @@ main { padding-bottom: 120px; }
 .q-figure[hidden] { display: none; }
 .q-figure { cursor: zoom-in; }
 .q-figure.zoomed { max-height: none; cursor: zoom-out; }
+
+/* Section repliée (Là où tu bloques) */
+.fold-card { padding-top: 16px; padding-bottom: 16px; }
+.fold-card > summary { display: flex; align-items: center; gap: 10px; cursor: pointer; list-style: none;
+                       font: 600 17px/1.3 var(--display); }
+.fold-card > summary::-webkit-details-marker { display: none; }
+.fold-card > summary::before { content: ""; width: 7px; height: 7px; flex: none; border-right: 2px solid var(--muted);
+                               border-bottom: 2px solid var(--muted); transform: rotate(-45deg); transition: transform .2s; }
+.fold-card[open] > summary::before { transform: rotate(45deg); }
+.fold-card[open] > summary { margin-bottom: 8px; }
+.fold-card > summary .muted { font: 400 14px var(--sans); }
+
+/* « Gérer le cours » : un vrai bouton, visible */
+.manage-btn { display: inline-flex; align-items: center; gap: 7px; white-space: nowrap; }
+.manage-btn svg { width: 16px; height: 16px; color: var(--accent-ink); }
+.manage-btn .caret { font-size: 11px; color: var(--muted); }
+
+/* Accueil : la régularité, en fondu sous le bouton */
+.home-heat { display: flex; flex-direction: column; align-items: center; gap: 10px; margin-top: 44px;
+             animation: home-heat-in 1.2s ease both .2s; }
+.home-heat-title { margin: 0; font: 600 13px/1.2 var(--sans); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.home-heat-title span { font-weight: 400; letter-spacing: 0; text-transform: none; }
+.home-heat .heatmap { grid-template-rows: repeat(7, 13px); grid-auto-columns: 13px; gap: 4px; overflow: visible;
+  -webkit-mask-image: linear-gradient(to right, transparent, #000 35%); mask-image: linear-gradient(to right, transparent, #000 35%); }
+.home-heat .heat { width: 13px; height: 13px; }
+@keyframes home-heat-in { from { opacity: 0; transform: translateY(8px); } to { opacity: .9; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .home-heat { animation: none; opacity: .9; } }
+
+/* Page du cours : le fichier en tête de ses chapitres */
+.chapter-file-head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin: 14px 0 2px; padding: 10px 12px;
+                     border-radius: 10px; background: var(--sunken); }
+.chapter-file-head:first-child { margin-top: 4px; }
+.chapter-file-name { flex: 1; min-width: 0; display: grid; grid-template-columns: auto 1fr; column-gap: 8px; align-items: center; }
+.chapter-file-name .ico { width: 18px; height: 18px; color: var(--accent-ink); grid-row: span 2; }
+.chapter-file-name strong { font-size: 14.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chapter-file-name small { font-size: 12.5px; }
+.chapter-file-actions { display: flex; align-items: center; gap: 10px; }
+
+/* Bandeau du cours : flashcards + réviser */
+.revise-strip-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+
+/* Classeur des flashcards : des cartes à collectionner (même cadre que la révision) */
+#card-grid.card-grid { grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 22px 16px; }
+.binder-slot { display: flex; flex-direction: column; gap: 6px; }
+.fcard.binder { --frame: linear-gradient(150deg, #eef0f3, #b9bfc9 42%, #f7f8fa 58%, #a4abb6);
+  height: auto; aspect-ratio: 63 / 88; transition: transform .2s; }
+.fcard.binder:hover { transform: translateY(-3px); }
+.fcard.binder.rare { --frame: linear-gradient(150deg, #f9e6a6, #d6a73c 40%, #fcefc1 57%, #bb8a26); }
+.fcard.binder.holo { --frame: linear-gradient(125deg, #ffc9e4, #bfe9ff 22%, #d4ffd0 44%, #fff0b8 66%, #e2ccff 88%); }
+.fcard.binder .fcard-face { padding: 7px; border-radius: 12px; background: var(--frame); overflow: hidden;
+  box-shadow: 0 12px 24px -16px rgba(30, 20, 10, .55); }
+.binder-body { height: 100%; display: flex; flex-direction: column; justify-content: center; gap: 8px; padding: 10px 10px 12px;
+  border-radius: 7px; background: var(--surface); overflow: auto; text-align: center; }
+.fcard.binder .fcard-back .binder-body { background: var(--surface); }
+.binder-head { position: absolute; top: 14px; left: 14px; right: 14px; display: flex; justify-content: space-between; gap: 6px;
+  font: 700 10px/1.2 var(--sans); letter-spacing: .05em; text-transform: uppercase; color: var(--muted); }
+.binder-set { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.binder-rarity { flex: none; text-transform: none; letter-spacing: 0; }
+.fcard.binder .fcard-front p { font: 600 16px/1.3 var(--display); }
+.fcard.binder .fcard-back p { font-size: 14.5px; line-height: 1.4; }
+.binder-tools { display: flex; justify-content: center; gap: 14px; font-size: 13px; }
+.binder-tools .link-button { display: inline-flex; align-items: center; gap: 4px; color: var(--muted); }
+.binder-tools .link-button:hover { color: var(--text); }
+.binder-tools .danger:hover { color: var(--ko); }
+.binder-tools .ico { width: 14px; height: 14px; }
