@@ -117,6 +117,15 @@ COVER_MIN, COVER_MAX = 10, 40
 CHARS_PER_QUESTION = 450  # un chapitre de 9 000 caractères (≈ 4 pages) → 20 questions
 
 
+CARDS_MIN, CARDS_MAX = 10, 50
+CHARS_PER_CARD = 500
+
+
+def cards_coverage_size(text: str, definitions: int = 0) -> int:
+    """Nombre de flashcards pour couvrir un texte : une par définition repérée, et assez pour sa longueur (10 à 50)."""
+    return max(CARDS_MIN, min(CARDS_MAX, max(definitions, round(len(text) / CHARS_PER_CARD))))
+
+
 def coverage_size(text: str, definitions: int = 0) -> int:
     """Nombre de questions pour couvrir tout un texte : une par définition repérée, et assez pour sa longueur
     (entre 10 et 40)."""

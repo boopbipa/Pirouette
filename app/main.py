@@ -24,7 +24,7 @@ from pydantic import BaseModel
 
 load_dotenv()
 
-from . import backup, claude_desktop, exchange, figures, local_ai, plan as plans, reminder, srs, updater  # noqa: E402
+from . import backup, claude_desktop, exchange, figures, local_ai, news, plan as plans, reminder, srs, updater  # noqa: E402
 from .grounding import Grounding  # noqa: E402
 from .jobs import Jobs  # noqa: E402
 from .chapters import (CHAPTERS_SCHEMA, CHAPTERS_SYSTEM, ai_candidates, build_chapters_prompt,  # noqa: E402
@@ -37,8 +37,8 @@ from .providers.base import NothingNew, ProviderError  # noqa: E402
 from .focus import (MANUAL_SCHEMA, MANUAL_SYSTEM, best_chunk, build_manual_prompt, focus_text,  # noqa: E402
                     parse_manual_lines)
 from .partiel import BATCH, GRADE_SCHEMA, GRADE_SYSTEM, build_grade_prompt, read_grades  # noqa: E402
-from .quiz import (COURSE_SHARES, QUESTION_TYPES, QuizOptions, assemble_quiz, chunk_text, coverage_size,  # noqa: E402
-                   normalize_question)
+from .quiz import (CHARS_PER_CARD, CHARS_PER_QUESTION, COURSE_SHARES, QUESTION_TYPES, QuizOptions,  # noqa: E402
+                   assemble_quiz, cards_coverage_size, chunk_text, coverage_size, normalize_question)
 from .revision import is_duplicate, normalize_cards  # noqa: E402
 from .storage import NotFound, Store  # noqa: E402
 
@@ -709,19 +709,21 @@ async def generate_quiz_background(
 
 
 def _submit_quiz(course: dict, provider: str, model: str, num_questions: int, difficulty: str, types: str,
-                 language: str, chapters: str, course_share: str, focus: str, manual: str, label: str) -> dict:
+                 language: str, chapters: str, course_share: str, focus: str, manual: str, label: str,
+                 text: str = "") -> dict:
     """Met un quiz en file. En pause (« rien de nouveau »), il peut être relancé en plus facile."""
     def make(variant: str = ""):
         level = "facile" if variant == "facile" else difficulty
         return _quiz_job(course["id"], provider, model, num_questions, level, types, language, chapters,
-                         course_share, focus, manual, title=label)[3]
+                         course_share, focus, manual, title=label, text=text)[3]
     return jobs.submit({"kind": "quiz", "course_id": course["id"], "course_name": course["name"], "provider": provider,
                         "label": label or focus or "Nouveau quiz"}, make(), retry=make)
 
 
-def _submit_cards(course: dict, provider: str, model: str, language: str, count: int, chapters: str, label: str) -> dict:
+def _submit_cards(course: dict, provider: str, model: str, language: str, count: int, chapters: str, label: str,
+                  text: str = "") -> dict:
     def make(variant: str = ""):
-        return _cards_job(course["id"], provider, model, language, count, chapters, title=label)[3]
+        return _cards_job(course["id"], provider, model, language, count, chapters, title=label, text=text)[3]
     return jobs.submit({"kind": "cards", "course_id": course["id"], "course_name": course["name"], "provider": provider,
                         "label": label}, make(), retry=make)
 
@@ -769,6 +771,55 @@ async def prepare_course(
     return {"jobs": created}
 
 
+# ---------- Nouvelle version d'un cours : les passages nouveaux ----------
+
+def _course_news(course: dict) -> list[dict]:
+    units = []
+    for f in course["files"]:
+        previous = store.previous_text(course["id"], f["id"])
+        if previous is None:
+            continue
+        chapters = f.get("chapters") or []
+        for unit in news.news_by_chapter(previous, store.file_text(course["id"], f["id"]), chapters, f["id"]):
+            title = chapters[unit["position"]]["title"] if unit["position"] is not None else f["name"]
+            units.append(unit | {"title": title, "file": f["name"],
+                                 "questions": max(3, min(40, round(unit["chars"] / CHARS_PER_QUESTION))),
+                                 "cards": max(3, min(50, round(unit["chars"] / CHARS_PER_CARD)))})
+    return units
+
+
+@app.get("/api/courses/{course_id}/news")
+async def course_news(course_id: str) -> dict:
+    """Les chapitres qui ont des passages nouveaux depuis la version précédente du fichier, avec ces passages."""
+    return {"units": _course_news(store.get_course(course_id))}
+
+
+@app.post("/api/courses/{course_id}/news/create")
+async def create_from_news(course_id: str, provider: str = Form("local"), model: str = Form(""),
+                           quizzes: bool = Form(True), cards: bool = Form(True),
+                           types: str = Form("qcm,vrai_faux,reponse_courte"), language: str = Form("français")) -> dict:
+    """Questions et cartes sur les passages nouveaux seulement, chapitre par chapitre (elles rejoignent le quiz
+    et les cartes du chapitre) ; les nouveautés sont ensuite considérées comme traitées."""
+    course = store.get_course(course_id)
+    created = []
+    for unit in _course_news(course):
+        label = unit["title"]
+        text = f"=== {unit['file']} — {unit['title']} (passages nouveaux) ===\n{unit['text']}"
+        if quizzes:
+            created.append(_submit_quiz(course, provider, model, unit["questions"], "moyen", types, language,
+                                        unit["key"], "equilibre", "", "", label, text=text))
+        if cards:
+            created.append(_submit_cards(course, provider, model, language, unit["cards"], unit["key"], label, text=text))
+    store.forget_previous(course_id)
+    return {"jobs": created}
+
+
+@app.post("/api/courses/{course_id}/news/dismiss")
+async def dismiss_news(course_id: str) -> dict:
+    store.forget_previous(course_id)
+    return {"ok": True}
+
+
 @app.get("/api/jobs")
 async def list_jobs() -> list[dict]:
     return jobs.list()
@@ -805,9 +856,12 @@ async def cancel_all_jobs() -> dict:
 
 
 def _quiz_job(course_id: str, provider: str, model: str, num_questions: int, difficulty: str, types: str,
-              language: str, chapters: str, course_share: str, focus: str, manual: str, title: str = ""):
-    """Prépare la création d'un quiz : (cours, sources, texte, job) ; `job(on_progress)` crée et enregistre le quiz."""
+              language: str, chapters: str, course_share: str, focus: str, manual: str, title: str = "",
+              text: str = ""):
+    """Prépare la création d'un quiz : (cours, sources, texte, job) ; `job(on_progress)` crée et enregistre le quiz.
+    `text` : ne travailler que sur ce texte (les passages nouveaux d'un chapitre), au lieu de tout le chapitre."""
     course, sources, course_text, model = _prepare(course_id, provider, model, chapters)
+    course_text = text or course_text
     focus = focus.strip()[:200]
     mine = parse_manual_lines(manual)
     # 0 : couvrir tout le chapitre (banque de questions ; au lancement, Pirouette en tire quelques-unes)
@@ -959,13 +1013,24 @@ async def generate_cards(course_id: str, provider: str = Form("local"), model: s
 
 
 def _cards_job(course_id: str, provider: str, model: str, language: str, count: int, chapters: str, focus: str = "",
-               title: str = ""):
+               title: str = "", text: str = ""):
     """Prépare l'ajout de cartes : (cours, sources, texte, job) ; `job(on_progress)` crée et enregistre les cartes."""
     course, sources, course_text, model = _prepare(course_id, provider, model, chapters)
+    course_text = text or course_text
     focus = focus.strip()[:200]
     ai_text = focus_text(course_text, focus)[0] if focus else course_text
     language = language.strip() or "français"
-    count = max(1, min(count, 100))
+    # 0 : autant de cartes qu'il en faut pour couvrir le chapitre, moins celles qu'il a déjà
+    cover = count <= 0 and not focus
+    if cover:
+        rule = store.get_settings().get("definition_rule")
+        count = cards_coverage_size(course_text, len(definitions_for(course_text, rule)))
+        if chapters:
+            scope = _meta(course, provider, model, language, sources, chapters)["scope"]
+            deck = store.get_doc(course_id, "cards") or {"cards": []}
+            have = sum(1 for c in deck["cards"] if any(_same_title(t, c.get("scope") or []) for t in scope))
+            count = max(5, count - have)
+    count = max(1, min(count or 20, 100))
 
     async def job(on_progress) -> dict:
         deck = store.get_doc(course_id, "cards") or {"cards": []}

@@ -1294,3 +1294,38 @@ main { padding-bottom: 120px; }
 .chapter-group { display: flex; align-items: center; gap: 6px; margin: 14px 0 2px; font-size: 13px; font-weight: 600; color: var(--muted); }
 .chapter-group .ico { width: 15px; height: 15px; }
 @media (max-width: 600px) { .tree-branches { margin-left: 10px; padding-left: 14px; } .tree-fold::before { left: -14px; width: 14px; } }
+
+/* « Ton cours » replié : juste le nom du fichier */
+.tree-source > summary { display: flex; align-items: center; gap: 12px; cursor: pointer; list-style: none; }
+.tree-source > summary::-webkit-details-marker { display: none; }
+.source-names { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.source-name { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.source-name .ico { width: 22px; height: 22px; flex: none; color: var(--accent-ink); }
+.source-name strong { font: 600 17px/1.3 var(--display); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.source-toggle { display: inline-flex; align-items: center; gap: 6px; flex: none; }
+.source-toggle::after { content: ""; width: 6px; height: 6px; border-right: 2px solid var(--muted); border-bottom: 2px solid var(--muted);
+                        transform: rotate(45deg) translateY(-2px); transition: transform .2s; }
+.tree-source[open] .source-toggle::after { transform: rotate(-135deg) translateY(-2px); }
+.tree-source[open] > summary { margin-bottom: 4px; }
+.tree-source .fold-body { margin-top: 10px; }
+.tree-source > .status { margin: 10px 0 0; }
+
+/* Du nouveau dans le cours (nouvelle version d'un fichier) */
+.news-card { margin-top: 18px; border-left: 4px solid var(--accent); }
+.news-card h2 { margin: 0 0 4px; }
+.news-list { list-style: none; margin: 12px 0; padding: 0; display: grid; gap: 6px; }
+.news-list li { display: flex; flex-direction: column; gap: 2px; }
+
+/* Réviser : quatre modes, une seule partie visible */
+.mode-tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin: 4px 0 16px; }
+.mode-tiles button { display: flex; flex-direction: column; align-items: flex-start; gap: 3px; padding: 12px 14px; text-align: left;
+                     border-radius: 14px; border: 1px solid var(--border); background: var(--surface); color: var(--text); }
+.mode-tiles button strong { font: 600 15px/1.25 var(--display); }
+.mode-tiles button small { font-size: 12.5px; color: var(--muted); }
+.mode-tiles button:hover { border-color: var(--text); }
+.mode-tiles button.active { border-color: var(--accent); background: var(--accent-soft); box-shadow: 0 0 0 1px var(--accent) inset; }
+#scope-main[data-mode="jour"] > [data-mode]:not([data-mode="jour"]),
+#scope-main[data-mode="chapitres"] > [data-mode]:not([data-mode="chapitres"]),
+#scope-main[data-mode="quiz"] > [data-mode]:not([data-mode="quiz"]),
+#scope-main[data-mode="partiel"] > [data-mode]:not([data-mode="partiel"]) { display: none; }
+@media (max-width: 640px) { .mode-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } }

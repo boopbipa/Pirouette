@@ -104,6 +104,8 @@ dans **Safari** → menu Fichier → **Ajouter au Dock** (ou, dans Chrome / Edge
    part des questions réussies, pas le score d'un tirage. « Nombre précis » redonne un quiz de N questions. L'IA locale
    reçoit au plus 12 questions à écrire par demande (le texte est découpé), et la demande pour l'app Claude demande
    aussi de couvrir tout le chapitre. Recréer un quiz sur un chapitre déjà couvert n'ajoute que ce qui manque.
+   **Flashcards : « Tout le chapitre »** aussi par défaut : une carte par définition repérée et par notion importante,
+   de 10 à 50 selon la longueur (environ une pour 500 caractères), moins celles que le chapitre a déjà.
    **Un quiz par chapitre** (le choix par défaut quand plusieurs chapitres sont cochés) : Pirouette crée un quiz pour
    chaque chapitre, titré avec le nom du chapitre. Les quiz se créent **en arrière-plan**, l'un après l'autre : on
    peut faire un autre quiz ou réviser en attendant ; un petit suivi en bas à gauche, visible partout dans l'app,
@@ -168,7 +170,7 @@ lancement, un guide en 3 étapes : installer l'IA locale, créer son semestre, i
 **Réviser**, Réglages et **Feedback** (une idée, un bug : Pirouette prépare le mail).
 La page d'un cours est l'**atelier** : tout s'y règle et s'y modifie, **Réviser** ne sert qu'à réviser. Elle se lit
 comme un arbre qui part du fichier importé :
-- **Ton cours** (en haut) : le ou les fichiers du cours. « **Nouvelle version** » dépose la version à jour : elle
+- **Ton cours** (en haut, replié : juste le nom du fichier ; « Modifier » le déplie) : le ou les fichiers du cours. « **Nouvelle version** » dépose la version à jour : elle
   remplace l'ancienne (même un PDF à la place d'un Keynote), les chapitres sont redécoupés, tes quiz et tes cartes
   gardés ; « **Redécouper** » relance le repérage des chapitres ; « + Ajouter un fichier » ou glisser un fichier.
 - En dessous, reliés au fichier par un trait, trois **dépliants** :
@@ -177,12 +179,22 @@ comme un arbre qui part du fichier importé :
   - **Quiz** : aperçu des questions (un clic), renommer, supprimer, exporter, importer, « + Nouveau quiz » ;
   - **Flashcards** : le classeur (voir plus haut), écrire, modifier, supprimer, importer, exporter.
 En haut à droite, « **Gérer le cours** » : renommer, semaine des partiels, **exporter quiz et flashcards**,
-réinitialiser les statistiques, supprimer. En bas, « Réviser ce cours → ».
+réinitialiser les statistiques, supprimer. En bas, « À réviser aujourd'hui : N cartes » et « Réviser <semestre> → », qui mène
+à l'espace Réviser du semestre du cours (celui du cours s'il n'est dans aucun semestre).
+
+**Nouvelle version d'un cours : seulement les nouveautés.** Quand tu déposes une version à jour, Pirouette garde le
+texte de l'ancienne et compare les deux phrase par phrase. S'il y a des passages nouveaux, un encart « **Du nouveau
+dans ton cours** » les liste par chapitre (« ≈ 1 200 caractères nouveaux → 3 questions, 3 cartes ») et propose de
+créer des questions et des cartes **seulement sur eux** (IA locale), ou de copier la demande pour l'app Claude : elle
+contient directement les passages nouveaux, Claude n'a pas à relire le cours. Les questions rejoignent le quiz du
+chapitre ; ce qui existait n'est pas refait.
 Un **fil d'Ariane** en haut (Mes cours › Cours › Quiz › …) permet de remonter d'un clic. Les menus déroulants
 sont aux couleurs de l'app.
 
 **Réviser** (répétition espacée, comme Anki) : d'abord on choisit un semestre (« Tout le semestre ») ou un cours,
-puis trois onglets : **Réviser**, **Rétroplanning** et **Suivi**.
+puis trois onglets : **Réviser**, **Rétroplanning** et **Suivi**. Dans l'onglet Réviser, quatre **modes** en haut
+(« Révision du jour », « Par chapitre », « Quiz », « Partiel blanc ») : on en choisit un et seule sa partie s'affiche
+(le dernier choisi est gardé). Le mode **Quiz** liste tous les quiz, avec « Faire le quiz ».
 - **Plan de révision** (sur un semestre, ou un cours sans semestre) : « une séance tous les 1 / 2 / 3 / 7 jours, de
   15 / 30 / 45 minutes ». Pirouette affiche la séance à faire ou la prochaine date, les séances tenues (« 4 sur 5 ») et
   un mot d'encouragement ; chaque séance commence par les cartes où tu bloques, puis les cartes du jour, avec
@@ -193,7 +205,7 @@ puis trois onglets : **Réviser**, **Rétroplanning** et **Suivi**.
   cartes — bien ancrées, rappel à 7 jours ou plus, ou difficiles — et le meilleur score de ses quiz) et trois boutons :
   **Quiz** (le quiz du chapitre ; s'il y en a plusieurs, Pirouette demande lequel), **Cartes** (les cartes du
   chapitre) et **Tout** (cartes et questions du chapitre mélangées).
-- **Autres quiz** : les quiz qui couvrent plusieurs chapitres ou tout le cours, à passer (« Passer »).
+- **Autres quiz** : les quiz qui couvrent plusieurs chapitres ou tout le cours, à faire (« Faire le quiz »).
 - **Rétroplanning** : à partir de la semaine des partiels (on peut l'indiquer là), Pirouette date les séances d'ici
   là : d'abord les chapitres (un ou plusieurs par séance, avec « Quiz » — ou « Créer le quiz » — et « Cartes » du
   chapitre), des séances de révision entre deux, puis la consolidation (erreurs, cartes difficiles) et des partiels

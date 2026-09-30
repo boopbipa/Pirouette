@@ -466,8 +466,16 @@ class Store:
         name = Path(filename).name or "fichier"
         existing = next((f for f in course["files"] if f["name"].lower() == name.lower()), None)
         entry = existing or {"id": _new_id(8), "name": name, "added_at": _now(), "revisions": 0}
+        # Nouvelle version : le texte de l'ancienne est gardé pour repérer les passages nouveaux (voir news.py).
+        # S'il en reste un plus ancien (nouveautés pas encore traitées), c'est lui la référence.
+        previous_path = files_dir / f"{entry['id']}.prev.txt"
+        previous = previous_path.read_text(encoding="utf-8") if previous_path.exists() else None
+        if existing and previous is None and (files_dir / f"{entry['id']}.txt").exists():
+            previous = (files_dir / f"{entry['id']}.txt").read_text(encoding="utf-8")
         for old in files_dir.glob(f"{entry['id']}.*"):
             old.unlink()
+        if previous is not None and previous != text:
+            previous_path.write_text(previous, encoding="utf-8")
         ext = re.sub(r"[^a-z0-9.]", "", Path(name).suffix.lower()) or ".bin"
         (files_dir / f"{entry['id']}{ext}.orig").write_bytes(data)
         (files_dir / f"{entry['id']}.txt").write_text(text, encoding="utf-8")
@@ -532,6 +540,16 @@ class Store:
             index = {"version": figures.INDEX_VERSION, "pages": {}}
         cache.write_text(json.dumps(index), encoding="utf-8")
         return index
+
+    def previous_text(self, course_id: str, file_id: str) -> str | None:
+        """Le texte de la version précédente d'un fichier, tant que ses nouveautés n'ont pas été traitées."""
+        path = self._course_dir(course_id) / "files" / f"{_check_id(file_id, 8)}.prev.txt"
+        return path.read_text(encoding="utf-8") if path.exists() else None
+
+    def forget_previous(self, course_id: str) -> None:
+        """Nouveautés traitées (ou écartées) : on oublie les anciennes versions."""
+        for path in (self._course_dir(course_id) / "files").glob("*.prev.txt"):
+            path.unlink()
 
     def file_text(self, course_id: str, file_id: str) -> str:
         return (self._course_dir(course_id) / "files" / f"{_check_id(file_id, 8)}.txt").read_text(encoding="utf-8")

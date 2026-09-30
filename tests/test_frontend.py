@@ -21,3 +21,10 @@ def test_every_id_used_in_app_js_exists_in_the_page():
     ids = set(re.findall(r'id="([\w-]+)"', html + source))  # la page, et les éléments créés par app.js
     used = set(re.findall(r'\$\("#([\w-]+)"\)', source))
     assert sorted(used - ids) == []
+
+
+def test_no_duplicate_ids_in_the_page():
+    """Deux éléments avec le même id : $("#…") ne trouve que le premier (le nombre de cartes à créer était ignoré)."""
+    html = (APP_JS.parent / "index.html").read_text(encoding="utf-8")
+    counts = Counter(re.findall(r'\sid="([\w-]+)"', html))
+    assert [name for name, n in counts.items() if n > 1] == []

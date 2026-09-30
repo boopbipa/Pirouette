@@ -212,7 +212,7 @@ async function openHome() {
   start.textContent = !stats.courses ? "Créer mon premier cours" : "Réviser";
   const exam = stats.next_exam;
   $("#home-exam").hidden = !exam;
-  if (exam) $("#home-exam").innerHTML = examSentence(exam, exam.course);
+  if (exam) $("#home-exam").innerHTML = examSentence(exam);
   setCrumbs();
   show("home");
 }
@@ -1215,14 +1215,57 @@ async function openCourse(id, tab, { keepScroll = false } = {}) {
   const scroll = window.scrollY;
   show("course");
   $("#course-overview").hidden = false;
-  if (tab && tab !== "fichiers") $(`#panel-${tab}`).open = true;
+  if (tab) $(`#panel-${tab}`).open = true;
   if (keepScroll) window.scrollTo(0, scroll);
   else if (tab) $(`#panel-${tab}`).scrollIntoView({ block: "start" });
   renderPrepare(course, tab);
+  renderNews(course);
   // Nouvelle version d'un fichier : questions et cartes à vérifier.
   $("#outdated-note").hidden = !course.outdated;
   $("#outdated-text").textContent = `Ton cours a changé : ${plural(course.outdated, "question ou carte ne correspond", "questions ou cartes ne correspondent")} plus au cours.`;
 }
+
+// ---- Nouvelle version d'un fichier : les passages nouveaux, pour des questions et des cartes sur eux seulement ----
+async function renderNews(course) {
+  const { units } = await api(`/api/courses/${course.id}/news`).catch(() => ({ units: [] }));
+  if (state.course?.id !== course.id) return;
+  state.news = units;
+  $("#news-card").hidden = !units.length;
+  $("#news-list").innerHTML = units.map((u) => `<li><strong>${escapeHtml(u.title)}</strong>
+    <small class="muted">≈ ${u.chars.toLocaleString("fr-FR")} caractères nouveaux → ${u.questions} questions, ${u.cards} cartes</small></li>`).join("");
+  const config = state.config || await api("/api/config").catch(() => null);
+  $("#news-go").hidden = !config?.local?.available;
+  state.newsModel = config?.local?.default_model || "";
+}
+function newsRequest() {
+  const c = state.course;
+  const parts = state.news.map((u) => `--- Chapitre « ${u.title} » (clé ${u.key}) ---\n${u.text}`).join("\n\n");
+  return `Pirouette : mon cours « ${c.name} » (identifiant ${c.id}) a une nouvelle version. Voici UNIQUEMENT les passages `
+    + `nouveaux, chapitre par chapitre. Crée des questions et des flashcards seulement sur eux (ne relis pas le cours) : `
+    + `pour chaque chapitre, pirouette_creer_quiz puis pirouette_ajouter_cartes avec sa clé dans « chapitres » `
+    + `(la « source » est une phrase de ces passages, recopiée mot pour mot). Réponds ensuite par un résumé court.\n\n${parts}`;
+}
+$("#news-go").addEventListener("click", async () => {
+  const form = new FormData();
+  form.append("provider", "local");
+  form.append("model", state.newsModel || "");
+  try {
+    await api(`/api/courses/${state.course.id}/news/create`, { method: "POST", body: form });
+    $("#news-card").hidden = true;
+    jobsState.open = true;
+    refreshJobs();
+  } catch (err) {
+    setStatus("#news-status", err.message, false);
+  }
+});
+$("#news-copy").addEventListener("click", async () => {
+  await copyText(newsRequest());
+  setStatus("#news-status", "Demande copiée : colle-la dans l'app Claude. Une fois faite, clique sur « Ignorer » pour ranger cet encart.", true);
+});
+$("#news-dismiss").addEventListener("click", async () => {
+  await api(`/api/courses/${state.course.id}/news/dismiss`, { method: "POST" }).catch(() => {});
+  $("#news-card").hidden = true;
+});
 
 // Menu « ••• » du cours : renommer, supprimer.
 $("#course-more").addEventListener("click", () => {
@@ -1235,6 +1278,8 @@ document.addEventListener("click", (e) => {
 
 async function renderFolderPick(course) {
   const folders = await api("/api/folders");
+  state.folders = folders;
+  renderCourseRevise(course);  // le bouton « Réviser » mène au semestre du cours
   const select = $("#course-folder");
   select.innerHTML = `<option value="">Sans semestre</option>`
     + folders.map((f) => `<option value="${f.id}">${escapeHtml(f.name)}${f.archived ? " (archivé)" : ""}</option>`).join("")
@@ -1375,6 +1420,8 @@ function renderQuizPanel(course) {
 
 // Le(s) fichier(s) du cours, à la racine de l'arbre : nouvelle version, redécoupage des chapitres, retrait.
 function renderFiles(course) {
+  $("#source-names").innerHTML = course.files.map((f) => `<span class="source-name">${ICON_FILE}<strong>${escapeHtml(f.name)}</strong></span>`).join("")
+    || `<span class="muted">Aucun fichier</span>`;
   $("#file-list").innerHTML = course.files.length ? course.files.map((f) => {
     const chapters = f.chapters || [];
     const found = chapters.length
@@ -1416,7 +1463,7 @@ function quizItem(q, course, number = null, { play = false } = {}) {
         <small><span class="badge">${best}</span>${q.attempts > 1 ? ` <span class="muted">${q.attempts} essais</span>` : ""}
           ${outdated ? ` <span class="badge warn-badge" title="Le cours a été modifié depuis la création de ce quiz">cours mis à jour depuis</span>` : ""}</small>
       </button>
-      ${play ? `<button class="primary small" data-open-quiz="${q.id}">Passer</button>` : `
+      ${play ? `<button class="primary small" data-open-quiz="${q.id}">Faire le quiz</button>` : `
       <button class="icon" data-export-quiz="${q.id}" aria-label="Exporter ce quiz (fichier texte)" title="Exporter (fichier texte à envoyer)">${ICON_SHARE}</button>
       <button class="icon" data-rename-quiz="${q.id}" data-title="${escapeHtml(label)}" aria-label="Renommer ce quiz" title="Renommer">${ICON_EDIT}</button>
       <button class="icon" data-delete-quiz="${q.id}" aria-label="Supprimer ce quiz" title="Supprimer">${ICON_TRASH}</button>`}
@@ -1731,6 +1778,13 @@ function renderScope() {
 }
 
 // Un quiz par chapitre (le choix par défaut dès que plusieurs chapitres sont cochés) ou un seul quiz.
+// Nombre de cartes : tout le chapitre (autant que nécessaire) ou un nombre précis
+const coverCards = () => $("#cards-size-mode").value === "cover" && !$("#focus").value.trim();
+$("#cards-size-mode").addEventListener("change", () => {
+  $("#cards-count-field").hidden = $("#cards-size-mode").value === "cover";
+  renderAppRequest();
+});
+
 // Taille du quiz : tout le chapitre (banque de questions, taille calculée par Pirouette) ou un nombre précis
 const coverMode = () => $("#quiz-size-mode").value === "cover" && !$("#focus").value.trim();
 $("#quiz-size-mode").addEventListener("change", () => {
@@ -1920,7 +1974,9 @@ function appRequest() {
     : whole ? "lis le cours (pirouette_lire)" : "lis seulement ces chapitres (pirouette_lire)";
   const brief = "Réponds ensuite par un résumé court.";
   if (state.createKind !== "quiz") {
-    return `Pirouette : ajoute ${$("#cards-count").value || 20} flashcards sur ${where}${theme}.\n${ids}\n`
+    const howMany = coverCards() ? "des flashcards qui couvrent tout le texte (une par définition et par notion importante, de 10 à 50 selon la longueur)"
+      : `${$("#cards-count").value || 20} flashcards`;
+    return `Pirouette : ajoute ${howMany} sur ${where}${theme}.\n${ids}\n`
       + `Va droit au but : ne liste pas les cours, ${read}, puis enregistre les cartes (pirouette_ajouter_cartes). ${brief}`;
   }
   const names = { qcm: "QCM", vrai_faux: "vrai/faux", reponse_courte: "réponse courte", texte_a_trous: "texte à trous" };
@@ -1954,6 +2010,8 @@ $("#focus").addEventListener("input", () => {
   // Un thème précis : un petit quiz ciblé, pas tout le chapitre
   $("#num-questions-field").hidden = coverMode();
   $("#quiz-size-mode").disabled = Boolean($("#focus").value.trim());
+  $("#cards-count-field").hidden = coverCards();
+  $("#cards-size-mode").disabled = Boolean($("#focus").value.trim());
 });
 $("#view-create").addEventListener("change", renderAppRequest);
 $("#view-create").addEventListener("click", () => setTimeout(renderAppRequest, 0));
@@ -2086,7 +2144,7 @@ async function generateQuiz() {
 async function createCards() {
   if (!hasSelection()) return showError("#create-error", "Coche au moins un chapitre.");
   const form = engineForm();
-  form.append("count", $("#cards-count").value);
+  form.append("count", coverCards() ? "0" : $("#cards-count").value);
   form.append("focus", $("#focus").value);
   showError("#create-error", "");
   try {
@@ -2151,7 +2209,7 @@ function renderCardGrid() {
   const cards = state.deck.cards;
   const none = !cards.length;
   $("#cards-help").hidden = $("#cards-foot").hidden = none;
-  $("#cards-count").textContent = none ? "" : `· ${cards.length}`;
+  $("#fold-cards-count").textContent = none ? "· aucune pour l'instant" : `· ${cards.length}`;
   $("#cards-empty").hidden = !none;
   $("#cards-empty").textContent = "Pas encore de flashcards pour ce cours : clique sur « + Ajouter des cartes ».";
   $("#cards-chip").innerHTML = chapterChip();
@@ -2792,8 +2850,11 @@ $("#card-delete-current").addEventListener("click", async () => {
 function renderCourseRevise(course) {
   const { today } = course.revision;
   $("#course-revise").hidden = !course.cards.total && !course.quizzes.length;
-  $("#course-revise-text").innerHTML = today ? `<b>${today}</b> carte${today > 1 ? "s" : ""} du jour` : "Tes cartes sont à jour.";
-  $("#course-revise-link").href = `#/reviser/cours/${course.id}`;
+  // Vers l'espace Réviser : celui du semestre du cours (plan, rétroplanning, suivi), sinon celui du cours
+  const folder = state.folders?.find((f) => f.id === course.folder_id);
+  $("#course-revise-text").innerHTML = today ? `À réviser aujourd'hui : <b>${today}</b> carte${today > 1 ? "s" : ""}` : "Rien à réviser aujourd'hui : tout est à jour.";
+  $("#course-revise-link").href = folder ? `#/reviser/dossier/${folder.id}` : `#/reviser/cours/${course.id}`;
+  $("#course-revise-link").textContent = folder ? `Réviser ${folder.name} →` : "Réviser →";
 }
 
 // ---------- Réviser : révision du jour, points faibles et suivi ----------
@@ -2917,10 +2978,15 @@ async function renderScopeMain() {
   const byChapter = await renderMastery();
   const placed = new Set(byChapter.flatMap((c) => c.chapters.flatMap((ch) => ch.quizzes.map((q) => q.id))));
   const names = Object.fromEntries(scoped.map((c) => [c.id, c.name]));
-  const others = quizzes.filter((q) => ids.has(q.course_id) && !placed.has(q.id))
+  // Mode « Quiz » : tous les quiz du cours ou du semestre (ceux d'un chapitre d'abord)
+  const all = quizzes.filter((q) => ids.has(q.course_id))
+    .sort((a, b) => Number(!placed.has(a.id)) - Number(!placed.has(b.id)))
     .map((q) => ({ ...q, course_name: scope.single ? "" : names[q.course_id] }));
-  $("#scope-quizzes-box").hidden = !others.length;
-  $("#scope-quizzes").innerHTML = others.map((q) => quizItem(q, null, null, { play: true })).join("");
+  $("#scope-quizzes").innerHTML = all.length ? all.map((q) => quizItem(q, null, null, { play: true })).join("")
+    : `<li class="empty muted">Pas encore de quiz : crée-les depuis la page du cours (Mes cours).</li>`;
+  $("#mode-quiz-note").textContent = plural(all.length, "quiz", "quiz");
+  $("#mode-jour-note").textContent = today.cards || today.questions ? `${today.cards + today.questions} à revoir` : "à jour";
+  $("#mode-chapitres-note").textContent = plural(byChapter.reduce((n, c) => n + c.chapters.length, 0), "chapitre", "chapitres");
 
   // Mode partiel : sur un cours. Depuis un semestre, on choisit le cours.
   const single = Boolean(scope.single);
@@ -2938,10 +3004,10 @@ const MASTERY_NAMES = { acquis: "Acquis", en_cours: "En cours", fragile: "Fragil
 async function renderMastery() {
   const data = await api(`/api/mastery?${new URLSearchParams(reviewScope())}`).catch(() => []);
   const withChapters = data.filter((c) => c.chapters.length);
-  $("#mastery-card").hidden = !withChapters.length;
+  $("#mastery-card").hidden = false;
   const several = withChapters.length > 1;
   state.chapterRows = {};
-  $("#mastery-list").innerHTML = withChapters.map((c) => `
+  $("#mastery-list").innerHTML = !withChapters.length ? `<p class="muted">Pas encore de chapitres : importe ton cours depuis Mes cours.</p>` : withChapters.map((c) => `
     ${several ? `<h3>${escapeHtml(c.course)}</h3>` : ""}
     <ul class="mastery-rows">${c.chapters.map((ch, i) => {
       // Plusieurs fichiers (« PARTIE 2 » dans chacun) : le nom du fichier sépare les groupes.
@@ -3174,6 +3240,21 @@ async function renderHomeHeat(guiding) {
   $("#home-heat-note").textContent = `· ${plural(data.active_days, "jour", "jours")} en 12 semaines`;
   $("#home-heatmap").innerHTML = heatmapHtml(data.days);
 }
+
+// Réviser : quatre modes (du jour, par chapitre, quiz, partiel) ; le dernier choisi est gardé
+function setScopeMode(mode) {
+  $("#scope-main").dataset.mode = mode;
+  document.querySelectorAll("[data-scope-mode]").forEach((b) => {
+    b.classList.toggle("active", b.dataset.scopeMode === mode);
+    b.setAttribute("aria-selected", String(b.dataset.scopeMode === mode));
+  });
+  try { localStorage.setItem("pirouette.scopeMode", mode); } catch {}
+}
+$("#scope-modes").addEventListener("click", (e) => {
+  const button = e.target.closest("[data-scope-mode]");
+  if (button) setScopeMode(button.dataset.scopeMode);
+});
+try { setScopeMode(localStorage.getItem("pirouette.scopeMode") || "jour"); } catch { setScopeMode("jour"); }
 
 // ---- Onglet Suivi ----
 async function renderProgress() {
@@ -4657,7 +4738,7 @@ $("#prepare-go").addEventListener("click", async () => {
   form.append("quizzes", quizzes ? "1" : "");
   form.append("cards", cards ? "1" : "");
   form.append("num_questions", $("#prepare-nq").value || "0");
-  form.append("cards_count", $("#prepare-nc").value || "10");
+  form.append("cards_count", $("#prepare-nc").value || "0");
   try {
     await api(`/api/courses/${state.course.id}/prepare`, { method: "POST", body: form });
     state.offerPrepare = null;

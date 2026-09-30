@@ -102,9 +102,16 @@
         <a role="tab" data-scope-tab="suivi">Suivi</a>
       </nav>
 
-      <div id="scope-main">
+      <div id="scope-main" data-mode="jour">
+        <!-- Quatre façons de réviser : on en choisit une, seule sa partie s'affiche -->
+        <div class="mode-tiles" id="scope-modes" role="tablist" aria-label="Façon de réviser">
+          <button type="button" role="tab" data-scope-mode="jour"><strong>Révision du jour</strong><small id="mode-jour-note"></small></button>
+          <button type="button" role="tab" data-scope-mode="chapitres"><strong>Par chapitre</strong><small id="mode-chapitres-note"></small></button>
+          <button type="button" role="tab" data-scope-mode="quiz"><strong>Quiz</strong><small id="mode-quiz-note"></small></button>
+          <button type="button" role="tab" data-scope-mode="partiel"><strong>Partiel blanc</strong><small>note sur 20</small></button>
+        </div>
         <!-- Plan de révision (semestre, ou cours sans semestre) -->
-        <div class="card plan-card" id="plan-card" hidden>
+        <div class="card plan-card" id="plan-card" data-mode="jour" hidden>
           <div id="plan-setup" hidden>
             <h2>Ton plan de révision</h2>
             <p class="muted">Choisis ton rythme : Pirouette te rappelle chaque séance et commence par les cartes où tu bloques.</p>
@@ -137,7 +144,7 @@
         </div>
 
         <!-- Cours rangé dans un semestre : le plan se règle sur le semestre -->
-        <div class="card revise-card" id="today-card">
+        <div class="card revise-card" id="today-card" data-mode="jour">
           <h2>Révision du jour</h2>
           <p class="revise-count" id="today-summary"></p>
           <p class="muted small-text" id="today-note">Les cartes reviennent au bon moment, avec quelques questions de tes quiz.</p>
@@ -145,20 +152,19 @@
         </div>
 
         <!-- Par chapitre : sa maîtrise, son quiz, ses cartes, ou les deux mélangés -->
-        <div class="card mastery-card" id="mastery-card" hidden>
+        <div class="card mastery-card" id="mastery-card" data-mode="chapitres" hidden>
           <h2>Par chapitre</h2>
           <div id="mastery-list"></div>
           <p class="mastery-legend muted small-text"><span class="lvl acquis"></span>Acquis <span class="lvl en_cours"></span>En cours
             <span class="lvl fragile"></span>Fragile <span class="lvl a_voir"></span>À voir</p>
         </div>
 
-        <div class="scope-section" id="scope-quizzes-box" hidden>
-          <h2>Autres quiz</h2>
-          <p class="muted small-text">Sur tout le cours, sur un thème ou sur plusieurs chapitres.</p>
+        <div class="scope-section" id="scope-quizzes-box" data-mode="quiz">
+          <p class="muted small-text">Un quiz de plus de 10 questions en tire 10 à chaque fois : d'abord celles ratées ou jamais vues.</p>
           <ul class="quiz-list" id="scope-quizzes"></ul>
         </div>
 
-        <div class="card revise-card">
+        <div class="card revise-card" data-mode="partiel">
           <h2>Mode partiel</h2>
           <p class="revise-count" id="partiel-summary">Un partiel blanc</p>
           <p class="muted small-text">Tes quiz et tes flashcards mélangés, corrigés à la fin, avec une note sur 20.</p>
@@ -169,14 +175,14 @@
         </div>
 
         <!-- Là où tu bloques : replié tout en bas, à déplier si besoin -->
-        <details class="card hard-card fold-card" id="hard-card" hidden>
+        <details class="card hard-card fold-card" id="hard-card" data-mode="jour" hidden>
           <summary><span>Là où tu bloques <span class="muted" id="hard-count"></span></span></summary>
           <p class="muted small-text">Les cartes que tu oublies le plus souvent. Chaque séance du plan commence par elles.</p>
           <ol class="hard-list" id="hard-list"></ol>
           <button class="ghost small" type="button" id="start-weak">Revoir ces cartes</button>
         </details>
 
-        <div class="revise-options">
+        <div class="revise-options" data-mode="jour">
           <div class="option-row">
             <span class="muted">Les cartes :</span>
             <div class="filters mini" role="radiogroup" aria-label="Façon de réviser les cartes">
@@ -619,25 +625,44 @@
       </div>
 
 
+      <!-- Nouvelle version du fichier : des questions et des cartes sur les passages nouveaux seulement -->
+      <div class="card news-card" id="news-card" hidden>
+        <h2>Du nouveau dans ton cours</h2>
+        <p class="muted small-text">La nouvelle version a des passages qui n'existaient pas. Pirouette peut créer des questions et des
+          cartes <strong>seulement sur eux</strong> : elles rejoignent le quiz et les cartes de leur chapitre, le reste ne bouge pas.</p>
+        <ul class="news-list" id="news-list"></ul>
+        <div class="actions">
+          <button class="primary small" type="button" id="news-go">Créer questions et cartes (IA locale)</button>
+          <button class="ghost small" type="button" id="news-copy">Copier la demande pour l'app Claude</button>
+          <button class="link-button" type="button" id="news-dismiss">Ignorer</button>
+        </div>
+        <p class="status" id="news-status" hidden></p>
+      </div>
+
       <!-- Le cours en arbre : le fichier importé, puis ce qui en découle (chapitres, quiz, flashcards), à déplier.
            Tout se règle et se modifie ici ; Réviser ne sert qu'à réviser. -->
       <div class="course-tree" id="course-tree">
-        <section class="card tree-source" id="panel-fichiers">
-          <div class="plan-head">
-            <h2>Ton cours</h2>
-            <span class="head-actions"><label class="ghost small button-like" for="file-input">+ Ajouter un fichier</label></span>
+        <details class="card tree-source" id="panel-fichiers">
+          <summary class="source-summary">
+            <span class="source-names" id="source-names"></span>
+            <span class="source-toggle muted small-text">Modifier</span>
+          </summary>
+          <div class="fold-body">
+            <div class="fold-tools">
+              <p class="muted small-text tree-hint">Tout part de ce fichier : Pirouette le découpe en chapitres, puis en tire tes quiz et tes flashcards.
+                Ton cours a avancé ? « Nouvelle version » : seuls les passages nouveaux ont besoin de nouvelles questions.</p>
+              <span class="head-actions"><label class="ghost small button-like" for="file-input">+ Ajouter un fichier</label></span>
+            </div>
+            <ul id="file-list" class="file-list source-list"></ul>
+            <label id="dropzone" class="dropzone dropzone-slim" for="file-input">
+              <input type="file" id="file-input" multiple accept=".pdf,.docx,.pptx,.pages,.key,.txt,.md,.markdown" hidden>
+              <input type="file" id="replace-input" accept=".pdf,.docx,.pptx,.pages,.key,.txt,.md,.markdown" hidden>
+              <span class="muted">Glisse un fichier ici (PDF, Word, PowerPoint, Pages, Keynote, texte). Un fichier du même nom le <strong>remplace</strong>.</span>
+            </label>
           </div>
-          <p class="muted small-text tree-hint">Tout part de ce fichier : Pirouette le découpe en chapitres, puis en tire tes quiz et tes flashcards.
-            Ton cours a avancé ? « Nouvelle version » : les chapitres sont redécoupés, tes quiz et tes cartes gardés.</p>
-          <ul id="file-list" class="file-list source-list"></ul>
-          <label id="dropzone" class="dropzone dropzone-slim" for="file-input">
-            <input type="file" id="file-input" multiple accept=".pdf,.docx,.pptx,.pages,.key,.txt,.md,.markdown" hidden>
-            <input type="file" id="replace-input" accept=".pdf,.docx,.pptx,.pages,.key,.txt,.md,.markdown" hidden>
-            <span class="muted">Glisse un fichier ici (PDF, Word, PowerPoint, Pages, Keynote, texte). Un fichier du même nom le <strong>remplace</strong>.</span>
-          </label>
           <p id="upload-status" class="status" hidden></p>
           <p id="chapters-status" class="status" hidden></p>
-        </section>
+        </details>
 
         <div class="tree-branches">
           <details class="card tree-fold" id="panel-chapitres">
@@ -665,7 +690,7 @@
           </details>
 
           <details class="card tree-fold" id="panel-cartes">
-            <summary><span class="fold-title">Flashcards</span><small class="muted" id="cards-count"></small></summary>
+            <summary><span class="fold-title">Flashcards</span><small class="muted" id="fold-cards-count"></small></summary>
             <div class="fold-body">
               <div class="fold-tools">
                 <p class="muted small-text" id="cards-help">Ton classeur : clique sur une carte pour la retourner, « Modifier » pour la corriger. Le cadre montre où tu en es : argent (nouvelle), or (en cours), holographique (acquise).</p>
@@ -700,7 +725,7 @@
         <div class="option-row"><label><input type="checkbox" id="prepare-quizzes" checked> Un quiz par chapitre</label>
           <select id="prepare-nq" class="chip" aria-label="Questions par quiz"><option value="0" selected>tout le chapitre</option><option value="5">5 questions</option><option value="10">10 questions</option><option value="15">15 questions</option><option value="20">20 questions</option><option value="30">30 questions</option></select></div>
         <div class="option-row"><label><input type="checkbox" id="prepare-cards" checked> Des flashcards par chapitre</label>
-          <select id="prepare-nc" class="chip" aria-label="Cartes par chapitre"><option value="5">5 cartes</option><option value="10" selected>10 cartes</option><option value="15">15 cartes</option><option value="20">20 cartes</option><option value="30">30 cartes</option><option value="40">40 cartes</option></select></div>
+          <select id="prepare-nc" class="chip" aria-label="Cartes par chapitre"><option value="0" selected>tout le chapitre</option><option value="5">5 cartes</option><option value="10">10 cartes</option><option value="15">15 cartes</option><option value="20">20 cartes</option><option value="30">30 cartes</option><option value="40">40 cartes</option></select></div>
         <p class="heat-note">Tout se crée en arrière-plan, chapitre après chapitre : tu peux commencer à réviser dès que le premier
           est prêt. Ton Mac peut chauffer un peu pendant ce temps : évite d'ouvrir d'autres apps gourmandes.</p>
         <p class="error" id="prepare-error" hidden></p>
@@ -792,11 +817,21 @@
 
       <div class="card" id="create-cards-options">
         <h2>Les cartes</h2>
-        <div class="field inline-field">
-          <label for="cards-count">Nombre de cartes à ajouter</label>
-          <input type="number" id="cards-count" min="1" max="100" value="20">
+        <div class="grid">
+          <div class="field">
+            <label for="cards-size-mode">Combien</label>
+            <select id="cards-size-mode">
+              <option value="cover" selected>Tout le chapitre (autant que nécessaire)</option>
+              <option value="count">Nombre précis</option>
+            </select>
+          </div>
+          <div class="field" id="cards-count-field" hidden>
+            <label for="cards-count">Nombre de cartes à ajouter</label>
+            <input type="number" id="cards-count" min="1" max="100" value="20">
+          </div>
         </div>
-        <p class="muted small-text">Elles s'ajoutent à celles que tu as déjà, sans doublon.</p>
+        <p class="muted small-text">« Tout le chapitre » : une carte par définition et par notion importante (de 10 à 50 selon la longueur).
+          Elles s'ajoutent à celles que tu as déjà, sans doublon : seules les notions pas encore en carte sont ajoutées.</p>
       </div>
 
       <div class="card">
