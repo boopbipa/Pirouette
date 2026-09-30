@@ -194,6 +194,12 @@ puis trois onglets : **Réviser**, **Rétroplanning** et **Suivi**.
   reposer (plus tôt si on ne savait pas, de plus en plus tard si on savait), sans l'afficher. Un clic sur la carte la
   retourne, un autre revient à la question. À la fin : « Voir la correction » (tout, ou mes erreurs seulement) et
   « Refaire mes erreurs ».
+- **Des cartes à collectionner** : chaque flashcard est une vraie carte (format portrait, cadre, nom du chapitre en
+  haut, numéro « 004/020 » en bas) dont la **rareté suit ta progression** : cadre argent « ◇ Nouvelle », or
+  « ◆◆ En cours », **holographique « ★ Acquise »** (arc-en-ciel qui bouge avec la souris). La carte s'incline sous la
+  souris avec un reflet, se retourne en 3D, et part à gauche (je ne savais pas), en bas (à moitié) ou à droite (je
+  savais) ; la suivante est tirée de la pile posée derrière. « ★ Carte acquise ! » quand une carte devient holo. Les
+  animations s'arrêtent si le Mac est réglé sur « Réduire les animations ».
 - **J'écris la réponse** (au lieu de retourner la carte) : Pirouette compare ta réponse au verso, surligne les mots
   retrouvés et propose une réponse (« C'est juste », « Presque », « Pas tout à fait ») ; c'est toi qui décides.
 - **Mode partiel** (sur un cours) : 20 questions de quiz (réparties entre tous les quiz du cours) + 10 flashcards par

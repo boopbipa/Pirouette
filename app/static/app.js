@@ -2262,6 +2262,7 @@ function showCard() {
   const { card } = s.items[s.index];
   const typing = cardMode() === "type";
   $("#flashcard").classList.remove("flipped");
+  dressCard(card, s);
   $("#card-front").textContent = card.front;
   $("#card-back").textContent = card.back;
   $("#card-back-question").textContent = card.front;
@@ -2275,6 +2276,68 @@ function showCard() {
   $("#card-keys-text").textContent = typing ? "Entrée pour vérifier, puis 1, 2 ou 3 pour répondre"
     : "Espace pour retourner la carte, puis 1, 2 ou 3 pour répondre";
   (typing ? $("#typed-answer") : $("#flashcard")).focus();
+}
+
+// ---- La carte à collectionner : rareté (d'après ta progression), numéro, pile, tirage ----
+function cardRarity(card) {
+  if (card.status === "known" || (card.interval || 0) >= 21) return { cls: "holo", label: "★ Acquise" };
+  if ((card.reviews || 0) > 0) return { cls: "rare", label: "◆◆ En cours" };
+  return { cls: "", label: "◇ Nouvelle" };
+}
+
+function dressCard(card, s) {
+  const el = $("#flashcard");
+  const rarity = cardRarity(card);
+  el.classList.remove("rare", "holo", "fly-again", "fly-hard", "fly-good");
+  if (rarity.cls) el.classList.add(rarity.cls);
+  const item = s.items[s.index];
+  const set = card.scope?.[0] || item.course_name || "Flashcard";
+  const pad = (n) => String(n).padStart(3, "0");
+  document.querySelectorAll("[data-card-set]").forEach((e) => { e.textContent = set; });
+  document.querySelectorAll("[data-card-rarity]").forEach((e) => { e.textContent = rarity.label; });
+  document.querySelectorAll("[data-card-number]").forEach((e) => { e.textContent = `${pad(s.index + 1)}/${pad(s.items.length)}`; });
+  const size = (text) => (text.length > 160 ? "very-long" : text.length > 70 ? "long" : "");
+  document.querySelector(".flashcard-front .tcg-art").className = `tcg-art ${size(card.front)}`;
+  document.querySelector(".flashcard-back .tcg-art").className = `tcg-art tcg-answer ${size(card.back)}`;
+  // Cartes restantes dans la pile, derrière (au plus 3 dessinées)
+  const left = s.items.slice(s.index + 1).filter((i) => i.kind === "card").length;
+  $("#tcg-pile").dataset.left = String(Math.min(left, 3));
+  el.classList.remove("dealing");
+  void el.offsetWidth;  // relance l'animation de tirage
+  el.classList.add("dealing");
+}
+$("#flashcard").addEventListener("animationend", (e) => {
+  if (e.animationName === "tcg-deal") $("#flashcard").classList.remove("dealing");
+});
+
+// Relief : la carte s'incline sous la souris, avec un reflet (holographique pour les cartes acquises)
+$("#flashcard").addEventListener("pointermove", (e) => {
+  if (e.pointerType === "touch" || matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  const el = $("#flashcard");
+  const box = el.getBoundingClientRect();
+  const x = (e.clientX - box.left) / box.width;
+  const y = (e.clientY - box.top) / box.height;
+  el.classList.add("tilting");
+  el.style.setProperty("--ry", `${(x - 0.5) * 16}deg`);
+  el.style.setProperty("--rx", `${(0.5 - y) * 14}deg`);
+  el.style.setProperty("--mx", `${x * 100}%`);
+  el.style.setProperty("--my", `${y * 100}%`);
+});
+$("#flashcard").addEventListener("pointerleave", () => {
+  const el = $("#flashcard");
+  el.classList.remove("tilting");
+  el.style.setProperty("--rx", "0deg");
+  el.style.setProperty("--ry", "0deg");
+});
+
+function showCardToast(text) {
+  const toast = $("#tcg-toast");
+  toast.hidden = true;
+  toast.textContent = text;
+  void toast.offsetWidth;
+  toast.hidden = false;
+  clearTimeout(showCardToast.timer);
+  showCardToast.timer = setTimeout(() => { toast.hidden = true; }, 1700);
 }
 
 // Retourne la carte ; un nouveau clic la remet côté question (et ainsi de suite).
@@ -2351,16 +2414,29 @@ function rateCard(rating) {
   const s = state.session;
   const item = s?.items[s.index];
   if (!item || item.kind !== "card" || !s.revealed) return;
+  if (s.leaving) return;
   const { card } = item;
+  const before = cardRarity(card).cls;
   s.results.push({ kind: "card", item, rating, given: s.checked?.given || "" });
   api(`/api/courses/${item.course_id}/cards/${card.id}/review`, jsonBody("POST", { rating }))
     .then((updated) => {
       Object.assign(card, updated);
       const own = state.deck?.course_id === item.course_id && state.deck.cards.find((c) => c.id === card.id);
       if (own && own !== card) Object.assign(own, updated);
+      if (before !== "holo" && cardRarity(card).cls === "holo") showCardToast("★ Carte acquise !");
     })
     .catch(() => {});
-  nextItem();
+  // La carte part (à gauche : ratée, en bas : à moitié, à droite : sue), puis la suivante est tirée de la pile
+  if (matchMedia("(prefers-reduced-motion: reduce)").matches) return nextItem();
+  s.leaving = true;
+  const el = $("#flashcard");
+  el.classList.remove("tilting", "dealing");
+  el.classList.add(`fly-${rating}`);
+  setTimeout(() => {
+    s.leaving = false;
+    el.classList.remove(`fly-${rating}`);
+    if (state.session === s) nextItem();
+  }, 360);
 }
 $("#ratings").addEventListener("click", (e) => {
   const button = e.target.closest("[data-rating]");
