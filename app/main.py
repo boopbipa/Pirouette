@@ -1554,8 +1554,23 @@ def _safe_name(name: str) -> str:
     return re.sub(r"[\\/:*?\"<>|]+", "-", name).strip(" .-")[:80] or "Pirouette"
 
 
-def _export(kind: str, item_id: str) -> tuple[str, str]:
-    """(nom du fichier, texte) d'un quiz (`quiz`) ou des flashcards d'un cours (`cards`)."""
+EXPORT_KINDS = {"quiz", "cards", "course", "folder"}
+
+
+def _export(kind: str, item_id: str) -> tuple[str, str | bytes]:
+    """(nom du fichier, contenu) d'un quiz (`quiz`), des flashcards d'un cours (`cards`), ou d'un paquet .zip avec
+    tous les quiz et flashcards d'un cours (`course`) ou d'un semestre (`folder`)."""
+    if kind in {"course", "folder"}:
+        if kind == "course":
+            owner = store.get_course(item_id)
+            courses = [owner]
+        else:
+            owner = store.get_folder(item_id)
+            courses = [c for c in store.list_courses() if c.get("folder_id") == item_id]
+        pack = _pack_courses(courses)
+        if not any(c["quizzes"] or c["cards"] for c in pack):
+            raise HTTPException(400, "Rien à exporter : pas encore de quiz ni de flashcards.")
+        return f"{_safe_name('Pirouette - ' + owner['name'])}.zip", exchange.build_pack(pack)
     if kind == "quiz":
         quiz = store.get_quiz(item_id)
         course = quiz.get("course_name") or ""
@@ -1568,28 +1583,33 @@ def _export(kind: str, item_id: str) -> tuple[str, str]:
 
 
 @app.get("/api/export/{kind}/{item_id}")
-async def export_file(kind: str, item_id: str) -> PlainTextResponse:
+async def export_file(kind: str, item_id: str) -> Response:
     """Téléchargement (dans un navigateur)."""
-    if kind not in {"quiz", "cards"}:
+    if kind not in EXPORT_KINDS:
         raise HTTPException(404, "Export inconnu.")
-    name, text = _export(kind, item_id)
-    return PlainTextResponse(text, headers={"Content-Disposition": f"attachment; filename*=UTF-8''{urllib.parse.quote(name)}"})
+    name, content = _export(kind, item_id)
+    media = "application/zip" if isinstance(content, bytes) else "text/plain; charset=utf-8"
+    return Response(content, media_type=media,
+                    headers={"Content-Disposition": f"attachment; filename*=UTF-8''{urllib.parse.quote(name)}"})
 
 
 @app.post("/api/export/{kind}/{item_id}")
 async def export_to_downloads(kind: str, item_id: str) -> dict:
     """App Mac : enregistre le fichier dans Téléchargements et le montre dans le Finder."""
-    if kind not in {"quiz", "cards"}:
+    if kind not in EXPORT_KINDS:
         raise HTTPException(404, "Export inconnu.")
-    name, text = _export(kind, item_id)
+    name, content = _export(kind, item_id)
     folder = Path.home() / "Downloads"
     folder.mkdir(parents=True, exist_ok=True)
     path = folder / name
     for n in range(2, 100):
         if not path.exists():
             break
-        path = folder / f"{Path(name).stem} ({n}).txt"
-    path.write_text(text, encoding="utf-8")
+        path = folder / f"{Path(name).stem} ({n}){Path(name).suffix}"
+    if isinstance(content, bytes):
+        path.write_bytes(content)
+    else:
+        path.write_text(content, encoding="utf-8")
     if sys.platform == "darwin":
         subprocess.run(["open", "-R", str(path)], capture_output=True, timeout=10)
     return {"path": str(path), "name": path.name}
@@ -1604,19 +1624,34 @@ async def import_file(course_id: str, file: UploadFile = File(...)) -> dict:
         text = raw.decode("utf-8")
     except UnicodeDecodeError:
         text = raw.decode("latin-1")
+    result = _import_text(course, text, file.filename or "Quiz")
+    if result is None:
+        raise HTTPException(400, "Rien de reconnu dans ce fichier : il faut un quiz Pirouette, des questions numérotées "
+                                 "avec leurs propositions, ou des flashcards « recto ; verso » (une par ligne).")
+    if result["kind"] == "quiz" and not result["added"] and not result.get("merged"):
+        raise HTTPException(400, "Aucune question lisible dans ce fichier.")
+    return result
+
+
+def _import_text(course: dict, text: str, filename: str) -> dict | None:
+    """Importe un quiz ou des flashcards (texte) dans un cours ; None si rien n'est reconnu."""
+    course_id = course["id"]
     found = exchange.parse(text)
     if found["kind"] == "quiz":
         if not found["questions"]:
-            raise HTTPException(400, "Aucune question lisible dans ce fichier.")
+            return {"kind": "quiz", "added": 0, "skipped": found["skipped"], "merged": False}
         # Chapitres du fichier retrouvés dans ce cours : le quiz s'y rattache (et rejoint le quiz de ces chapitres).
         titles = [title for _, title in _units(course, "")]
         scope = [t for t in titles if any(_same_title(t, [c]) for c in found["chapters"])]
-        quiz = {"title": found["title"] or Path(file.filename or "Quiz").stem, "questions": found["questions"],
+        quiz = {"title": found["title"] or Path(filename).stem, "questions": found["questions"],
                 "provider": "import", "model": "", "language": "français", "course_id": course_id,
                 "course_name": course["name"], "course_version": course["version"], "sources": [], "scope": scope,
                 "difficulty": "moyen"}
         key = store.chapter_key(quiz)
         existing = store.chapter_quiz(key) if key else None
+        if existing is None:  # même titre dans ce cours (quiz sur tout le cours) : on complète plutôt que doubler
+            existing = next((store.get_quiz(q["id"]) for q in store.list_quizzes(course_id)
+                             if exchange.name_key(q.get("custom_title") or q["title"]) == exchange.name_key(quiz["title"])), None)
         if existing:
             merged, added = store.add_to_quiz(existing["id"], quiz["questions"])
             return {"kind": "quiz", "quiz_id": merged["id"], "title": merged["title"], "added": added,
@@ -1633,8 +1668,82 @@ async def import_file(course_id: str, file: UploadFile = File(...)) -> dict:
         deck.update(course_name=course["name"], course_id=course_id, cards=[*deck["cards"], *new])
         store.save_doc(course_id, "cards", deck)
         return {"kind": "cards", "added": len(new), "skipped": found["skipped"] + len(found["cards"]) - len(new)}
-    raise HTTPException(400, "Rien de reconnu dans ce fichier : il faut un quiz Pirouette, des questions numérotées "
-                             "avec leurs propositions, ou des flashcards « recto ; verso » (une par ligne).")
+    return None
+
+
+# ---------- Paquets : tous les quiz et flashcards d'un cours ou d'un semestre ----------
+
+_PACKS: dict[str, list[dict]] = {}  # paquets lus, en attente de confirmation (jeton → contenu)
+
+
+def _pack_courses(courses: list[dict]) -> list[dict]:
+    folders = {f["id"]: f["name"] for f in store.list_folders()}
+    return [{"name": c["name"], "folder": folders.get(c.get("folder_id"), ""),
+             "quizzes": [store.get_quiz(q["id"]) for q in reversed(store.list_quizzes(c["id"]))],
+             "cards": (store.get_doc(c["id"], "cards") or {}).get("cards", [])} for c in courses]
+
+
+@app.post("/api/pack/preview")
+async def pack_preview(file: UploadFile = File(...)) -> dict:
+    """Lit un paquet et propose, pour chacun de ses cours, le cours de Pirouette où l'importer."""
+    try:
+        courses = exchange.read_pack(await file.read())
+    except (ValueError, KeyError, json.JSONDecodeError) as exc:
+        raise HTTPException(400, str(exc) if isinstance(exc, ValueError) else "Paquet illisible.") from exc
+    if not courses:
+        raise HTTPException(400, "Ce paquet ne contient aucun quiz ni aucune flashcard.")
+    token = os.urandom(8).hex()
+    _PACKS.clear()  # un seul paquet à la fois
+    _PACKS[token] = courses
+    existing = store.list_courses()
+    rows = []
+    for c in courses:
+        match = exchange.best_match(c["name"], existing)
+        cards = exchange.parse(c["cards"]).get("cards", []) if c["cards"] else []
+        rows.append({"name": c["name"], "folder": c["folder"], "quizzes": len(c["quizzes"]), "cards": len(cards),
+                     "match": {"id": match["id"], "name": match["name"]} if match else None})
+    return {"token": token, "courses": rows,
+            "existing": [{"id": c["id"], "name": c["name"]} for c in sorted(existing, key=lambda c: c["name"].lower())]}
+
+
+class PackImportIn(BaseModel):
+    token: str
+    targets: list[str]  # pour chaque cours du paquet : identifiant d'un cours, "new" (le créer) ou "" (l'ignorer)
+
+
+@app.post("/api/pack/import")
+async def pack_import(body: PackImportIn) -> dict:
+    courses = _PACKS.get(body.token)
+    if courses is None:
+        raise HTTPException(400, "Ce paquet n'est plus en attente : choisis-le de nouveau.")
+    folders = {exchange.name_key(f["name"]): f["id"] for f in store.list_folders()}
+    done = {"courses": 0, "created": 0, "quizzes": 0, "questions": 0, "cards": 0}
+    for pack_course, target in zip(courses, body.targets):
+        if not target:
+            continue
+        if target == "new":
+            course = store.create_course(pack_course["name"])
+            folder = pack_course["folder"]
+            if folder:  # rangé dans le semestre du même nom (créé s'il n'existe pas)
+                key = exchange.name_key(folder)
+                if key not in folders:
+                    folders[key] = store.create_folder(folder)["id"]
+                store.move_course(course["id"], folders[key])
+            done["created"] += 1
+        else:
+            course = store.get_course(target)
+        done["courses"] += 1
+        for filename, text in pack_course["quizzes"]:
+            result = _import_text(store.get_course(course["id"]), text, filename)
+            if result and result["kind"] == "quiz" and result["added"]:
+                done["quizzes"] += 0 if result.get("merged") else 1
+                done["questions"] += result["added"]
+        if pack_course["cards"]:
+            result = _import_text(store.get_course(course["id"]), pack_course["cards"], "Flashcards.txt")
+            if result and result["kind"] == "cards":
+                done["cards"] += result["added"]
+    _PACKS.pop(body.token, None)
+    return done
 
 
 @app.post("/api/quit")

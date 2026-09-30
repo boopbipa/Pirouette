@@ -188,3 +188,111 @@ def _parse_cards(text: str) -> tuple[list[dict], int]:
         else:
             skipped += 1
     return cards, skipped
+
+
+# ---------- Paquet : tous les quiz et flashcards d'un cours ou d'un semestre, dans un .zip ----------
+#
+# Pirouette - <nom>.zip
+#   pirouette.json                     index : les cours, leur semestre et leurs fichiers
+#   <Cours>/Quiz - <titre>.txt         chaque quiz (le même .txt qu'un export seul : lisible, importable seul)
+#   <Cours>/Flashcards.txt             les cartes (format Anki / Quizlet)
+
+PACK_INDEX = "pirouette.json"
+
+
+def _file_name(name: str) -> str:
+    return re.sub(r"[\\/:*?\"<>|]+", "-", name).strip(" .-")[:80] or "Sans nom"
+
+
+def build_pack(courses: list[dict]) -> bytes:
+    """`courses` : [{"name", "folder", "quizzes": [quiz…], "cards": [carte…]}] → contenu du .zip."""
+    import io
+    import json
+    import zipfile
+
+    out = io.BytesIO()
+    index = {"format": "pirouette-paquet", "version": 1, "courses": []}
+    used: set[str] = set()
+    with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as archive:
+        for course in courses:
+            folder = base = _file_name(course["name"])
+            n = 2
+            while folder.lower() in used:  # deux cours du même nom
+                folder, n = f"{base} ({n})", n + 1
+            used.add(folder.lower())
+            entry = {"name": course["name"], "folder": course.get("folder") or "", "quizzes": [], "cards": ""}
+            names: set[str] = set()
+            for quiz in course["quizzes"]:
+                title = quiz.get("custom_title") or quiz.get("title") or "Quiz"
+                name = stem = f"Quiz - {_file_name(title)}"
+                n = 2
+                while name.lower() in names:
+                    name, n = f"{stem} ({n})", n + 1
+                names.add(name.lower())
+                path = f"{folder}/{name}.txt"
+                archive.writestr(path, quiz_to_text(quiz, course["name"]))
+                entry["quizzes"].append(path)
+            if course["cards"]:
+                entry["cards"] = f"{folder}/Flashcards.txt"
+                archive.writestr(entry["cards"], cards_to_text(course["cards"], course["name"]))
+            index["courses"].append(entry)
+        archive.writestr(PACK_INDEX, json.dumps(index, ensure_ascii=False, indent=2))
+    return out.getvalue()
+
+
+def read_pack(data: bytes) -> list[dict]:
+    """Contenu d'un paquet : [{"name", "folder", "quizzes": [(nom de fichier, texte)], "cards": texte}].
+    Sans index (zip fait à la main) : un cours par dossier du zip. ValueError si ce n'est pas un zip lisible."""
+    import io
+    import json
+    import zipfile
+
+    try:
+        archive = zipfile.ZipFile(io.BytesIO(data))
+    except zipfile.BadZipFile as exc:
+        raise ValueError("Ce fichier n'est pas un paquet Pirouette (.zip).") from exc
+
+    def text(path: str) -> str:
+        raw = archive.read(path)
+        try:
+            return raw.decode("utf-8")
+        except UnicodeDecodeError:
+            return raw.decode("latin-1")
+
+    names = [n for n in archive.namelist() if not n.endswith("/") and "__MACOSX" not in n]
+    if PACK_INDEX in names:
+        index = json.loads(text(PACK_INDEX))
+        return [{"name": c["name"], "folder": c.get("folder") or "",
+                 "quizzes": [(p.rsplit("/", 1)[-1], text(p)) for p in c.get("quizzes", []) if p in names],
+                 "cards": text(c["cards"]) if c.get("cards") in names else ""}
+                for c in index.get("courses", [])]
+    courses: dict[str, dict] = {}
+    for path in names:
+        if not path.lower().endswith((".txt", ".csv", ".tsv", ".md")):
+            continue
+        folder = path.rsplit("/", 1)[0] if "/" in path else "Cours importé"
+        course = courses.setdefault(folder, {"name": folder.rsplit("/", 1)[-1], "folder": "", "quizzes": [], "cards": ""})
+        body = text(path)
+        if parse(body).get("kind") == "cards":
+            course["cards"] += ("\n" if course["cards"] else "") + body
+        else:
+            course["quizzes"].append((path.rsplit("/", 1)[-1], body))
+    return list(courses.values())
+
+
+def name_key(name: str) -> str:
+    """Nom comparable : sans accents, casse ni ponctuation (« Neuro-sciences » ≈ « neurosciences »)."""
+    import unicodedata
+
+    plain = unicodedata.normalize("NFKD", name).encode("ascii", "ignore").decode()
+    return re.sub(r"[^a-z0-9]", "", plain.lower())
+
+
+def best_match(name: str, candidates: list[dict]) -> dict | None:
+    """Le cours existant qui porte ce nom (ou un nom très proche), sinon None."""
+    from difflib import SequenceMatcher
+
+    key = name_key(name)
+    scored = [(SequenceMatcher(None, key, name_key(c["name"])).ratio(), c) for c in candidates]
+    scored = [(score, c) for score, c in scored if score >= 0.85]
+    return max(scored, key=lambda s: s[0])[1] if scored else None

@@ -63,10 +63,13 @@
       <div class="page-head">
         <h1>Mes cours <span class="muted count" id="course-count"></span></h1>
         <div class="head-actions">
+          <button class="ghost small" type="button" id="pack-import-btn" title="Réimporter des quiz et flashcards exportés (paquet .zip)">Importer</button>
+          <input type="file" id="pack-input" accept=".zip,application/zip" hidden>
           <button class="ghost small" type="button" id="new-folder">+ Semestre</button>
           <button class="primary small" type="button" id="new-course-btn">+ Nouveau cours</button>
         </div>
       </div>
+      <p class="status" id="courses-status" hidden></p>
       <p class="muted small-text" id="folders-help" hidden>Glisse un cours sur un semestre pour l'y ranger (ou choisis son semestre depuis la page du cours).</p>
       <div class="course-grid drop-zone" data-drop-folder="">
         <div id="course-list" class="contents"></div>
@@ -594,6 +597,7 @@
           <div class="plus-menu more-menu" id="course-more-menu" role="menu" hidden>
             <button type="button" role="menuitem" id="rename-course"><strong>Renommer le cours</strong></button>
             <button type="button" role="menuitem" id="course-exam"><strong>Semaine des partiels</strong></button>
+            <button type="button" role="menuitem" id="course-export"><strong>Exporter quiz et flashcards</strong></button>
             <button type="button" role="menuitem" id="reset-stats"><strong>Réinitialiser les statistiques</strong></button>
             <button type="button" role="menuitem" id="delete-course" class="danger"><strong>Supprimer le cours</strong></button>
           </div>
@@ -608,26 +612,85 @@
         <span class="primary small fake-button">Choisir un fichier</span>
       </label>
 
-      <!-- Le cours, chapitre par chapitre : ce qu'il contient, créer, gérer (on s'entraîne dans Réviser) -->
-      <div class="card course-chapters" id="course-chapters">
-        <div class="plan-head">
-          <h2>Chapitres</h2>
-          <span class="head-actions">
-            <label class="ghost small button-like" for="file-input">+ Ajouter un fichier</label>
-          </span>
+      <p class="status" id="course-status" hidden></p>
+      <div class="outdated-note" id="outdated-note" hidden>
+        <span id="outdated-text"></span>
+        <button class="ghost small" type="button" id="outdated-open">Vérifier</button>
+      </div>
+
+
+      <!-- Le cours en arbre : le fichier importé, puis ce qui en découle (chapitres, quiz, flashcards), à déplier.
+           Tout se règle et se modifie ici ; Réviser ne sert qu'à réviser. -->
+      <div class="course-tree" id="course-tree">
+        <section class="card tree-source" id="panel-fichiers">
+          <div class="plan-head">
+            <h2>Ton cours</h2>
+            <span class="head-actions"><label class="ghost small button-like" for="file-input">+ Ajouter un fichier</label></span>
+          </div>
+          <p class="muted small-text tree-hint">Tout part de ce fichier : Pirouette le découpe en chapitres, puis en tire tes quiz et tes flashcards.
+            Ton cours a avancé ? « Nouvelle version » : les chapitres sont redécoupés, tes quiz et tes cartes gardés.</p>
+          <ul id="file-list" class="file-list source-list"></ul>
+          <label id="dropzone" class="dropzone dropzone-slim" for="file-input">
+            <input type="file" id="file-input" multiple accept=".pdf,.docx,.pptx,.pages,.key,.txt,.md,.markdown" hidden>
+            <input type="file" id="replace-input" accept=".pdf,.docx,.pptx,.pages,.key,.txt,.md,.markdown" hidden>
+            <span class="muted">Glisse un fichier ici (PDF, Word, PowerPoint, Pages, Keynote, texte). Un fichier du même nom le <strong>remplace</strong>.</span>
+          </label>
+          <p id="upload-status" class="status" hidden></p>
+          <p id="chapters-status" class="status" hidden></p>
+        </section>
+
+        <div class="tree-branches">
+          <details class="card tree-fold" id="panel-chapitres">
+            <summary><span class="fold-title">Chapitres</span><small class="muted" id="fold-chapitres-count"></small></summary>
+            <div class="fold-body">
+              <ul class="course-chapter-list" id="chapter-list"></ul>
+              <p class="status" id="course-chapters-status" hidden></p>
+            </div>
+          </details>
+
+          <details class="card tree-fold" id="panel-quiz">
+            <summary><span class="fold-title">Quiz</span><small class="muted" id="fold-quiz-count"></small></summary>
+            <div class="fold-body">
+              <div class="fold-tools">
+                <p class="muted small-text">Clique sur un quiz pour voir ses questions ; ✎ le renomme, la corbeille le supprime. Pour t'entraîner : Réviser.</p>
+                <span class="head-actions">
+                  <button class="ghost small" type="button" data-import>Importer</button>
+                  <button class="primary small" data-create="quiz">+ Nouveau quiz</button>
+                </span>
+              </div>
+              <p class="status" id="quiz-status" hidden></p>
+              <div id="quiz-chip"></div>
+              <ul id="quiz-list" class="quiz-list"></ul>
+            </div>
+          </details>
+
+          <details class="card tree-fold" id="panel-cartes">
+            <summary><span class="fold-title">Flashcards</span><small class="muted" id="cards-count"></small></summary>
+            <div class="fold-body">
+              <div class="fold-tools">
+                <p class="muted small-text" id="cards-help">Ton classeur : clique sur une carte pour la retourner, « Modifier » pour la corriger. Le cadre montre où tu en es : argent (nouvelle), or (en cours), holographique (acquise).</p>
+                <span class="head-actions">
+                  <button class="ghost small" type="button" data-import>Importer</button>
+                  <button class="ghost small" type="button" id="cards-export">Exporter</button>
+                  <button class="ghost small" type="button" id="cards-flip-all">Voir les réponses</button>
+                  <button class="ghost small" id="card-write">Écrire une carte</button>
+                  <button class="primary small" data-create="cartes">+ Ajouter des cartes</button>
+                </span>
+              </div>
+              <p id="cards-status" class="status ok" hidden></p>
+              <input type="file" id="import-input" accept=".txt,.csv,.tsv,.md,text/plain" hidden>
+              <div id="cards-chip"></div>
+              <div id="card-grid" class="card-grid"></div>
+              <p id="cards-empty" class="empty-state muted" hidden></p>
+              <div class="panel-foot" id="cards-foot"><button class="link-button danger" id="cards-clear">Effacer toutes les cartes</button></div>
+            </div>
+          </details>
         </div>
-        <ul class="course-chapter-list" id="chapter-list"></ul>
-        <p class="status" id="course-chapters-status" hidden></p>
-        <p class="course-links small-text"><a data-tab-link="quiz">Tous les quiz</a> · <a data-tab-link="cartes">Toutes les flashcards</a>
-          · <a data-tab-link="fichiers">Fichiers</a></p>
       </div>
 
       <div class="revise-strip" id="course-revise">
         <span id="course-revise-text"></span>
-        <span class="revise-strip-actions">
-          <a class="button ghost small" id="course-cards-link" href="#">Mes flashcards</a>
-          <a class="button primary small" id="course-revise-link" href="#/reviser">Réviser ce cours →</a>
-        </span>
+        <a class="button primary small" id="course-revise-link" href="#/reviser">Réviser ce cours →</a>
       </div>
       </div>
 
@@ -647,58 +710,6 @@
         </div>
       </div>
 
-      <div class="outdated-note" id="outdated-note" hidden>
-        <span id="outdated-text"></span>
-        <button class="ghost small" type="button" id="outdated-open">Vérifier</button>
-      </div>
-
-      <section class="panel" id="panel-quiz" hidden>
-        <div class="panel-head">
-          <h1>Quiz</h1>
-          <div class="head-actions">
-            <button class="ghost small" type="button" data-import>Importer</button>
-            <button class="primary small" data-create="quiz">+ Nouveau quiz</button>
-          </div>
-        </div>
-        <p class="status" id="quiz-status" hidden></p>
-        <p class="muted small-text">Clique sur un quiz pour voir ses questions. Pour t'entraîner, passe-le depuis Réviser.</p>
-        <div id="quiz-chip"></div>
-        <ul id="quiz-list" class="quiz-list"></ul>
-      </section>
-
-      <section class="panel" id="panel-cartes" hidden>
-        <div class="panel-head">
-          <h1>Flashcards <span class="muted count" id="cards-count"></span></h1>
-          <div class="head-actions">
-            <button class="ghost small" type="button" data-import>Importer</button>
-            <button class="ghost small" type="button" id="cards-export">Exporter</button>
-            <button class="ghost small" type="button" id="cards-flip-all">Voir les réponses</button>
-            <button class="ghost small" id="card-write">Écrire une carte</button>
-            <button class="primary small" data-create="cartes">+ Ajouter des cartes</button>
-          </div>
-        </div>
-        <p class="muted small-text" id="cards-help">Ton classeur : clique sur une carte pour la retourner, « Modifier » pour la corriger. Le cadre montre où tu en es : argent (nouvelle), or (en cours), holographique (acquise).</p>
-        <p id="cards-status" class="status ok" hidden></p>
-        <input type="file" id="import-input" accept=".txt,.csv,.tsv,.md,text/plain" hidden>
-        <div id="cards-chip"></div>
-        <div id="card-grid" class="card-grid"></div>
-        <p id="cards-empty" class="empty-state muted" hidden></p>
-        <div class="panel-foot" id="cards-foot"><button class="link-button danger" id="cards-clear">Effacer toutes les cartes</button></div>
-      </section>
-
-      <section class="panel" id="panel-fichiers" hidden>
-        <div class="panel-head"><h1>Fichiers</h1></div>
-        <label id="dropzone" class="dropzone" for="file-input">
-          <input type="file" id="file-input" multiple accept=".pdf,.docx,.pptx,.pages,.key,.txt,.md,.markdown" hidden>
-          <input type="file" id="replace-input" accept=".pdf,.docx,.pptx,.pages,.key,.txt,.md,.markdown" hidden>
-          <strong>Glisse ton cours ici</strong>
-          <span class="muted">PDF, Word, PowerPoint, Pages, Keynote, texte ou Markdown.
-            Un fichier du même nom qu'un fichier déjà présent le <strong>remplace</strong> (nouvelle version).</span>
-        </label>
-        <p id="upload-status" class="status" hidden></p>
-        <p id="chapters-status" class="status" hidden></p>
-        <ul id="file-list" class="file-list"></ul>
-      </section>
     </section>
 
     <!-- Créer un quiz ou des flashcards -->
@@ -1086,6 +1097,19 @@
         <button class="ghost" type="button" id="ask-cancel">Annuler</button>
       </div>
     </form>
+  </dialog>
+
+  <!-- Importer un paquet : à quel cours rattacher chaque cours du paquet -->
+  <dialog id="pack-dialog" class="pack-dialog">
+    <h2>Importer des quiz et flashcards</h2>
+    <p class="muted small-text">Pour chaque cours du paquet, choisis où l'importer. Pirouette a retrouvé ceux qui portent le même nom ;
+      les autres peuvent être rattachés à un de tes cours, créés, ou ignorés. Les questions et cartes déjà présentes ne sont pas doublées.</p>
+    <ul class="pack-rows" id="pack-rows"></ul>
+    <p class="error" id="pack-error" hidden></p>
+    <div class="actions">
+      <button class="primary" type="button" id="pack-go">Importer</button>
+      <button class="ghost" type="button" id="pack-cancel">Annuler</button>
+    </div>
   </dialog>
 
   <!-- Écrire ou corriger une flashcard -->

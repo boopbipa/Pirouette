@@ -1249,3 +1249,48 @@ main { padding-bottom: 120px; }
 .binder-tools .link-button:hover { color: var(--text); }
 .binder-tools .danger:hover { color: var(--ko); }
 .binder-tools .ico { width: 14px; height: 14px; }
+
+/* Importer un paquet : correspondance des cours */
+.pack-dialog { max-width: 640px; }
+.pack-rows { list-style: none; margin: 14px 0; padding: 0; display: grid; gap: 8px; }
+.pack-row { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr) auto; align-items: center; gap: 10px;
+            padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; }
+.pack-name { display: flex; flex-direction: column; min-width: 0; }
+.pack-name strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pack-arrow { color: var(--muted); }
+.pack-row select { width: 100%; min-width: 0; }
+.pack-found { color: var(--ok); font-weight: 600; }
+.pack-new { color: var(--warn); font-weight: 600; }
+@media (max-width: 560px) { .pack-row { grid-template-columns: 1fr; } .pack-arrow { display: none; } }
+
+/* Page du cours en arbre : le fichier, puis ce qui en découle */
+.course-tree { margin-top: 18px; }
+.tree-source { position: relative; z-index: 1; }
+.tree-hint { margin: 4px 0 10px; }
+.source-list { margin: 0; }
+.source-file { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-radius: 12px; background: var(--sunken); border: 0; }
+.source-file > .ico { width: 24px; height: 24px; flex: none; color: var(--accent-ink); }
+.source-file .file-main { flex: 1; min-width: 0; }
+.source-file .file-main strong { display: block; font-size: 15.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.source-file .file-actions { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+.source-list .source-file + .source-file { margin-top: 8px; }
+.dropzone-slim { display: block; margin-top: 10px; padding: 10px 14px; text-align: center; font-size: 13px; }
+.tree-branches { position: relative; margin-left: 26px; padding-left: 22px; }
+.tree-branches::before { content: ""; position: absolute; left: 0; top: -2px; bottom: 26px; width: 2px; border-radius: 2px;
+                         background: var(--border); }
+.tree-fold { position: relative; margin-top: 12px; padding-top: 14px; padding-bottom: 14px; }
+.tree-fold::before { content: ""; position: absolute; left: -22px; top: 26px; width: 22px; height: 2px; background: var(--border); }
+.tree-fold > summary { display: flex; align-items: baseline; gap: 8px; cursor: pointer; list-style: none; font: 600 17px/1.3 var(--display); }
+.tree-fold > summary::-webkit-details-marker { display: none; }
+.tree-fold > summary::before { content: ""; align-self: center; width: 7px; height: 7px; flex: none; margin-right: 4px;
+                               border-right: 2px solid var(--muted); border-bottom: 2px solid var(--muted);
+                               transform: rotate(-45deg); transition: transform .2s; }
+.tree-fold[open] > summary::before { transform: rotate(45deg); }
+.tree-fold > summary small { font: 400 14px var(--sans); }
+.fold-body { margin-top: 12px; }
+.fold-tools { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 8px; }
+.fold-tools p { margin: 4px 0 0; flex: 1 1 260px; }
+.fold-tools .head-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+.chapter-group { display: flex; align-items: center; gap: 6px; margin: 14px 0 2px; font-size: 13px; font-weight: 600; color: var(--muted); }
+.chapter-group .ico { width: 15px; height: 15px; }
+@media (max-width: 600px) { .tree-branches { margin-left: 10px; padding-left: 14px; } .tree-fold::before { left: -14px; width: 14px; } }

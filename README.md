@@ -127,7 +127,7 @@ dans **Safari** → menu Fichier → **Ajouter au Dock** (ou, dans Chrome / Edge
    **Un seul quiz par chapitre** : recréer un quiz sur les mêmes chapitres alimente le quiz existant (nouvelles
    questions seulement, les semblables sont écartées) au lieu d'en créer un second. Au lancement, les quiz en double
    d'un même chapitre sont regroupés (questions semblables retirées, suivi des réussites et des ratés gardé).
-5. **Flashcards** (« Mes flashcards » à côté de « Réviser ce cours ») : un **classeur** de cartes à collectionner,
+5. **Flashcards** (dépliant « Flashcards » de la page du cours) : un **classeur** de cartes à collectionner,
    avec le même cadre qu'en révision (argent, or, holographique selon ta progression), à lire librement : un **clic**
    retourne la carte, « Voir les réponses » les retourne toutes. Sous chaque carte, **Modifier** et **Supprimer**
    (✎ aussi pendant la révision). On les apprend dans **Réviser**. Ajouter des cartes complète le paquet sans doublon. « ✎ Écrire une carte » en ajoute une à la main
@@ -166,15 +166,18 @@ fondu dessous, **Ta régularité** : le calendrier des 12 dernières semaines, u
 plus révisé ; au premier
 lancement, un guide en 3 étapes : installer l'IA locale, créer son semestre, importer son premier cours), **Mes cours** (cours et semestres),
 **Réviser**, Réglages et **Feedback** (une idée, un bug : Pirouette prépare le mail).
-La page d'un cours sert à **ranger et fabriquer** : la liste de ses **chapitres**, groupés sous le **fichier** d'où
-ils viennent (nom, nombre de chapitres, date de mise à jour). « **Nouvelle version** » y dépose la version à jour du
-fichier : elle remplace l'ancienne (même un PDF à la place d'un Keynote) et les chapitres sont redécoupés, tes quiz et
-tes cartes gardés ; « **Redécouper** » relance le repérage des chapitres. Pour chaque chapitre : ce qu'il contient
-(« 12 questions · 20 cartes »), un bouton **Créer** (un quiz ou des flashcards sur ce seul chapitre) et un menu « ••• »
-(voir les questions, voir les cartes, exporter). En haut à droite, « **Gérer le cours** » : renommer, semaine des
-partiels, réinitialiser les statistiques, supprimer. En bas, « Tous les quiz · Toutes les flashcards · Fichiers » ouvrent
-les pages complètes, où l'on renomme et supprime les quiz et modifie les cartes ; on s'entraîne dans **Réviser**
-(lien « Réviser ce cours → »).
+La page d'un cours est l'**atelier** : tout s'y règle et s'y modifie, **Réviser** ne sert qu'à réviser. Elle se lit
+comme un arbre qui part du fichier importé :
+- **Ton cours** (en haut) : le ou les fichiers du cours. « **Nouvelle version** » dépose la version à jour : elle
+  remplace l'ancienne (même un PDF à la place d'un Keynote), les chapitres sont redécoupés, tes quiz et tes cartes
+  gardés ; « **Redécouper** » relance le repérage des chapitres ; « + Ajouter un fichier » ou glisser un fichier.
+- En dessous, reliés au fichier par un trait, trois **dépliants** :
+  - **Chapitres** : pour chacun ce qu'il contient (« 12 questions · 20 cartes »), **Créer** (un quiz ou des flashcards
+    sur ce seul chapitre) et « ••• » (voir ses questions, voir ses cartes, exporter son quiz) ;
+  - **Quiz** : aperçu des questions (un clic), renommer, supprimer, exporter, importer, « + Nouveau quiz » ;
+  - **Flashcards** : le classeur (voir plus haut), écrire, modifier, supprimer, importer, exporter.
+En haut à droite, « **Gérer le cours** » : renommer, semaine des partiels, **exporter quiz et flashcards**,
+réinitialiser les statistiques, supprimer. En bas, « Réviser ce cours → ».
 Un **fil d'Ariane** en haut (Mes cours › Cours › Quiz › …) permet de remonter d'un clic. Les menus déroulants
 sont aux couleurs de l'app.
 
@@ -284,11 +287,19 @@ et « Tout annuler ». Rien de ce qui n'est pas terminé n'est gardé. L'écran 
 autres créations Claude en attente sont annulées (celles de l'IA locale continuent).
 
 **S'échanger des quiz et des flashcards** : dans un cours, l'icône « exporter » d'un quiz (ou « Exporter » sur la page
-Flashcards) enregistre un .txt dans Téléchargements, à envoyer par Messages ou mail. « Importer » (pages Quiz et
+Flashcards) enregistre un .txt dans Téléchargements, à envoyer par Messages ou mail. « Importer » (dépliants Quiz et
 Flashcards) le relit : un quiz Pirouette, un quiz écrit à la main (« 1. Question ? », « a) … ✓ » ou « Réponse : b »),
 ou des flashcards d'Anki, de Quizlet ou d'un tableur (« recto ; verso », tabulation, « :: », « Q : / R : »). Un quiz
 dont les chapitres existent dans le cours rejoint le quiz de ces chapitres, sans les questions déjà présentes. Les
 flashcards exportées s'importent aussi dans Anki et Quizlet.
+
+**Tout exporter d'un coup** : « Gérer le cours » → « Exporter quiz et flashcards », ou l'icône « exporter » d'un
+semestre dans Mes cours (tous ses cours). Pirouette enregistre un seul fichier **.zip** (« Pirouette - L1 S1.zip ») :
+un dossier par cours, chaque quiz en .txt (lisible, importable seul) et les flashcards. **Réimporter** : Mes cours →
+« Importer ». Pour chaque cours du paquet, Pirouette retrouve le cours du même nom (ou d'un nom très proche :
+« Neuroscience » ≈ « Neurosciences ») ; sinon il propose de le **rattacher à la main** à un de tes cours, de le **créer**
+(rangé dans le semestre du même nom) ou de l'ignorer. Les questions et les cartes déjà présentes ne sont pas doublées :
+réimporter le même paquet n'ajoute rien.
 
 **Sauvegardes** : Réglages → Tes données → « Sauvegarde automatique » à chaque ouverture, chaque semaine (par défaut)
 ou jamais, et « Sauvegarder maintenant ». Chaque sauvegarde est un dossier daté dans `Documents/Pirouette - Sauvegardes`

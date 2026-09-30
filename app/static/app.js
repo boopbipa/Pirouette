@@ -82,7 +82,7 @@ function setCrumbs(crumbs = []) {
     : `<span class="here" aria-current="page">${escapeHtml(c.label)}</span>`).join("");
 }
 const COURSES_CRUMB = { label: "Mes cours", href: "#/cours" };
-const TAB_NAMES = { quiz: "Quiz", cartes: "Flashcards", fichiers: "Fichiers" };
+const TAB_NAMES = { chapitres: "Chapitres", quiz: "Quiz", cartes: "Flashcards", fichiers: "Fichiers" };
 function courseCrumbs(course, tab = null, ...more) {
   const list = [COURSES_CRUMB, { label: course.name, href: `#/cours/${course.id}` }];
   if (tab) list.push({ label: TAB_NAMES[tab], href: `#/cours/${course.id}/${tab}` });
@@ -278,6 +278,7 @@ function folderHtml(folder, courses) {
         <span class="folder-actions">
           <button class="icon" type="button" data-folder-rename="${folder.id}" title="Renommer le semestre" aria-label="Renommer le semestre">${ICON_EDIT}</button>
           <button class="icon" type="button" data-folder-exam="${folder.id}" title="Semaine des partiels" aria-label="Semaine des partiels">${ICON_CALENDAR}</button>
+          <button class="icon" type="button" data-folder-export="${folder.id}" title="Exporter tous les quiz et flashcards du semestre" aria-label="Exporter le semestre">${ICON_SHARE}</button>
           <button class="ghost small" type="button" data-folder-archive="${folder.id}">${folder.archived ? "Désarchiver" : "Archiver"}</button>
           <button class="icon" type="button" data-folder-delete="${folder.id}" title="Supprimer le semestre (les cours sont gardés)" aria-label="Supprimer le semestre">${ICON_TRASH}</button>
         </span>
@@ -313,10 +314,11 @@ $("#new-folder").addEventListener("click", async () => {
 });
 
 $("#view-courses").addEventListener("click", async (e) => {
-  const button = e.target.closest("[data-folder-rename], [data-folder-archive], [data-folder-delete], [data-folder-exam]");
+  const button = e.target.closest("[data-folder-rename], [data-folder-archive], [data-folder-delete], [data-folder-exam], [data-folder-export]");
   if (!button) return;
   e.preventDefault();  // un bouton dans le titre du dossier ne le replie pas
-  const { folderRename, folderArchive, folderDelete, folderExam } = button.dataset;
+  const { folderRename, folderArchive, folderDelete, folderExam, folderExport } = button.dataset;
+  if (folderExport) return exportItem("folder", folderExport, "#courses-status");
   const folder = state.folders.find((f) => f.id === (folderRename || folderArchive || folderDelete || folderExam));
   if (folderExam) return openExamDialog({ folder });
   try {
@@ -1161,7 +1163,7 @@ $("#new-course-form").addEventListener("submit", async (e) => {
 
 // ---------- Un cours ----------
 // #/cours/<id>/quiz | cartes | fichiers : les trois entrées du cours ; #/cours/<id>/nouveau/quiz | cartes : création.
-const TABS = ["quiz", "cartes", "fichiers"];
+const TABS = ["chapitres", "quiz", "cartes", "fichiers"];
 
 function courseHash(tab) {
   return `#/cours/${state.course.id}${tab ? `/${tab}` : ""}`;
@@ -1188,11 +1190,11 @@ async function loadCourse(id) {
 async function openCourse(id, tab, { keepScroll = false } = {}) {
   if (state.course?.id !== id || !tab) state.chapterFilter = null;
   const course = await loadCourse(id);
-  // Sans partie choisie : la page du cours, avec ses trois entrées. Sinon, la partie seule.
+  // Une seule page, en arbre : le fichier, puis chapitres, quiz et flashcards à déplier. `tab` ouvre un dépliant.
   if (!TABS.includes(tab)) tab = null;
   state.tab = tab;
   $("#course-name").textContent = course.name;
-  setCrumbs(courseCrumbs(course, tab));
+  setCrumbs(courseCrumbs(course));
   renderFolderPick(course);
   const chip = $("#course-exam-chip");
   chip.hidden = !course.exam || course.exam.days <= -7;
@@ -1201,21 +1203,25 @@ async function openCourse(id, tab, { keepScroll = false } = {}) {
   // Cours tout neuf, sans fichier ni carte : on invite d'abord à importer le cours.
   const empty = !course.files.length && !course.quizzes.length && !course.cards.total;
   $("#start-drop").hidden = !empty;
-  $("#course-chapters").hidden = empty;
+  $("#course-tree").hidden = empty;
   renderCourseRevise(course);
   renderQuizPanel(course);
   renderFiles(course);
-  if (tab === "cartes") await loadDeck();
+  const questions = course.quizzes.reduce((n, q) => n + q.count, 0);
+  $("#fold-quiz-count").textContent = course.quizzes.length
+    ? `· ${plural(course.quizzes.length, "quiz", "quiz")}, ${plural(questions, "question", "questions")}` : "· aucun pour l'instant";
+  await loadDeck();
 
   const scroll = window.scrollY;
   show("course");
+  $("#course-overview").hidden = false;
+  if (tab && tab !== "fichiers") $(`#panel-${tab}`).open = true;
   if (keepScroll) window.scrollTo(0, scroll);
-  $("#course-overview").hidden = Boolean(tab);
+  else if (tab) $(`#panel-${tab}`).scrollIntoView({ block: "start" });
   renderPrepare(course, tab);
-  // Nouvelle version d'un fichier : questions et cartes à vérifier (sur la page du cours et ses fichiers).
-  $("#outdated-note").hidden = !course.outdated || !(tab === null || tab === "fichiers");
+  // Nouvelle version d'un fichier : questions et cartes à vérifier.
+  $("#outdated-note").hidden = !course.outdated;
   $("#outdated-text").textContent = `Ton cours a changé : ${plural(course.outdated, "question ou carte ne correspond", "questions ou cartes ne correspondent")} plus au cours.`;
-  TABS.forEach((t) => { $(`#panel-${t}`).hidden = t !== tab; });
 }
 
 // Menu « ••• » du cours : renommer, supprimer.
@@ -1252,21 +1258,17 @@ const refreshCourse = () => openCourse(state.course.id, state.tab, { keepScroll:
 
 // Page du cours : ses chapitres, avec ce qu'ils contiennent, « Créer » et « … » (voir, exporter).
 async function renderTiles(course) {
-  document.querySelectorAll("[data-tab-link]").forEach((a) => { a.href = courseHash(a.dataset.tabLink); });
   const data = (await api(`/api/mastery?course=${course.id}`).catch(() => []))[0] || { chapters: [] };
   if (state.course?.id !== course.id) return;
   state.courseChapters = data.chapters;
   const fileOf = (ch) => course.files.find((f) => ch.key === f.id || ch.key.startsWith(`${f.id}-`));
+  const several = course.files.length > 1;
+  $("#fold-chapitres-count").textContent = data.chapters.length ? `· ${data.chapters.length}` : "";
   $("#chapter-list").innerHTML = data.chapters.map((ch, i) => {
-    // En tête des chapitres, le fichier d'où ils viennent : une nouvelle version les redécoupe tous
+    // Plusieurs fichiers : les chapitres de chacun sous son nom
     const f = fileOf(ch);
-    const header = f && (i === 0 || fileOf(data.chapters[i - 1]) !== f) ? `<li class="chapter-file-head">
-      <span class="chapter-file-name">${ICON_FILE}<strong title="${escapeHtml(f.name)}">${escapeHtml(f.name)}</strong>
-        <small class="muted">${f.chapters?.length ? plural(f.chapters.length, "chapitre", "chapitres") : "sans chapitres"} · mis à jour ${formatDate(f.updated_at)}</small></span>
-      <span class="chapter-file-actions">
-        <button class="ghost small" type="button" data-replace-file="${f.id}" title="Dépose la version à jour : les chapitres sont redécoupés, tes quiz et cartes gardés">Nouvelle version</button>
-        <button class="link-button inline" type="button" data-rechapter-file="${f.id}">Redécouper</button>
-      </span></li>` : "";
+    const header = several && f && (i === 0 || fileOf(data.chapters[i - 1]) !== f)
+      ? `<li class="chapter-group">${ICON_FILE}${escapeHtml(f.name)}</li>` : "";
     const contents = [ch.questions ? plural(ch.questions, "question", "questions") : "", ch.cards ? plural(ch.cards, "carte", "cartes") : ""]
       .filter(Boolean).join(" · ") || "Rien encore";
     return `${header}<li class="chapter-item">
@@ -1279,18 +1281,12 @@ async function renderTiles(course) {
 }
 
 // Le fichier d'un groupe de chapitres : nouvelle version (même nom : elle remplace l'ancienne) ou redécoupage
-$("#chapter-list").addEventListener("click", async (e) => {
+document.addEventListener("click", async (e) => {
   const replace = e.target.closest("[data-replace-file]")?.dataset.replaceFile;
   if (replace) {
     state.replacing = replace;
     $("#replace-input").value = "";
     return $("#replace-input").click();
-  }
-  const again = e.target.closest("[data-rechapter-file]")?.dataset.rechapterFile;
-  if (again) {
-    await openCourse(state.course.id, "fichiers");
-    history.replaceState(null, "", courseHash("fichiers"));
-    detectChapters([again]);
   }
 });
 $("#replace-input").addEventListener("change", async () => {
@@ -1348,7 +1344,14 @@ $("#chapter-menu").addEventListener("click", (e) => {
   }
   if (action === "export") return exportItem("quiz", ch.quizzes[0].id, "#course-chapters-status");
   state.chapterFilter = ch.single ? null : ch.title;
-  go(courseHash(action === "see-quiz" ? "quiz" : "cartes"));
+  // Même page : on filtre sur ce chapitre et on ouvre le dépliant
+  const tab = action === "see-quiz" ? "quiz" : "cartes";
+  history.replaceState(null, "", courseHash(tab));
+  state.tab = tab;
+  renderQuizPanel(state.course);
+  if (state.deck) renderCardGrid();
+  $(`#panel-${tab}`).open = true;
+  $(`#panel-${tab}`).scrollIntoView({ behavior: "smooth", block: "start" });
 });
 
 // Filtre « un chapitre » (depuis « Voir les questions / les cartes » d'un chapitre). « Chapitre 1 — X » = « Chapitre 1 : X ».
@@ -1360,7 +1363,6 @@ function chapterChip() {
 }
 document.addEventListener("click", (e) => {
   if (e.target.closest("[data-clear-chapter]")) { state.chapterFilter = null; renderQuizPanel(state.course); if (state.deck) renderCardGrid(); }
-  if (e.target.closest("[data-tab-link]")) state.chapterFilter = null;
 });
 
 function renderQuizPanel(course) {
@@ -1371,29 +1373,30 @@ function renderQuizPanel(course) {
     : `<li class="empty muted">Aucun quiz ${state.chapterFilter ? "sur ce chapitre" : "pour l'instant"} : clique sur « + Nouveau quiz ».</li>`;
 }
 
+// Le(s) fichier(s) du cours, à la racine de l'arbre : nouvelle version, redécoupage des chapitres, retrait.
 function renderFiles(course) {
   $("#file-list").innerHTML = course.files.length ? course.files.map((f) => {
     const chapters = f.chapters || [];
     const found = chapters.length
-      ? `${chapters.length} chapitres ${f.chapters_by === "ai" ? "repérés par l'IA" : "repérés automatiquement"}`
+      ? `${plural(chapters.length, "chapitre", "chapitres")} ${f.chapters_by === "ai" ? "repérés par l'IA" : "repérés automatiquement"}`
       : f.chapters_by === "ai" ? "L'IA n'a pas trouvé de chapitres" : "Pas de chapitres repérés";
     return `
-    <li class="file-item">
+    <li class="file-item source-file">
+      ${ICON_FILE}
       <div class="file-main">
         <strong>${escapeHtml(f.name)}</strong>
-        <small class="muted">${formatSize(f.size)} · ${f.revisions > 1 ? `version ${f.revisions}, ` : ""}mis à jour ${formatDate(f.updated_at)}</small>
-        <small class="muted">${found} · <button class="link-button inline" data-detect-file="${f.id}" ${state.detecting ? "disabled" : ""}>${
-          f.chapters_by === "ai" ? "Relancer l'IA" : "Repérer avec l'IA"}</button></small>
+        <small class="muted">${found} · ${f.revisions > 1 ? `version ${f.revisions}, ` : ""}mis à jour ${formatDate(f.updated_at)} · ${formatSize(f.size)}</small>
         ${f.definitions ? `<small class="muted"><button class="link-button inline" data-show-defs="${f.id}">${
           plural(f.definitions, "définition repérée", "définitions repérées")}</button></small>` : ""}
       </div>
       <div class="file-actions">
-        <button class="ghost small" data-file-create="quiz" data-file="${f.id}">Quiz</button>
-        <button class="ghost small" data-file-create="cartes" data-file="${f.id}">Flashcards</button>
+        <button class="ghost small" type="button" data-replace-file="${f.id}" title="Dépose la version à jour : les chapitres sont redécoupés, tes quiz et cartes gardés">Nouvelle version</button>
+        <button class="ghost small" type="button" data-detect-file="${f.id}" ${state.detecting ? "disabled" : ""} title="${
+          f.chapters_by === "ai" ? "Relancer l'IA pour repérer les chapitres" : "Repérer les chapitres avec l'IA"}">Redécouper</button>
         <button class="icon" data-remove-file="${f.id}" aria-label="Retirer ${escapeHtml(f.name)}" title="Retirer du cours">✕</button>
       </div>
     </li>`;
-  }).join("") : `<li class="empty muted">Aucun fichier : dépose ton cours ci-dessus.</li>`;
+  }).join("") : `<li class="empty muted">Aucun fichier : dépose ton cours ci-dessous.</li>`;
 }
 
 // « Quiz 3 · Titre » ; un quiz renommé s'affiche exactement avec le nom choisi.
@@ -1421,12 +1424,70 @@ function quizItem(q, course, number = null, { play = false } = {}) {
     </li>`;
 }
 
+// ---------- Paquets : tous les quiz et flashcards d'un cours ou d'un semestre (.zip), à réimporter ----------
+$("#course-export").addEventListener("click", () => {
+  $("#course-more-menu").hidden = true;
+  exportItem("course", state.course.id, "#course-status");
+});
+$("#pack-import-btn").addEventListener("click", () => { $("#pack-input").value = ""; $("#pack-input").click(); });
+$("#pack-input").addEventListener("change", async () => {
+  const file = $("#pack-input").files[0];
+  if (!file) return;
+  const form = new FormData();
+  form.append("file", file);
+  try {
+    state.pack = await api("/api/pack/preview", { method: "POST", body: form });
+  } catch (err) {
+    return setStatus("#courses-status", err.message, false);
+  }
+  const options = (row) => [
+    ...state.pack.existing.map((c) => `<option value="${c.id}" ${row.match?.id === c.id ? "selected" : ""}>${escapeHtml(c.name)}</option>`),
+    `<option value="new" ${row.match ? "" : "selected"}>Créer le cours « ${escapeHtml(row.name)} »</option>`,
+    `<option value="">Ne pas importer</option>`].join("");
+  $("#pack-rows").innerHTML = state.pack.courses.map((row, i) => `
+    <li class="pack-row">
+      <span class="pack-name"><strong>${escapeHtml(row.name)}</strong>
+        <small class="muted">${[row.quizzes ? plural(row.quizzes, "quiz", "quiz") : "", row.cards ? plural(row.cards, "carte", "cartes") : ""].filter(Boolean).join(" · ")}${row.folder ? ` · ${escapeHtml(row.folder)}` : ""}</small></span>
+      <span class="pack-arrow" aria-hidden="true">→</span>
+      <select class="chip" data-pack-target="${i}" aria-label="Où importer ${escapeHtml(row.name)}">${options(row)}</select>
+      ${row.match ? `<small class="pack-found">retrouvé</small>` : `<small class="pack-new">à rattacher</small>`}
+    </li>`).join("");
+  $("#pack-error").hidden = true;
+  $("#pack-dialog").showModal();
+});
+$("#pack-rows").addEventListener("change", (e) => {
+  const select = e.target.closest("[data-pack-target]");
+  const badge = select?.parentElement.querySelector(".pack-found, .pack-new");
+  if (badge) badge.remove();
+});
+$("#pack-cancel").addEventListener("click", () => $("#pack-dialog").close());
+$("#pack-go").addEventListener("click", async () => {
+  const targets = [...document.querySelectorAll("[data-pack-target]")].map((s) => s.value);
+  $("#pack-go").disabled = true;
+  try {
+    const done = await api("/api/pack/import", jsonBody("POST", { token: state.pack.token, targets }));
+    $("#pack-dialog").close();
+    const parts = [done.questions ? plural(done.questions, "question", "questions") : "", done.cards ? plural(done.cards, "carte", "cartes") : ""].filter(Boolean);
+    setStatus("#courses-status", parts.length
+      ? `Importé : ${parts.join(" et ")} dans ${plural(done.courses, "cours", "cours")}${done.created ? ` (dont ${plural(done.created, "nouveau cours", "nouveaux cours")})` : ""}.`
+      : "Rien de nouveau : ces quiz et ces cartes étaient déjà là.", true);
+    loadCourses();
+  } catch (err) {
+    $("#pack-error").textContent = err.message;
+    $("#pack-error").hidden = false;
+  } finally {
+    $("#pack-go").disabled = false;
+  }
+});
+
 // ---------- S'échanger quiz et flashcards : fichier texte à envoyer (Messages, mail…), à importer ailleurs ----------
 async function exportItem(kind, id, statusSelector) {
   try {
     if (state.desktop) {
       const { name } = await api(`/api/export/${kind}/${id}`, { method: "POST" });
-      setStatus(statusSelector, `Enregistré dans Téléchargements : « ${name} ». Envoie-le (Messages, mail…) : il s'importe dans Pirouette${kind === "cards" ? ", Anki ou Quizlet" : ""}.`, true);
+      setStatus(statusSelector, kind === "course" || kind === "folder"
+        ? `Enregistré dans Téléchargements : « ${name} ». Pour le réimporter (sur ce Mac ou un autre) : Mes cours → Importer.`
+        : `Enregistré dans Téléchargements : « ${name} ». Envoie-le (Messages, mail…) : il s'importe dans Pirouette${kind === "cards" ? ", Anki ou Quizlet" : ""}.`, true);
     } else {
       location.href = `/api/export/${kind}/${id}`;
     }
@@ -1437,14 +1498,18 @@ async function exportItem(kind, id, statusSelector) {
 document.addEventListener("click", (e) => {
   const button = e.target.closest("[data-export-quiz]");
   if (button) exportItem("quiz", button.dataset.exportQuiz, "#quiz-status");
-  if (e.target.closest("[data-import]")) $("#import-input").click();
+  const importer = e.target.closest("[data-import]");
+  if (importer) {
+    state.importFrom = importer.closest("#panel-cartes") ? "cartes" : "quiz";
+    $("#import-input").click();
+  }
 });
 $("#cards-export").addEventListener("click", () => exportItem("cards", state.course.id, "#cards-status"));
 $("#import-input").addEventListener("change", async (e) => {
   const file = e.target.files[0];
   e.target.value = "";
   if (!file) return;
-  const onCards = state.tab === "cartes";
+  const onCards = state.importFrom === "cartes";
   const status = onCards ? "#cards-status" : "#quiz-status";
   const form = new FormData();
   form.append("file", file);
@@ -1453,11 +1518,7 @@ $("#import-input").addEventListener("change", async (e) => {
     const skipped = r.skipped ? ` (${r.skipped} ignorée${r.skipped > 1 ? "s" : ""} : illisible${r.skipped > 1 ? "s" : ""} ou déjà là)` : "";
     state.deck = null;
     await refreshCourse();
-    const tab = r.kind === "cards" ? "cartes" : "quiz";
-    if (state.tab !== tab) {  // un fichier de cartes importé depuis la page Quiz (ou l'inverse) : on y va
-      history.replaceState(null, "", courseHash(tab));
-      await openCourse(state.course.id, tab);
-    }
+    $(r.kind === "cards" ? "#panel-cartes" : "#panel-quiz").open = true;  // des cartes importées depuis « Quiz » : on les montre
     setStatus(r.kind === "cards" ? "#cards-status" : "#quiz-status", r.kind === "cards"
       ? `${plural(r.added, "carte ajoutée", "cartes ajoutées")}${skipped}.`
       : r.merged ? `${plural(r.added, "question ajoutée", "questions ajoutées")} au quiz « ${r.title} » (même chapitre)${skipped}.`
@@ -2200,10 +2261,7 @@ $("#cards-menu").addEventListener("click", async (e) => {
     if (!state.course.files.length) return go(courseHash("fichiers"));
     return go(courseHash("nouveau/cartes"));
   }
-  if (state.tab !== "cartes") {
-    await openCourse(state.course.id, "cartes");
-    history.replaceState(null, "", courseHash("cartes"));
-  }
+  $("#panel-cartes").open = true;
   openCardDialog();
 });
 
@@ -2736,9 +2794,6 @@ function renderCourseRevise(course) {
   $("#course-revise").hidden = !course.cards.total && !course.quizzes.length;
   $("#course-revise-text").innerHTML = today ? `<b>${today}</b> carte${today > 1 ? "s" : ""} du jour` : "Tes cartes sont à jour.";
   $("#course-revise-link").href = `#/reviser/cours/${course.id}`;
-  $("#course-cards-link").href = courseHash("cartes");
-  $("#course-cards-link").hidden = !course.cards.total;
-  $("#course-cards-link").textContent = `Mes flashcards (${course.cards.total})`;
 }
 
 // ---------- Réviser : révision du jour, points faibles et suivi ----------
