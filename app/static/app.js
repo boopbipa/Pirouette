@@ -239,14 +239,18 @@ async function loadCourses() {
   show("courses");
 }
 
+// Mes cours (l'atelier) : ce que contient chaque cours. Réviser montre la même grille, mais où tu en es.
 function courseCard(c) {
+  const chapters = c.files.reduce((n, f) => n + (f.chapters?.length || 0), 0);
+  const parts = [plural(c.files.length, "fichier", "fichiers"), chapters ? plural(chapters, "chapitre", "chapitres") : "",
+    `${c.quiz_count} quiz`, plural(c.card_count || 0, "carte", "cartes")].filter(Boolean);
   return `
     <a class="course-card" href="#/cours/${c.id}" draggable="false" data-course-card="${c.id}">
       <span class="course-main">
         <strong>${escapeHtml(c.name)}</strong>
-        <small>${plural(c.files.length, "fichier", "fichiers")} · ${c.quiz_count} quiz · ${plural(c.card_count || 0, "carte", "cartes")}</small>
+        <small>${parts.join(" · ")}</small>
       </span>
-      <small class="course-date">${formatDay(c.updated_at)}</small>
+      <span class="course-edit" title="Régler et modifier ce cours">${ICON_EDIT}</span>
     </a>`;
 }
 
@@ -2864,28 +2868,50 @@ async function openReview() {
   state.newCards = null;
   const [data, folders] = await Promise.all([api("/api/progress"), api("/api/folders")]);
   const courses = data.courses;
-  const counts = (list) => ({ today: list.reduce((n, c) => n + c.today, 0), weak: list.reduce((n, c) => n + c.weak, 0) });
-  const card = (href, name, { today, weak }, extra = "") => `
-    <a class="pick-card${extra}" href="${href}">
-      <strong>${escapeHtml(name)}</strong>
-      <small>${today || weak ? `${today ? `<b>${today}</b> carte${today > 1 ? "s" : ""} du jour` : ""}${today && weak ? " · " : ""}${
-        weak ? `${weak} point${weak > 1 ? "s" : ""} faible${weak > 1 ? "s" : ""}` : ""}` : "À jour ✓"}</small>
+  // Même grille que Mes cours, mais chaque carte dit où tu en es : maîtrise (cartes sues) et ce qui est à revoir.
+  const card = (c) => {
+    const mastery = c.cards ? Math.round((100 * c.known) / c.cards) : 0;
+    const status = c.today ? `<b>${c.today}</b> à revoir aujourd'hui` : c.cards ? "À jour" : "Pas encore de cartes";
+    return `
+    <a class="course-card revise-course" href="#/reviser/cours/${c.id}">
+      <span class="course-main">
+        <strong>${escapeHtml(c.name)}</strong>
+        <small>${status}${c.weak ? ` · ${plural(c.weak, "point faible", "points faibles")}` : ""}</small>
+      </span>
+      <span class="revise-mastery" title="${c.cards ? `${c.known} cartes sues sur ${c.cards}` : "Pas encore de cartes"}">${c.cards ? `${mastery} %<small>maîtrise</small>` : ""}</span>
+      <span class="revise-band" style="--m:${mastery}%" aria-hidden="true"></span>
     </a>`;
-  const archived = new Set(folders.filter((f) => f.archived).map((f) => f.id));
+  };
+  const group = (folder, list) => {
+    if (!list.length) return "";
+    const today = list.reduce((n, c) => n + c.today, 0);
+    const exam = folder?.exam_week && !folder.archived ? ` · ${examLabel(folder.exam_week)}` : "";
+    return `
+    <details class="folder revise-folder" data-folder="${folder?.id || ""}" ${!folder || folderOpen(folder) ? "open" : ""}>
+      <summary class="folder-head">
+        ${FOLDER_ICON}<strong>${escapeHtml(folder ? folder.name : "Sans semestre")}</strong>
+        <small class="muted">${plural(list.length, "cours", "cours")}${exam}${today ? ` · ${today} à revoir` : ""}</small>
+        ${folder && list.length > 1 ? `<a class="button primary small folder-revise" href="#/reviser/dossier/${folder.id}">Réviser le semestre</a>` : ""}
+      </summary>
+      <div class="course-grid">${list.map(card).join("")}</div>
+    </details>`;
+  };
   const known = new Set(folders.map((f) => f.id));
-  const group = (title, list, folderId = null) => list.length ? `
-    <div class="pick-group"><h2>${escapeHtml(title)}</h2>
-      <div class="pick-grid">${folderId && list.length > 1 ? card(`#/reviser/dossier/${folderId}`, "Tout le semestre", counts(list), " main") : ""}${
-        list.map((c) => card(`#/reviser/cours/${c.id}`, c.name, c)).join("")}</div></div>` : "";
+  const archived = folders.filter((f) => f.archived);
   $("#review-pick").innerHTML = !courses.length
     ? `<p class="empty-state muted">Pas encore de cours à réviser : crée un cours dans « Mes cours ».</p>`
-    : folders.filter((f) => !f.archived).map((f) => group(f.name, courses.filter((c) => c.folder_id === f.id), f.id)).join("")
-      + group(folders.length ? "Sans semestre" : "Un cours", courses.filter((c) => !known.has(c.folder_id)))
-      + (archived.size ? `<details class="pick-archived"><summary>Archivés</summary>${
-        folders.filter((f) => f.archived).map((f) => group(f.name, courses.filter((c) => c.folder_id === f.id), f.id)).join("")}</details>` : "");
+    : folders.filter((f) => !f.archived).map((f) => group(f, courses.filter((c) => c.folder_id === f.id))).join("")
+      + group(null, courses.filter((c) => !known.has(c.folder_id)))
+      + (archived.length ? `<details class="pick-archived"><summary>Archivés</summary>${
+        archived.map((f) => group(f, courses.filter((c) => c.folder_id === f.id))).join("")}</details>` : "");
   setCrumbs();
   show("review");
 }
+// Un semestre replié ou ouvert dans Réviser l'est aussi dans Mes cours (même préférence)
+$("#review-pick").addEventListener("toggle", (e) => {
+  const folder = e.target.closest?.("details.revise-folder");
+  if (folder?.dataset.folder) rememberFolder(folder.dataset.folder, folder.open);
+}, true);
 
 // … puis, pour ce choix, trois onglets : Réviser (plan, séance, quiz, partiel), Rétroplanning et Suivi.
 const SCOPE_TABS = { "": "Réviser", planning: "Rétroplanning", suivi: "Suivi" };

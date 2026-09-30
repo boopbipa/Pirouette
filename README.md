@@ -191,7 +191,13 @@ chapitre ; ce qui existait n'est pas refait.
 Un **fil d'Ariane** en haut (Mes cours › Cours › Quiz › …) permet de remonter d'un clic. Les menus déroulants
 sont aux couleurs de l'app.
 
-**Réviser** (répétition espacée, comme Anki) : d'abord on choisit un semestre (« Tout le semestre ») ou un cours,
+**Mes cours et Réviser : la même grille, pas le même contenu.** Les deux pages montrent les semestres (dépliables,
+même icône) et leurs cours en cartes. Dans **Mes cours** (l'atelier), une carte dit ce que contient le cours
+(« 1 fichier · 4 chapitres · 12 quiz · 80 cartes ») et mène à ses réglages (icône crayon). Dans **Réviser**, elle dit
+où tu en es : « 19 à revoir aujourd'hui », la **maîtrise** (part des cartes sues) et un bandeau de couleur en bas qui
+se remplit ; l'en-tête du semestre affiche les partiels (« J-75 ») et « **Réviser le semestre** ».
+
+**Réviser** (répétition espacée, comme Anki) : d'abord on choisit un semestre (« Réviser le semestre ») ou un cours,
 puis trois onglets : **Réviser**, **Rétroplanning** et **Suivi**. Dans l'onglet Réviser, quatre **modes** en haut
 (« Révision du jour », « Par chapitre », « Quiz », « Partiel blanc ») : on en choisit un et seule sa partie s'affiche
 (le dernier choisi est gardé). Le mode **Quiz** liste tous les quiz, avec « Faire le quiz ».

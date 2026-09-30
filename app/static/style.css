@@ -1329,3 +1329,20 @@ main { padding-bottom: 120px; }
 #scope-main[data-mode="quiz"] > [data-mode]:not([data-mode="quiz"]),
 #scope-main[data-mode="partiel"] > [data-mode]:not([data-mode="partiel"]) { display: none; }
 @media (max-width: 640px) { .mode-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+/* Mes cours et Réviser : même grille, contenu différent */
+.course-edit { flex: none; display: grid; place-items: center; width: 30px; height: 30px; border-radius: 50%; color: var(--muted);
+               background: var(--sunken); }
+.course-edit .ico { width: 15px; height: 15px; }
+.course-card:hover .course-edit { color: var(--accent-ink); }
+.revise-course { position: relative; overflow: hidden; padding-bottom: 20px; }
+.revise-course .course-main small b { color: var(--accent-ink); }
+.revise-mastery { flex: none; font: 700 18px/1 var(--display); color: var(--accent-ink); }
+.revise-band { position: absolute; left: 0; right: 0; bottom: 0; height: 6px; background: var(--sunken); }
+.revise-band::after { content: ""; position: absolute; inset: 0 auto 0 0; width: var(--m); background: var(--accent);
+                      border-radius: 0 3px 3px 0; }
+.revise-folder { margin-top: 18px; }
+.revise-folder .folder-head .folder-revise { margin-left: auto; }
+.revise-folder .course-grid { margin-top: 4px; }
+.revise-mastery { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; }
+.revise-mastery small { font: 500 11px/1 var(--sans); color: var(--muted); letter-spacing: .02em; }
