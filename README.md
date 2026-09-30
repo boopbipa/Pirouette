@@ -210,7 +210,8 @@ tombent toujours avant la semaine, se resserrent les deux dernières semaines, p
 semaine ; les nouvelles cartes sont étalées pour être toutes vues à temps.
 
 **Choisir le moteur** : en créant un quiz ou des flashcards, **L'app Claude** (par défaut, avec ton abonnement :
-Pirouette prépare la demande — nombre de questions, types, chapitres, thème — à copier-coller dans l'app Claude) ou
+Pirouette prépare la demande — nombre de questions, types, chapitres, thème, avec l'identifiant du cours et les clés
+des chapitres pour que Claude ne lise que ce qu'il faut et économise ton forfait — à copier-coller dans l'app Claude) ou
 **Local (Ollama)** (gratuit, hors ligne). Le dernier choix est retenu. (Claude par clé API est mis de côté ;
 `PIROUETTE_CLAUDE=1` le réactive.)
 
@@ -219,8 +220,8 @@ Pirouette apparaît dans ses outils (protocole MCP) : on demande par exemple « 
 chapitre 2 de Neuro dans Pirouette » ou « Ajoute 15 flashcards sur la myéline ». Claude liste les cours, lit les
 chapitres voulus et enregistre quiz et cartes dans Pirouette, avec l'abonnement Claude (sans clé API). Chaque question
 passe les mêmes contrôles que celles de l'IA locale (citation du cours, réponse tirée du cours, ni trop facile ni en
-double) ; Claude reçoit la raison des refus pour corriger. Il peut aussi lire tes cartes difficiles pour te réexpliquer
-une notion. **Pirouette n'a pas besoin d'être ouverte** : l'app Claude la lance elle-même, en arrière-plan et sans
+double) ; Claude reçoit la raison des refus pour corriger. Une question refusée se corrige et se renvoie dans le même quiz
+(paramètre `quiz`). Il peut aussi lire tes cartes difficiles pour te réexpliquer une notion. **Pirouette n'a pas besoin d'être ouverte** : l'app Claude la lance elle-même, en arrière-plan et sans
 fenêtre. Techniquement : Pirouette s'inscrit dans `~/Library/Application Support/Claude/claude_desktop_config.json`
 (clé `mcpServers`, sans toucher aux autres outils) et l'app Claude lance `Pirouette --mcp`.
 

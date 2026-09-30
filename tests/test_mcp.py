@@ -127,3 +127,20 @@ def test_desktop_mcp_mode_speaks_only_json(tmp_path):
     lines = run.stdout.decode().splitlines()
     assert len(lines) == 2, run.stderr.decode()
     assert "Neuro" in json.loads(lines[1])["result"]["content"][0]["text"]
+
+
+def test_complete_an_existing_quiz(tmp_path):
+    store, cid = _store(tmp_path)
+    first = {"type": "reponse_courte", "kind": "cours", "question": "Quelle cellule est la base du système nerveux ?",
+             "choices": [], "answer": "Le neurone", "explanation": "", "source": "Le neurone est la cellule de base du système nerveux."}
+    text, error = _call(store, "pirouette_creer_quiz", cours=cid, titre="Tout le cours", questions=[first])
+    quiz_id = store.list_quizzes(cid)[0]["id"]
+    assert not error and f"Identifiant du quiz : {quiz_id}" in text
+    second = {"type": "reponse_courte", "kind": "cours", "question": "Qu'accélère la gaine de myéline ?", "choices": [],
+              "answer": "La conduction de l'influx nerveux", "explanation": "",
+              "source": "La gaine de myéline accélère la conduction de l'influx nerveux le long de l'axone."}
+    text, error = _call(store, "pirouette_creer_quiz", cours=cid, titre="x", questions=[second], quiz=quiz_id)
+    assert not error and "1 question ajoutée" in text and "2 questions en tout" in text
+    assert len(store.list_quizzes(cid)) == 1
+    missing, error = _call(store, "pirouette_creer_quiz", cours=cid, titre="x", questions=[second], quiz="000000000000")
+    assert error and "introuvable" in missing

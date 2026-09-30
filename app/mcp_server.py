@@ -29,8 +29,10 @@ MAX_CARDS = 60
 INSTRUCTIONS = """Pirouette est l'app de révision de l'étudiant : ses cours (PDF, Word, Pages…) découpés en chapitres,
 ses quiz et ses flashcards. Pour créer un quiz ou des flashcards : 1) pirouette_cours pour trouver le cours et les
 chapitres, 2) pirouette_lire pour lire le texte des chapitres voulus, 3) pirouette_creer_quiz ou
-pirouette_ajouter_cartes. Tout doit venir du texte du cours, avec une citation exacte (« source »). Écris en
-français sauf demande contraire, et tutoie l'étudiant."""
+pirouette_ajouter_cartes. Si la demande donne déjà l'identifiant du cours et les clés des chapitres (demande copiée
+depuis Pirouette), saute l'étape 1 et ne lis que ces chapitres : c'est plus rapide et bien moins coûteux. Tout doit
+venir du texte du cours, avec une citation exacte (« source »). Écris en français sauf demande contraire, tutoie
+l'étudiant, et termine par un résumé court."""
 
 QUESTION_RULES = SYSTEM_PROMPT.split("Règles :", 1)[1].rsplit("- Réponds uniquement", 1)[0].strip()
 
@@ -61,11 +63,15 @@ TOOLS = [
         "name": "pirouette_creer_quiz",
         "description": "Enregistre un quiz dans Pirouette (l'étudiant le passe ensuite dans Réviser). Chaque question "
                        "est vérifiée : sa « source » doit être une phrase du cours (des chapitres indiqués) et sa réponse "
-                       "doit venir du cours ; les questions refusées sont renvoyées avec la raison, pour les corriger "
-                       "et les renvoyer dans un nouvel appel.\n\nRègles pour les questions :\n" + QUESTION_RULES,
+                       "doit venir du cours ; les questions refusées sont renvoyées avec la raison. Pour compléter un "
+                       "quiz déjà enregistré (remplacer des questions refusées, en ajouter), passe son identifiant dans "
+                       "« quiz » : les questions s'y ajoutent au lieu de créer un nouveau quiz.\n\nRègles pour les "
+                       "questions :\n" + QUESTION_RULES,
         "inputSchema": {"type": "object", "properties": {
             "cours": {"type": "string", "description": "Identifiant du cours."},
             "titre": {"type": "string", "description": "Titre court du quiz (ex. le nom du chapitre)."},
+            "quiz": {"type": "string", "description": "Identifiant d'un quiz existant à compléter (donné quand un quiz "
+                                                       "est enregistré). Vide : nouveau quiz."},
             "chapitres": _chapters_prop("sur lesquels porte le quiz"),
             "questions": {"type": "array", "maxItems": MAX_QUESTIONS, "items": {
                 "type": "object",
@@ -185,8 +191,18 @@ class Pirouette:
         head = f"Cours « {course['name']} »" + (f", partie {partie}/{parts}" if parts > 1 else "") + " :\n\n"
         return head + chunk + more
 
-    def pirouette_creer_quiz(self, cours: str, titre: str, questions: list, chapitres: list[str] | None = None) -> str:
+    def pirouette_creer_quiz(self, cours: str, titre: str, questions: list, chapitres: list[str] | None = None,
+                             quiz: str = "") -> str:
         course = self._course(cours)
+        target = None
+        if quiz:
+            try:
+                target = self.store.get_quiz(str(quiz))
+            except Exception:
+                raise ToolError(f"Quiz introuvable : « {quiz} ».")
+            if target.get("course_id") != course["id"]:
+                raise ToolError("Ce quiz appartient à un autre cours.")
+            chapitres = chapitres or None
         sources = self._sources(course, chapitres)
         grounding = Grounding("\n\n".join(body for _, body in sources))
         previous = [{"front": q["question"], "back": "" if q["type"] == "vrai_faux" else q["answer"]}
@@ -220,20 +236,21 @@ class Pirouette:
         report = "\n".join(f"- question {n} « {label} » : {why}" for n, label, why in refused)
         if not kept:
             raise ToolError("Aucune question retenue.\n" + report)
-        quiz = {"title": str(titre).strip()[:120] or "Quiz", "questions": kept, "difficulty": "moyen",
-                **self._meta(course, sources, chapitres)}
-        key = self.store.chapter_key(quiz)
-        existing = self.store.chapter_quiz(key) if key else None
-        if existing:  # un quiz existe déjà sur ces chapitres : on l'alimente
+        new_quiz = {"title": str(titre).strip()[:120] or "Quiz", "questions": kept, "difficulty": "moyen",
+                    **self._meta(course, sources, chapitres)}
+        key = self.store.chapter_key(new_quiz)
+        existing = target or (self.store.chapter_quiz(key) if key else None)
+        if existing:  # quiz demandé, ou déjà créé sur ces chapitres : on l'alimente
             merged, added = self.store.add_to_quiz(existing["id"], kept)
+            quiz_id = merged["id"]
             done = f"{added} question{'s' if added > 1 else ''} ajoutée{'s' if added > 1 else ''} au quiz « {merged['title']} » " \
-                   f"(déjà créé sur ces chapitres, {len(merged['questions'])} questions en tout)."
+                   f"({len(merged['questions'])} questions en tout)."
         else:
-            self.store.save_quiz(quiz)
-            done = f"Quiz « {quiz['title']} » enregistré dans Pirouette : {len(kept)} question{'s' if len(kept) > 1 else ''}."
-        done += f" L'étudiant le trouve dans Réviser › {course['name']} (et dans Mes cours › {course['name']} › Quiz)."
-        return done + (f"\n\nQuestions refusées ({len(refused)}) — corrige-les et renvoie-les dans un nouveau quiz si tu veux :\n{report}"
-                       if refused else "")
+            quiz_id = self.store.save_quiz(new_quiz)["id"]
+            done = f"Quiz « {new_quiz['title']} » enregistré dans Pirouette : {len(kept)} question{'s' if len(kept) > 1 else ''}."
+        done += f" Identifiant du quiz : {quiz_id}. L'étudiant le trouve dans Réviser › {course['name']}."
+        return done + (f"\n\nQuestions refusées ({len(refused)}) — corrige-les (sans le demander à l'étudiant) et renvoie-les "
+                       f"avec quiz=\"{quiz_id}\" : elles s'ajouteront à ce quiz.\n{report}" if refused else "")
 
     def pirouette_ajouter_cartes(self, cours: str, cartes: list, chapitres: list[str] | None = None) -> str:
         course = self._course(cours)

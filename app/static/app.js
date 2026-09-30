@@ -1721,21 +1721,34 @@ function updateProviderUi() {
   if (viaApp) renderAppRequest();
 }
 
+// Demande pour l'app Claude. Elle donne l'identifiant du cours et les clés des chapitres : Claude n'a pas à lister
+// les cours ni à lire tout le cours, ce qui économise beaucoup de tokens (donc du forfait).
 function appRequest() {
   const course = state.course;
   const units = chapterUnits(course);
   const chosen = units.filter((u) => isChecked(u.key));
-  const where = !chosen.length || chosen.length === units.length ? `tout le cours « ${course.name} »`
+  const whole = !chosen.length || chosen.length === units.length;
+  const where = whole ? `tout le cours « ${course.name} »`
     : `${chosen.length > 1 ? "les chapitres" : "le chapitre"} ${chosen.map((u) => `« ${u.title} »`).join(", ")} du cours « ${course.name} »`;
   const focus = $("#focus").value.trim();
   const theme = focus ? `, uniquement sur le thème « ${focus} »` : "";
+  const each = state.createKind === "quiz" && perChapter() && (chosen.length || units.length) > 1;
+  const listed = chosen.length ? chosen : units;
+  const ids = `Cours : ${course.id} · chapitres : ${whole && !each ? "tout le cours" : listed.map((u) => `${u.key} (${u.title})`).join(", ")}`;
+  const read = each ? "lis chaque chapitre (pirouette_lire avec sa clé)"
+    : whole ? "lis le cours (pirouette_lire)" : "lis seulement ces chapitres (pirouette_lire)";
+  const brief = "Réponds ensuite par un résumé court.";
   if (state.createKind !== "quiz") {
-    return `Dans Pirouette, ajoute ${$("#cards-count").value || 20} flashcards sur ${where}${theme}.`;
+    return `Pirouette : ajoute ${$("#cards-count").value || 20} flashcards sur ${where}${theme}.\n${ids}\n`
+      + `Va droit au but : ne liste pas les cours, ${read}, puis enregistre les cartes (pirouette_ajouter_cartes). ${brief}`;
   }
   const names = { qcm: "QCM", vrai_faux: "vrai/faux", reponse_courte: "réponse courte", texte_a_trous: "texte à trous" };
   const types = [...document.querySelectorAll("input[name=types]:checked")].map((b) => names[b.value]);
-  return `Dans Pirouette, fais-moi un quiz de ${$("#num-questions").value || 10} questions sur ${where}${theme}`
-    + (types.length ? ` (${types.join(", ")})` : "") + ".";
+  const n = $("#num-questions").value || 10;
+  return `Pirouette : crée ${each ? `un quiz de ${n} questions par chapitre` : `un quiz de ${n} questions`} sur ${where}${theme}`
+    + (types.length ? ` (${types.join(", ")})` : "") + `.\n${ids}\n`
+    + `Va droit au but : ne liste pas les cours, ${read}, puis enregistre ${each
+      ? "un quiz par chapitre (pirouette_creer_quiz, avec la clé du chapitre dans « chapitres »)" : "le quiz (pirouette_creer_quiz)"}. ${brief}`;
 }
 function renderAppRequest() {
   if (!$("#app-request").hidden) $("#app-request-text").textContent = appRequest();
