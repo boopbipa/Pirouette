@@ -224,6 +224,10 @@ une notion. **Pirouette n'a pas besoin d'être ouverte** : l'app Claude la lance
 fenêtre. Techniquement : Pirouette s'inscrit dans `~/Library/Application Support/Claude/claude_desktop_config.json`
 (clé `mcpServers`, sans toucher aux autres outils) et l'app Claude lance `Pirouette --mcp`.
 
+**Réinitialiser les statistiques d'un cours** : menu « ••• » du cours. Scores des quiz, réussites par question,
+progression des flashcards (elles redeviennent nouvelles), historique des révisions et notes des partiels repartent
+de zéro ; les quiz, les cartes et les fichiers sont gardés.
+
 **Organisation du cours ignorée** : l'IA a pour consigne de laisser de côté les infos pratiques (modalités
 d'évaluation, « 30 % de la note », partiels, calendrier, salles, contacts, bibliographie), et un filtre écarte celles
 qui passeraient quand même. Pendant une révision, « Supprimer cette carte » (sous la carte) retire une carte inutile.

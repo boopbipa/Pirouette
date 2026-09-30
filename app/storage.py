@@ -779,6 +779,36 @@ class Store:
                 "available": {"questions": sum(len(self.get_quiz(q["id"])["questions"]) for q in self.list_quizzes(course_id)),
                               "cards": len(cards)}}
 
+    def reset_stats(self, course_id: str) -> dict:
+        """Remet à zéro le suivi d'un cours (scores des quiz, réussites par question, progression des flashcards,
+        journal des révisions, notes des partiels) ; les quiz et les cartes eux-mêmes sont gardés."""
+        self.get_course(course_id)
+        quizzes = 0
+        for summary in self.list_quizzes(course_id):
+            quiz = self.get_quiz(summary["id"])
+            quiz["attempts"], quiz["stats"] = [], {}
+            _write(self._quiz_path(quiz["id"]), quiz)
+            quizzes += 1
+        deck = self.get_doc(course_id, "cards")
+        cards = 0
+        if deck:
+            for card in deck.get("cards", []):
+                for key in ("interval", "ease", "due", "lapses", "last_rating"):
+                    card.pop(key, None)
+                card.update(status="new", reviews=0, last_reviewed=None)
+                cards += 1
+            self.save_doc(course_id, "cards", deck)
+        activity = self.activity()
+        for day in list(activity):
+            activity[day].pop(course_id, None)
+            if not activity[day]:
+                del activity[day]
+        _write(self.root / "activity.json", activity)
+        path = self._partiels_path(course_id)
+        if path.exists():
+            path.unlink()
+        return {"quizzes": quizzes, "cards": cards}
+
     def _partiels_path(self, course_id: str) -> Path:
         return self._course_dir(course_id) / "partiels.json"
 

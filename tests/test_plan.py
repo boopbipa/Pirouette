@@ -111,3 +111,20 @@ def test_mastery_api(tmp_path, monkeypatch):
     assert chapters["Chapitre 1 : Le neurone"]["cards"] == 40 and chapters["Chapitre 2 : La synapse"]["cards"] == 0
     assert chapters["Chapitre 1 : Le neurone"]["level"] == "fragile"  # la carte oubliée 3 fois
     assert chapters["Chapitre 2 : La synapse"]["level"] == "a_voir"
+
+
+def test_reset_course_stats_keeps_the_content(tmp_path, monkeypatch):
+    store, client, folder, cid = _setup(tmp_path, monkeypatch)
+    quiz = store.save_quiz({"course_id": cid, "title": "Q", "questions": [{"type": "qcm", "question": "?", "answer": "a"}],
+                            "attempts": [{"score": 1, "total": 1, "date": "2026-09-01"}],
+                            "stats": {"0": {"right": 1, "wrong": 0, "last": True, "date": "2026-09-01"}}})
+    other = client.post("/api/courses", json={"name": "Autre"}).json()["id"]
+    store.log_activity(cid, cards=3)
+    store.log_activity(other, cards=2)
+    assert client.post(f"/api/courses/{cid}/reset-stats").json() == {"quizzes": 1, "cards": 40}
+    kept = store.get_quiz(quiz["id"])
+    assert kept["attempts"] == [] and kept["stats"] == {} and len(kept["questions"]) == 1
+    card = store.get_doc(cid, "cards")["cards"][3]
+    assert card["status"] == "new" and card["reviews"] == 0 and "lapses" not in card and "due" not in card
+    days = store.activity()
+    assert all(cid not in per_course for per_course in days.values()) and any(other in d for d in days.values())

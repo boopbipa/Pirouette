@@ -1422,6 +1422,18 @@ $("#rename-course").addEventListener("click", async () => {
   refreshCourse();
 });
 
+// Repartir de zéro (après avoir beaucoup créé, modifié, supprimé des quiz) : le contenu reste, le suivi repart à zéro.
+$("#reset-stats").addEventListener("click", async () => {
+  $("#course-more-menu").hidden = true;
+  if (!confirm(`Réinitialiser les statistiques de « ${state.course.name} » ?\n\nLes scores des quiz, les réussites et erreurs par question, `
+    + "la progression des flashcards (elles redeviennent nouvelles), l'historique des révisions et les notes des partiels "
+    + "de ce cours sont remis à zéro. Les quiz, les cartes et les fichiers sont gardés.")) return;
+  const { quizzes, cards } = await api(`/api/courses/${state.course.id}/reset-stats`, { method: "POST" });
+  state.deck = null;
+  await refreshCourse();
+  alert(`C'est fait : ${plural(quizzes, "quiz", "quiz")} et ${plural(cards, "carte", "cartes")} repartent de zéro.`);
+});
+
 $("#delete-course").addEventListener("click", async () => {
   $("#course-more-menu").hidden = true;
   if (!confirm(`Supprimer le cours « ${state.course.name} », ses fichiers, ses quiz et ses flashcards ?`)) return;

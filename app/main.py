@@ -451,6 +451,12 @@ class ExamIn(BaseModel):
     date: str = ""  # début de la semaine des partiels, "" pour l'effacer
 
 
+@app.post("/api/courses/{course_id}/reset-stats")
+async def reset_course_stats(course_id: str) -> dict:
+    """Repartir de zéro sur un cours : scores, réussites, progression des cartes, historique (contenu gardé)."""
+    return store.reset_stats(course_id)
+
+
 @app.put("/api/courses/{course_id}/exam")
 async def set_exam(course_id: str, body: ExamIn) -> dict:
     try:
