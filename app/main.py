@@ -43,7 +43,7 @@ from .storage import NotFound, Store  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent
 # Claude est mis de côté pour l'instant : seule l'IA locale est proposée. PIROUETTE_CLAUDE=1 le réactive.
-CLAUDE_ENABLED = os.getenv("PIROUETTE_CLAUDE", "1") != "0"  # Claude (clé API) proposé à côté de l'IA locale
+CLAUDE_ENABLED = os.getenv("PIROUETTE_CLAUDE") == "1"  # Claude (clé API) mis de côté : on passe par l'app Claude
 PROVIDERS = {"local": ollama_provider} | ({"claude": claude_provider} if CLAUDE_ENABLED else {})
 MAX_TOP_UPS = 3  # demandes supplémentaires au plus quand il manque des questions ou des cartes
 

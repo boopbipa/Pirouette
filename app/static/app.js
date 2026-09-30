@@ -1657,9 +1657,10 @@ async function loadConfig({ keepSelection = false } = {}) {
     localStatus.innerHTML = `Ollama n'est pas ouvert ou pas installé : <a href="#/reglages">configurer l'IA locale</a>`;
   }
   const claudeOn = config.claude.enabled;
-  $("#engines").hidden = !claudeOn;
-  $("#engine-title").textContent = claudeOn ? "Moteur IA" : "IA locale";
-  $("#engine-note").hidden = claudeOn;
+  // Deux choix : l'app Claude (par défaut) et l'IA locale ; Claude par clé API seulement s'il est activé.
+  document.querySelector("input[name=provider][value=claude]").closest(".engine").hidden = !claudeOn;
+  $("#engine-title").textContent = "Moteur IA";
+  $("#engine-note").hidden = true;
   $("#engine-note").innerHTML = config.local.available
     ? `Sur ton Mac, hors ligne et gratuite · ${config.local.models.length} modèle(s)`
     : localStatus.innerHTML;
@@ -1684,9 +1685,8 @@ async function loadConfig({ keepSelection = false } = {}) {
 
   // Dernier moteur choisi (ou celui par défaut).
   let saved = null;
-  try { saved = localStorage.getItem("pirouette.provider"); } catch {}
-  const provider = ["local", "claude", "app"].includes(saved) && (saved !== "claude" || claudeOn) ? saved
-    : claudeOn && config.default_provider === "claude" ? "claude" : "local";
+  try { saved = localStorage.getItem("pirouette.engine"); } catch {}
+  const provider = ["local", "claude", "app"].includes(saved) && (saved !== "claude" || claudeOn) ? saved : "app";
   document.querySelector(`input[name=provider][value=${provider}]`).checked = true;
   api("/api/claude-app").then((info) => {
     $("#app-status").innerHTML = info.installed ? "Avec ton abonnement Claude · branchée"
@@ -1699,7 +1699,7 @@ async function loadConfig({ keepSelection = false } = {}) {
 document.querySelectorAll("input[name=provider]").forEach((r) => r.addEventListener("change", updateProviderUi));
 function updateProviderUi() {
   const provider = selectedProvider();
-  try { localStorage.setItem("pirouette.provider", provider); } catch {}
+  try { localStorage.setItem("pirouette.engine", provider); } catch {}
   $("#local-model-field").hidden = provider !== "local";
   // L'app Claude : Pirouette ne peut pas la piloter ; on prépare la demande à y coller.
   const viaApp = provider === "app";
@@ -1770,6 +1770,7 @@ async function openCreate(id, kind) {
   showError("#create-error", "");
   renderChapterPicker(course);
   show("create");
+  updateProviderUi();  // la demande pour l'app Claude suit ce qu'on crée (quiz ou cartes)
 }
 
 function engineForm() {

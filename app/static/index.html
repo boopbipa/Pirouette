@@ -756,6 +756,13 @@
         <p class="muted small-text" id="engine-note" hidden></p>
         <div class="engines" id="engines">
           <label class="engine">
+            <input type="radio" name="provider" value="app">
+            <span>
+              <strong>L'app Claude</strong>
+              <small id="app-status" class="muted">Avec ton abonnement Claude</small>
+            </span>
+          </label>
+          <label class="engine">
             <input type="radio" name="provider" value="local">
             <span>
               <strong>Local (Ollama)</strong>
@@ -767,13 +774,6 @@
             <span>
               <strong>Claude (clé API)</strong>
               <small id="claude-status" class="muted">Meilleure qualité, payant à l'usage</small>
-            </span>
-          </label>
-          <label class="engine">
-            <input type="radio" name="provider" value="app">
-            <span>
-              <strong>L'app Claude</strong>
-              <small id="app-status" class="muted">Avec ton abonnement Claude</small>
             </span>
           </label>
         </div>

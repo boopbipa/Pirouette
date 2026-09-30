@@ -126,12 +126,12 @@ def test_thinking_is_off_by_default_and_only_sent_to_thinking_models(client, mon
     client.put("/api/settings", json={"local_thinking": False})
 
 
-def test_claude_is_offered_next_to_the_local_ai(client, monkeypatch):
+def test_claude_api_is_set_aside_for_the_claude_app(client, monkeypatch):
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
     config = client.get("/api/config").json()
-    assert config["claude"]["enabled"] is True and config["default_provider"] == "local"
-    assert config["claude"]["available"] is False  # pas de clé : proposé, mais à configurer
-    assert client.get("/api/settings").json()["claude_enabled"] is True
+    assert config["claude"]["enabled"] is False and config["default_provider"] == "local"  # on passe par l'app Claude
+    assert config["claude"]["available"] is False
+    assert client.get("/api/settings").json()["claude_enabled"] is False
     cid = client.post("/api/courses", json={"name": "Bio"}).json()["id"]
     client.post(f"/api/courses/{cid}/files", files=[("files", ("a.txt", b"du texte", "text/plain"))])
     assert client.post(f"/api/courses/{cid}/quizzes", data={"provider": "inconnu"}).status_code == 400
