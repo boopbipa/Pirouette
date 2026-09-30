@@ -224,6 +224,10 @@ une notion. **Pirouette n'a pas besoin d'être ouverte** : l'app Claude la lance
 fenêtre. Techniquement : Pirouette s'inscrit dans `~/Library/Application Support/Claude/claude_desktop_config.json`
 (clé `mcpServers`, sans toucher aux autres outils) et l'app Claude lance `Pirouette --mcp`.
 
+**Organisation du cours ignorée** : l'IA a pour consigne de laisser de côté les infos pratiques (modalités
+d'évaluation, « 30 % de la note », partiels, calendrier, salles, contacts, bibliographie), et un filtre écarte celles
+qui passeraient quand même. Pendant une révision, « Supprimer cette carte » (sous la carte) retire une carte inutile.
+
 **Rien de nouveau ?** Si un chapitre est déjà bien couvert (toutes les questions proposées ressemblent à celles de
 tes quiz), la création se met en pause (« Déjà bien couvert ») au lieu d'échouer, et les suivantes continuent. Un
 bouton « Plus faciles » crée alors des questions plus faciles et les ajoute au quiz du chapitre (« Réessayer » pour

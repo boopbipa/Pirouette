@@ -33,6 +33,8 @@ Règles :
 - Couvre les notions importantes de tout le cours : définitions, mécanismes, causes/conséquences, formules, dates.
 - Chaque carte porte sur une notion différente : jamais deux cartes sur la même notion, même formulées autrement.
 - Pas de questions auxquelles on peut répondre par oui/non.
+- Ignore l'organisation du cours : modalités d'évaluation (notes, pourcentages, coefficients, partiels, dossiers à
+  rendre), calendrier, horaires, salles, contacts, plan du cours, bibliographie. Seul le contenu à apprendre compte.
 - "source" : recopie mot pour mot, sans rien changer, la phrase du cours qui contient la réponse. Chaque carte est
   vérifiée : une source qui n'est pas dans le cours fait rejeter la carte.
 - Réponds uniquement avec le JSON demandé."""
@@ -118,6 +120,12 @@ def normalize_cards(parts: list[dict], limit: int, existing: list[dict] = (), gr
             front, back = plain_text(item.get("front", "")), plain_text(item.get("back", ""))
             source = plain_text(item.get("source", ""))
             if not front or not back or is_duplicate(front, back, [*existing, *kept]):
+                continue
+            from .grounding import is_logistics
+
+            if grounding is not None and is_logistics(front, back, source):  # organisation du cours, pas à apprendre
+                if rejected is not None:
+                    rejected.append(front)
                 continue
             card = {"id": uuid.uuid4().hex[:8], "front": front, "back": back, "source": source,
                     "status": "new", "reviews": 0, "last_reviewed": None}

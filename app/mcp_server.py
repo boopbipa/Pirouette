@@ -17,7 +17,7 @@ from datetime import datetime
 
 from . import __version__
 from .chapters import chapter_text
-from .grounding import Grounding
+from .grounding import Grounding, is_logistics
 from .quiz import QUESTION_TYPES, SYSTEM_PROMPT, giveaway, normalize_question
 from .revision import is_duplicate, normalize_cards
 
@@ -207,6 +207,8 @@ class Pirouette:
                 refused.append((number, label, "la « source » n'est pas une phrase du cours (recopie-la mot pour mot)"))
             elif question["type"] != "vrai_faux" and not grounding.words_found(question["answer"]):
                 refused.append((number, label, "la réponse ne vient pas du cours"))
+            elif is_logistics(question["source"], question["question"], question["answer"]):
+                refused.append((number, label, "organisation du cours (notes, examens, calendrier…), rien à apprendre"))
             elif giveaway(question):
                 refused.append((number, label, "trop facile : l'énoncé donne la réponse"))
             elif is_duplicate(**notion, others=previous):

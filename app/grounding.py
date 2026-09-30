@@ -73,3 +73,17 @@ class Grounding:
 
     def check_card(self, card: dict) -> bool:
         return self.quote_found(card.get("source", "")) and self.words_found(card["back"], 0.4)
+
+
+# Informations d'organisation du cours (notes, modalités d'examen, calendrier…) : utiles, mais rien à apprendre.
+# Le modèle a pour consigne de les ignorer ; ce filtre rattrape celles qui passent quand même.
+LOGISTICS = re.compile("|".join([
+    r"\b\d+\s*%\s*(de la|du|des)\s+(note|moyenne|évaluation|evaluation)",
+    r"\bcoefficient\b", r"contr[ôo]le continu", r"modalit[ée]s? d['’][ée]valuation", r"\bnote finale\b",
+    r"date (limite|de rendu|butoir)", r"\bbibliographie\b", r"\b[\w.-]+@[\w-]+\.\w+", r"\bsalle [A-Z0-9]",
+    r"\b(heures?|créneaux?) de (cours|td|tp)\b", r"\bpermanences?\b",
+]), re.IGNORECASE)
+
+
+def is_logistics(*texts: str) -> bool:
+    return any(LOGISTICS.search(text or "") for text in texts)

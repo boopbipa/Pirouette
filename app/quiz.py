@@ -71,6 +71,8 @@ Règles :
   la question, la bonne réponse et l'explication doivent se trouver dans le cours, avec ses mots. Si le cours parle
   d'un sujet sans donner un détail (un mécanisme, un nom, une date), ne pose pas de question sur ce détail.
 - Vise les notions importantes (définitions, mécanismes, formules, dates, causes/conséquences), pas les détails anecdotiques ni la mise en page.
+- Ignore l'organisation du cours : modalités d'évaluation (notes, pourcentages, coefficients, partiels, dossiers à
+  rendre), calendrier, horaires, salles, contacts, plan du cours, bibliographie. Seul le contenu à apprendre compte.
 - Questions claires, autonomes, sans ambiguïté, et sans répétition entre elles.
 - Sauf pour "texte_a_trous", l'énoncé est une vraie question, courte (une ou deux phrases) et terminée par « ? ».
   Jamais une phrase inachevée qui s'arrête sur un article ou une élision (« d' », « l' », « le », « une », « des »…) :
@@ -334,6 +336,7 @@ def assemble_quiz(parts: list[dict], options: QuizOptions, fallback_title: str, 
     """Questions valides, sans doublon. Sont écartées (et renvoyées dans "rejected" pour être remplacées) :
     les questions trop faciles (voir `giveaway`), celles qui ne viennent pas du cours (avec `grounding`) et celles
     qui répètent, même reformulées, une question d'un quiz déjà créé sur ce cours (`previous`)."""
+    from .grounding import is_logistics
     from .revision import is_duplicate
 
     def notion(q: dict) -> dict:
@@ -355,7 +358,8 @@ def assemble_quiz(parts: list[dict], options: QuizOptions, fallback_title: str, 
             if key in seen:
                 continue
             seen.add(key)
-            if (giveaway(question) or (grounding is not None and not grounding.check_question(question))
+            if (giveaway(question) or is_logistics(question["source"], question["question"], question["answer"])
+                    or (grounding is not None and not grounding.check_question(question))
                     or is_duplicate(**notion(question), others=asked)):
                 rejected.append(question["question"])
                 continue

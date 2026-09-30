@@ -2422,6 +2422,23 @@ $("#card-edit-current").addEventListener("click", () => {
   } });
 });
 
+// Une carte inutile (hors sujet, simple info d'organisation du cours…) : on la supprime sans quitter la séance.
+$("#card-delete-current").addEventListener("click", async () => {
+  const s = state.session;
+  const item = s.items[s.index];
+  if (!confirm("Supprimer cette carte ? Elle disparaît du cours et de tes révisions.")) return;
+  try {
+    await api(`/api/courses/${item.course_id}/cards/${item.card.id}`, { method: "DELETE" });
+  } catch (err) {
+    return alert(err.message);
+  }
+  state.deck = null;
+  s.items.splice(s.index, 1);
+  if (s.index < s.items.length) showItem();
+  else if (s.results.length) finishSession();
+  else { state.sessionBack = s.back; leaveSession(); }
+});
+
 // Le cours sert à ranger et fabriquer ; on s'entraîne dans Réviser (un lien y mène).
 function renderCourseRevise(course) {
   const { today } = course.revision;
