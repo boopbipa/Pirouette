@@ -73,7 +73,6 @@ def test_swap_waits_for_the_window_only(tmp_path):
     et il est arrêté quand l'app est fermée."""
     import shutil
     import subprocess
-    import sys
     import time
 
     if not shutil.which("ps") or not shutil.which("bash"):
@@ -82,11 +81,13 @@ def test_swap_waits_for_the_window_only(tmp_path):
     (bundle / "Contents" / "MacOS").mkdir(parents=True)
     (new_app / "Contents").mkdir(parents=True)
     (new_app / "Contents" / "version").write_text("nouvelle")
-    program = str(bundle / "Contents" / "MacOS" / "Pirouette")
+    # Un faux Pirouette : un petit script rangé dans l'app (sa ligne de commande contient le chemin de l'app)
+    program = bundle / "Contents" / "MacOS" / "Pirouette"
+    program.write_text("#!/bin/bash\nsleep 60 &\nwait\n")
+    program.chmod(0o755)
 
-    def launch(*extra):  # un processus dont la ligne de commande commence par le chemin de l'app
-        code = "import time; time.sleep(60)"
-        return subprocess.Popen(["bash", "-c", f'exec -a "{program}" "{sys.executable}" -c "{code}" {" ".join(extra)}'])
+    def launch(*extra):
+        return subprocess.Popen([str(program), *extra])
 
     window, claude = launch(), launch("--mcp")
     time.sleep(1)  # le temps que les deux programmes démarrent

@@ -96,7 +96,7 @@ def swap_script(bundle: Path, new_app: Path) -> str:
     # pas (elle le sera à la prochaine mise à jour) — la supprimer sous ses pieds faisait geler l'app.
     return f"""#!/bin/bash
 # Programmes lancés depuis un dossier : « pid commande » (awk plutôt que pgrep : on lit toute la ligne de commande)
-lancees() {{ ps -ww -e -o pid= -o args= | awk -v p="$1" '{{ pid = $1; $1 = ""; sub(/^ /, ""); if (index($0, p) == 1) print pid, $0 }}'; }}
+lancees() {{ ps -ww -e -o pid= -o args= | awk -v p="$1" '{{ pid = $1; $1 = ""; sub(/^ /, ""); if (index($0, p) && $0 !~ /^(awk|ps|grep) /) print pid, $0 }}'; }}
 app_ouverte() {{ lancees "$1" | grep -v -e ' --mcp' -e ' --remind' | grep -q .; }}
 while app_ouverte {program}; do sleep 1; done
 [ -d {q(new_app)} ] || exit 0
