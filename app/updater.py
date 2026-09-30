@@ -82,24 +82,41 @@ async def check() -> dict:
 
 
 def swap_script(bundle: Path, new_app: Path) -> str:
-    """Script lancé à part : attend que plus aucune Pirouette ne tourne (l'utilisateur la quitte quand il veut),
-    puis remplace l'app. Il ne la relance pas : c'est l'utilisateur qui la rouvre."""
+    """Script lancé à part : attend que la fenêtre de Pirouette soit fermée (l'utilisateur la quitte quand il veut),
+    puis remplace l'app. Il ne la relance pas : c'est l'utilisateur qui la rouvre.
+
+    Seule l'app elle-même compte. Les Pirouette sans fenêtre — celle que l'app Claude garde ouverte pour ses outils
+    (« --mcp »), le rappel quotidien (« --remind ») — n'empêchent pas la mise à jour : elles sont arrêtées au moment
+    du remplacement (sinon la mise à jour attendait indéfiniment, tant que l'app Claude était ouverte)."""
     q = lambda p: "'" + str(p).replace("'", "'\\''") + "'"  # noqa: E731
     old = bundle.with_name(bundle.name + ".ancienne")
-    running = q(str(bundle) + "/Contents/MacOS/")
-    old_running = q(str(old) + "/Contents/MacOS/")
+    program = q(str(bundle) + "/Contents/MacOS/")
+    old_program = q(str(old) + "/Contents/MacOS/")
     # Rouverte très vite, Pirouette peut encore tourner depuis l'ancienne app déplacée : on ne la supprime alors
     # pas (elle le sera à la prochaine mise à jour) — la supprimer sous ses pieds faisait geler l'app.
     return f"""#!/bin/bash
-while pgrep -f {running} >/dev/null 2>&1; do sleep 1; done
+# Programmes lancés depuis un dossier : « pid commande » (awk plutôt que pgrep : on lit toute la ligne de commande)
+lancees() {{ ps -ww -e -o pid= -o args= | awk -v p="$1" '{{ pid = $1; $1 = ""; sub(/^ /, ""); if (index($0, p) == 1) print pid, $0 }}'; }}
+app_ouverte() {{ lancees "$1" | grep -v -e ' --mcp' -e ' --remind' | grep -q .; }}
+while app_ouverte {program}; do sleep 1; done
 [ -d {q(new_app)} ] || exit 0
-pgrep -f {old_running} >/dev/null 2>&1 || rm -rf {q(old)}
+# L'app est fermée : on arrête ses Pirouette sans fenêtre (outils de l'app Claude, rappel) avant de la remplacer
+for i in 1 2 3 4 5; do
+  pids=$(lancees {program} | awk '{{ print $1 }}')
+  [ -z "$pids" ] && break
+  kill $pids 2>/dev/null
+  sleep 1
+done
+pids=$(lancees {program} | awk '{{ print $1 }}')
+[ -n "$pids" ] && kill -9 $pids 2>/dev/null
+lancees {old_program} | grep -q . || rm -rf {q(old)}
 if [ ! -e {q(old)} ] && mv {q(bundle)} {q(old)} && mv {q(new_app)} {q(bundle)}; then
-  pgrep -f {old_running} >/dev/null 2>&1 || rm -rf {q(old)}
+  lancees {old_program} | grep -q . || rm -rf {q(old)}
 else
   [ -d {q(old)} ] && [ ! -d {q(bundle)} ] && mv {q(old)} {q(bundle)}
 fi
 xattr -dr com.apple.quarantine {q(bundle)} 2>/dev/null
+exit 0
 """
 
 

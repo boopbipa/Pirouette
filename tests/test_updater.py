@@ -14,7 +14,9 @@ def test_versions_and_script():
     assert updater.parse_version("v0.17.0") < updater.parse_version("0.18.0") < updater.parse_version("1.0")
     assert updater.parse_version("0.10.0") > updater.parse_version("0.9.9")
     script = updater.swap_script(Path("/Applications/Pirouette.app"), Path("/Applications/Pirouette.app.nouvelle"))
-    assert "pgrep -f '/Applications/Pirouette.app/Contents/MacOS/'" in script
+    assert "while app_ouverte '/Applications/Pirouette.app/Contents/MacOS/'" in script
+    # Le Pirouette sans fenêtre de l'app Claude (--mcp) et le rappel n'empêchent pas la mise à jour : arrêtés au remplacement
+    assert "grep -v -e ' --mcp' -e ' --remind'" in script and "kill $pids" in script
     assert "open " not in script  # l'app ne se relance pas toute seule : l'utilisateur la rouvre
     assert "mv '/Applications/Pirouette.app.nouvelle' '/Applications/Pirouette.app'" in script
     assert updater.app_bundle() is None  # pas l'app empaquetée : pas d'installation automatique
@@ -64,3 +66,43 @@ def test_quit_stops_the_desktop_app(client, monkeypatch):
     assert client.post("/api/quit").status_code == 400 and not started  # pas dans un navigateur
     monkeypatch.setenv("PIROUETTE_DESKTOP", "1")
     assert client.post("/api/quit").json() == {"quitting": True} and started == [0.4]
+
+
+def test_swap_waits_for_the_window_only(tmp_path):
+    """Pour de vrai : l'app ouverte bloque le remplacement ; le Pirouette de l'app Claude (--mcp) ne le bloque pas
+    et il est arrêté quand l'app est fermée."""
+    import shutil
+    import subprocess
+    import sys
+    import time
+
+    if not shutil.which("ps") or not shutil.which("bash"):
+        pytest.skip("ps et bash nécessaires")
+    bundle, new_app = tmp_path / "Pirouette.app", tmp_path / "Pirouette.app.nouvelle"
+    (bundle / "Contents" / "MacOS").mkdir(parents=True)
+    (new_app / "Contents").mkdir(parents=True)
+    (new_app / "Contents" / "version").write_text("nouvelle")
+    program = str(bundle / "Contents" / "MacOS" / "Pirouette")
+
+    def launch(*extra):  # un processus dont la ligne de commande commence par le chemin de l'app
+        code = "import time; time.sleep(60)"
+        return subprocess.Popen(["bash", "-c", f'exec -a "{program}" "{sys.executable}" -c "{code}" {" ".join(extra)}'])
+
+    window, claude = launch(), launch("--mcp")
+    time.sleep(1)  # le temps que les deux programmes démarrent
+    script = tmp_path / "remplacer.sh"
+    script.write_text(updater.swap_script(bundle, new_app))
+    swap = subprocess.Popen(["bash", str(script)])
+    try:
+        time.sleep(2.5)
+        assert swap.poll() is None and not (bundle / "Contents" / "version").exists()  # fenêtre ouverte : on attend
+        window.terminate()
+        window.wait(timeout=10)
+        swap.wait(timeout=20)
+        assert (bundle / "Contents" / "version").read_text() == "nouvelle"
+        assert claude.wait(timeout=10) is not None  # le Pirouette de l'app Claude a été arrêté
+        assert not new_app.exists() and not (tmp_path / "Pirouette.app.ancienne").exists()
+    finally:
+        for proc in (window, claude, swap):
+            if proc.poll() is None:
+                proc.kill()
