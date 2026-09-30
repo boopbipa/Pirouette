@@ -95,6 +95,15 @@ dans **Safari** → menu Fichier → **Ajouter au Dock** (ou, dans Chrome / Edge
    difficulté, types, part de **questions de cours** : définitions, « de quoi est composé… », termes à retrouver —
    au moins 40 %, 70 % ou 100 %) ou le nombre de cartes, puis lance. Pirouette vérifie la part de questions de cours
    et redemande précisément celles qui manquent.
+   **Taille : « Tout le chapitre »** (par défaut) : l'IA couvre tout le texte, du début à la fin — une question par
+   définition repérée et par notion importante — et Pirouette fixe le nombre d'après la longueur du chapitre (de 10 à
+   40 ; environ une question pour 450 caractères). Le quiz devient une **banque de questions** : à chaque lancement,
+   Pirouette en **tire 10** (Réglages → Révisions → « Questions tirées quand tu lances un quiz », 0 pour tout faire),
+   d'abord celles ratées la dernière fois et celles jamais posées, puis les plus anciennes. « Faire les 40 » lance le
+   quiz entier ; à la fin, « Nouveau tirage » en tire 10 autres. Pour une banque, la maîtrise du chapitre compte la
+   part des questions réussies, pas le score d'un tirage. « Nombre précis » redonne un quiz de N questions. L'IA locale
+   reçoit au plus 12 questions à écrire par demande (le texte est découpé), et la demande pour l'app Claude demande
+   aussi de couvrir tout le chapitre. Recréer un quiz sur un chapitre déjà couvert n'ajoute que ce qui manque.
    **Un quiz par chapitre** (le choix par défaut quand plusieurs chapitres sont cochés) : Pirouette crée un quiz pour
    chaque chapitre, titré avec le nom du chapitre. Les quiz se créent **en arrière-plan**, l'un après l'autre : on
    peut faire un autre quiz ou réviser en attendant ; un petit suivi en bas à gauche, visible partout dans l'app,

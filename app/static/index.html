@@ -385,6 +385,10 @@
           <label for="new-per-day">Nouvelles cartes par jour dans la révision du jour</label>
           <input type="number" id="new-per-day" min="0" max="200" value="20">
         </div>
+        <div class="field inline-field">
+          <label for="quiz-size">Questions tirées quand tu lances un quiz <small class="muted">(0 : toutes)</small></label>
+          <input type="number" id="quiz-size" min="0" max="50" value="10">
+        </div>
         <p class="status" id="revision-status" hidden></p>
       </div>
 
@@ -623,7 +627,7 @@
         <h2>Tout préparer pour ce cours ?</h2>
         <p class="muted" id="prepare-text"></p>
         <div class="option-row"><label><input type="checkbox" id="prepare-quizzes" checked> Un quiz par chapitre</label>
-          <select id="prepare-nq" class="chip" aria-label="Questions par quiz"><option value="5">5 questions</option><option value="10" selected>10 questions</option><option value="15">15 questions</option><option value="20">20 questions</option><option value="30">30 questions</option></select></div>
+          <select id="prepare-nq" class="chip" aria-label="Questions par quiz"><option value="0" selected>tout le chapitre</option><option value="5">5 questions</option><option value="10">10 questions</option><option value="15">15 questions</option><option value="20">20 questions</option><option value="30">30 questions</option></select></div>
         <div class="option-row"><label><input type="checkbox" id="prepare-cards" checked> Des flashcards par chapitre</label>
           <select id="prepare-nc" class="chip" aria-label="Cartes par chapitre"><option value="5">5 cartes</option><option value="10" selected>10 cartes</option><option value="15">15 cartes</option><option value="20">20 cartes</option><option value="30">30 cartes</option><option value="40">40 cartes</option></select></div>
         <p class="heat-note">Tout se crée en arrière-plan, chapitre après chapitre : tu peux commencer à réviser dès que le premier
@@ -714,6 +718,13 @@
         </div>
         <div class="grid">
           <div class="field">
+            <label for="quiz-size-mode">Taille</label>
+            <select id="quiz-size-mode">
+              <option value="cover" selected>Tout le chapitre (10 à 40 questions)</option>
+              <option value="count">Nombre précis</option>
+            </select>
+          </div>
+          <div class="field" id="num-questions-field" hidden>
             <label for="num-questions" id="num-questions-label">Nombre de questions</label>
             <input type="number" id="num-questions" min="1" max="50" value="10">
           </div>
@@ -921,6 +932,7 @@
       </div>
       <div class="progress"><div id="progress-bar"></div></div>
       <p class="status" id="quiz-note" hidden></p>
+      <p class="quiz-draw" id="quiz-draw" hidden></p>
       <div class="card question-card">
         <span id="question-type" class="tag"></span>
         <h2 id="question-text"></h2>

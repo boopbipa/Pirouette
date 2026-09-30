@@ -37,7 +37,8 @@ from .providers.base import NothingNew, ProviderError  # noqa: E402
 from .focus import (MANUAL_SCHEMA, MANUAL_SYSTEM, best_chunk, build_manual_prompt, focus_text,  # noqa: E402
                     parse_manual_lines)
 from .partiel import BATCH, GRADE_SCHEMA, GRADE_SYSTEM, build_grade_prompt, read_grades  # noqa: E402
-from .quiz import COURSE_SHARES, QUESTION_TYPES, QuizOptions, assemble_quiz, chunk_text, normalize_question  # noqa: E402
+from .quiz import (COURSE_SHARES, QUESTION_TYPES, QuizOptions, assemble_quiz, chunk_text, coverage_size,  # noqa: E402
+                   normalize_question)
 from .revision import is_duplicate, normalize_cards  # noqa: E402
 from .storage import NotFound, Store  # noqa: E402
 
@@ -128,6 +129,7 @@ class SettingsIn(BaseModel):
     definition_rule: str | None = None  # comment repérer les définitions ; "auto" = deviner, "aucune" = ne pas repérer
     reminder_time: str | None = None    # rappel quotidien « HH:MM » (Mac) ; "" pour l'arrêter
     new_per_day: int | None = None      # nouvelles cartes par jour dans la révision du jour
+    quiz_size: int | None = None        # questions tirées quand on lance un grand quiz ; 0 = toutes
     backup_mode: str | None = None      # sauvegarde automatique : "open" (à l'ouverture), "week", "off"
 
 
@@ -150,6 +152,7 @@ def _settings_view() -> dict:
         "reminder_time": store.get_settings().get("reminder_time", ""),
         "reminder_supported": reminder.supported(),
         "new_per_day": store.new_per_day(),
+        "quiz_size": int(store.get_settings().get("quiz_size", 10)),
         "data_dir": str(store.root.resolve()),
         "backup_mode": store.get_settings().get("backup_mode", "week"),
         "backup_dir": str(backup.backup_dir(store)),
@@ -190,6 +193,8 @@ async def save_settings(body: SettingsIn) -> dict:
         store.save_settings(reminder_time=body.reminder_time or None)
     if body.new_per_day is not None:
         store.save_settings(new_per_day=max(0, min(body.new_per_day, 200)))
+    if body.quiz_size is not None:
+        store.save_settings(quiz_size=max(0, min(body.quiz_size, 50)))
     if body.backup_mode is not None:
         if body.backup_mode not in backup.MODES:
             raise HTTPException(400, "Fréquence de sauvegarde inconnue.")
@@ -805,8 +810,13 @@ def _quiz_job(course_id: str, provider: str, model: str, num_questions: int, dif
     course, sources, course_text, model = _prepare(course_id, provider, model, chapters)
     focus = focus.strip()[:200]
     mine = parse_manual_lines(manual)
+    # 0 : couvrir tout le chapitre (banque de questions ; au lancement, Pirouette en tire quelques-unes)
+    cover = num_questions <= 0 and not focus
+    if cover:
+        num_questions = coverage_size(course_text, len(definitions_for(course_text, store.get_settings().get("definition_rule"))))
     options = QuizOptions(
-        num_questions=max(1, min(num_questions, 50)),
+        num_questions=max(1, min(num_questions or 10, 50)),
+        cover=cover,
         difficulty=difficulty,
         types=[t for t in types.split(",") if t in QUESTION_TYPES] or list(QUESTION_TYPES),
         language=language.strip() or "français",
@@ -833,6 +843,11 @@ def _quiz_job(course_id: str, provider: str, model: str, num_questions: int, dif
                               if hits and text != course_text else
                               f"Thème « {focus} » : tout le cours est gardé, l'IA s'en tient au thème")
         wanted = options.num_questions - len(own)
+        if cover:  # le quiz du chapitre existe déjà : on ne demande que ce qui manque pour le couvrir
+            key = store.chapter_key(_meta(course, provider, model, "", sources, chapters))
+            existing = store.chapter_quiz(key) if key else None
+            if existing:
+                wanted = max(5, wanted - len(existing["questions"]))
         if wanted <= 0:
             return _save_quiz_result({"title": title or f"Mes questions · {course['name']}", "questions": own}, course,
                                      provider, model, options, sources, chapters, dropped, focus)
@@ -1331,6 +1346,15 @@ async def delete_retro(folder: str = "", course: str = "") -> dict:
 MASTERY_LEVELS = ("a_voir", "fragile", "en_cours", "acquis")
 
 
+def _quiz_score(q: dict) -> float:
+    """Meilleur score d'un quiz ; pour une banque (plus de questions qu'une séance), la part des questions réussies
+    la dernière fois : réussir 10 questions sur 40 ne vaut pas 100 %."""
+    best = q["best_score"]
+    if q["count"] > max(best["total"], 1):
+        return 100 * q.get("known", 0) / q["count"]
+    return 100 * best["score"] / max(best["total"], 1)
+
+
 def _chapter_mastery(cards: list[dict], quiz_scores: list[float]) -> dict:
     """Où l'on en est sur un chapitre : cartes vues, bien ancrées (rappel à 7 jours ou plus), difficiles ; meilleur
     score de ses quiz. Niveau : à voir, fragile, en cours, acquis ; et un score de 0 à 100."""
@@ -1372,7 +1396,7 @@ async def mastery(folder: str = "", course: str = "") -> list[dict]:
             cards = deck if single else [card for card in deck if _same_title(title, card.get("scope") or [])]
             mine = [q for q in own if single or _same_title(title, q.get("scope") or [])]
             placed |= {q["id"] for q in mine}
-            scores = [100 * q["best_score"]["score"] / max(q["best_score"]["total"], 1) for q in mine if q.get("best_score")]
+            scores = [_quiz_score(q) for q in mine if q.get("best_score")]
             file_name = next((f["name"] for f in c["files"] if key == f["id"] or key.startswith(f"{f['id']}-")), "")
             chapters.append({"key": key, "title": title, "file": file_name, "single": single,
                              "quizzes": [_quiz_brief(q) for q in mine], "questions": sum(q["count"] for q in mine)}

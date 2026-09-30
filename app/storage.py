@@ -880,6 +880,8 @@ class Store:
                 "attempts": len(attempts),
                 "last_score": attempts[-1] if attempts else None,
                 "best_score": max(attempts, key=lambda a: a["score"] / max(a["total"], 1)) if attempts else None,
+                # Questions réussies la dernière fois qu'elles ont été posées (une banque se voit par morceaux)
+                "known": sum(1 for stat in (quiz.get("stats") or {}).values() if stat.get("last")),
             })
         return sorted(summaries, key=lambda q: q["created_at"] or "", reverse=True)
 

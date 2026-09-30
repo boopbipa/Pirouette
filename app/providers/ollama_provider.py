@@ -80,6 +80,7 @@ async def run(course_text: str, system: str, schema: dict, build_prompt, total_i
     model = model or default_model()
     chunks = chunk_text(course_text, chunk_chars())
     plan = plan_chunks(chunks, total_items) if total_items else [(c, 0) for c in chunks]
+    plan = [piece for chunk, n in plan for piece in _split_big(chunk, n)]
     parts: list[dict] = []
     async with httpx.AsyncClient(timeout=httpx.Timeout(900, connect=5)) as client:
         for index, (chunk, n_items) in enumerate(plan, start=1):
@@ -92,6 +93,17 @@ async def run(course_text: str, system: str, schema: dict, build_prompt, total_i
                 {"role": "user", "content": build_prompt(chunk, n_items, part)},
             ]))
     return parts
+
+
+MAX_PER_CALL = 12  # au-delà, un petit modèle bâcle ou oublie des questions : on découpe le morceau
+
+
+def _split_big(chunk: str, n_items: int) -> list[tuple[str, int]]:
+    """Un morceau qui doit donner beaucoup de questions est redécoupé : chaque partie du texte a les siennes."""
+    if n_items <= MAX_PER_CALL:
+        return [(chunk, n_items)]
+    pieces = -(-n_items // MAX_PER_CALL)
+    return plan_chunks(chunk_text(chunk, max(len(chunk) // pieces + 200, 1500)), n_items)
 
 
 async def generate_cards(course_text: str, n_cards: int, language: str, model: str | None = None,

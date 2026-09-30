@@ -110,6 +110,17 @@ class QuizOptions:
     course_share: float = COURSE_SHARES["equilibre"]  # part minimale de questions de cours (définitions…)
     definition_rule: str | None = None  # comment repérer les définitions (Réglages → Tes définitions)
     focus: str = ""  # thème précis demandé par l'étudiant (« les systèmes nerveux et leurs fonctions »)
+    cover: bool = False  # couvrir tout le texte (banque de questions), plutôt qu'un petit quiz
+
+
+COVER_MIN, COVER_MAX = 10, 40
+CHARS_PER_QUESTION = 450  # un chapitre de 9 000 caractères (≈ 4 pages) → 20 questions
+
+
+def coverage_size(text: str, definitions: int = 0) -> int:
+    """Nombre de questions pour couvrir tout un texte : une par définition repérée, et assez pour sa longueur
+    (entre 10 et 40)."""
+    return max(COVER_MIN, min(COVER_MAX, max(definitions, round(len(text) / CHARS_PER_QUESTION))))
 
 
 def course_quota(n_questions: int, share: float) -> int:
@@ -132,7 +143,7 @@ Génère un quiz de exactement {n_questions} questions sur ce cours.
 - Niveau : {options.difficulty} — {difficulty}
 - Langue des questions, réponses et explications : {options.language}.
 - "title" : un titre court décrivant le thème du cours.
-{_focus_block(options.focus)}{_kind_block(n_questions, options)}{_definitions_prompt(course_text, options.definition_rule)}{_avoid_block(options.avoid)}"""
+{_focus_block(options.focus)}{_cover_block(options.cover)}{_kind_block(n_questions, options)}{_definitions_prompt(course_text, options.definition_rule)}{_avoid_block(options.avoid)}"""
 
 
 def _focus_block(focus: str) -> str:
@@ -141,6 +152,13 @@ def _focus_block(focus: str) -> str:
     return (f"- Thème imposé : toutes les questions portent sur « {focus} », en s'appuyant uniquement sur ce que le"
             " cours en dit. Aucune question sur le reste du cours. Si le cours en dit peu, varie les angles (définition,"
             " rôle, composition, différence, conséquence) plutôt que de sortir du thème.\n")
+
+
+def _cover_block(cover: bool) -> str:
+    if not cover:
+        return ""
+    return ("- Couvre tout le texte, du début à la fin : chaque définition et chaque notion importante a sa question,"
+            " une seule par notion. Ne laisse aucune partie du texte de côté.\n")
 
 
 def _definitions_prompt(course_text: str, rule: str | None) -> str:

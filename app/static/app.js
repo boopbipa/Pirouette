@@ -542,6 +542,7 @@ function renderReminder(settings) {
     ? "Une notification du Mac à l'heure choisie, même app fermée : les jours de séance de ton plan de révision (sans plan, s'il y a des cartes du jour)."
     : "Disponible dans l'app Mac (Pirouette.app).";
   $("#new-per-day").value = settings.new_per_day;
+  $("#quiz-size").value = settings.quiz_size;
   $("#revision-status").hidden = true;
 }
 
@@ -568,6 +569,13 @@ $("#reminder-test").addEventListener("click", async () => {
   } catch (err) {
     setStatus("#revision-status", err.message, false);
   }
+});
+$("#quiz-size").addEventListener("change", async (e) => {
+  const settings = await api("/api/settings", jsonBody("PUT", { quiz_size: Number(e.target.value) || 0 }));
+  e.target.value = state.quizSize = settings.quiz_size;
+  setStatus("#revision-status", settings.quiz_size
+    ? `Un quiz de plus de ${settings.quiz_size} questions en tire ${settings.quiz_size} à chaque lancement.`
+    : "Chaque quiz se fait en entier.", true);
 });
 $("#new-per-day").addEventListener("change", async (e) => {
   const settings = await api("/api/settings", jsonBody("PUT", { new_per_day: Number(e.target.value) || 0 }));
@@ -1622,6 +1630,14 @@ function renderScope() {
 }
 
 // Un quiz par chapitre (le choix par défaut dès que plusieurs chapitres sont cochés) ou un seul quiz.
+// Taille du quiz : tout le chapitre (banque de questions, taille calculée par Pirouette) ou un nombre précis
+const coverMode = () => $("#quiz-size-mode").value === "cover" && !$("#focus").value.trim();
+$("#quiz-size-mode").addEventListener("change", () => {
+  $("#num-questions-field").hidden = $("#quiz-size-mode").value === "cover";
+  updateQuizMode();
+  updateManualHint();
+});
+
 function perChapter() {
   return state.createKind === "quiz" && !$("#quiz-mode-row").hidden && state.quizMode !== "single";
 }
@@ -1634,7 +1650,7 @@ function updateQuizMode() {
   $("#num-questions-label").textContent = each ? "Questions par quiz" : "Nombre de questions";
   $("#manual-field").hidden = each;
   $("#quiz-mode-hint").textContent = each
-    ? `${chosen} quiz de ${Number($("#num-questions").value) || 10} questions, un par chapitre coché, créés l'un après l'autre en arrière-plan.`
+    ? `${chosen} quiz${coverMode() ? " qui couvrent chacun tout leur chapitre" : ` de ${Number($("#num-questions").value) || 10} questions`}, un par chapitre coché, créés l'un après l'autre en arrière-plan.`
     : "Un seul quiz sur tous les chapitres cochés.";
   $("#create-btn").textContent = each ? `Créer les ${chosen} quiz` : "Générer le quiz";
 }
@@ -1809,7 +1825,11 @@ function appRequest() {
   const names = { qcm: "QCM", vrai_faux: "vrai/faux", reponse_courte: "réponse courte", texte_a_trous: "texte à trous" };
   const types = [...document.querySelectorAll("input[name=types]:checked")].map((b) => names[b.value]);
   const n = $("#num-questions").value || 10;
-  return `Pirouette : crée ${each ? `un quiz de ${n} questions par chapitre` : `un quiz de ${n} questions`} sur ${where}${theme}`
+  const size = coverMode()
+    ? (each ? "un quiz par chapitre qui couvre tout le chapitre" : "un quiz qui couvre tout le texte")
+      + " : chaque définition et chaque notion importante a sa question, du début à la fin (de 10 à 40 questions selon la longueur)"
+    : each ? `un quiz de ${n} questions par chapitre` : `un quiz de ${n} questions`;
+  return `Pirouette : crée ${size} sur ${where}${theme}`
     + (types.length ? ` (${types.join(", ")})` : "") + `.\n${ids}\n`
     + `Va droit au but : ne liste pas les cours, ${read}, puis enregistre ${each
       ? "un quiz par chapitre (pirouette_creer_quiz, avec la clé du chapitre dans « chapitres »)" : "le quiz (pirouette_creer_quiz)"}. ${brief}`;
@@ -1829,6 +1849,11 @@ function renderAppRequest() {
 }
 // La demande suit les réglages de la page (nombre, types, chapitres, thème).
 ["#num-questions", "#cards-count", "#focus"].forEach((id) => $(id).addEventListener("input", renderAppRequest));
+$("#focus").addEventListener("input", () => {
+  // Un thème précis : un petit quiz ciblé, pas tout le chapitre
+  $("#num-questions-field").hidden = coverMode();
+  $("#quiz-size-mode").disabled = Boolean($("#focus").value.trim());
+});
 $("#view-create").addEventListener("change", renderAppRequest);
 $("#view-create").addEventListener("click", () => setTimeout(renderAppRequest, 0));
 async function copyText(text) {
@@ -1935,7 +1960,7 @@ async function generateQuiz() {
   if (!types.length) return showError("#create-error", "Choisis au moins un type de question.");
   if (!hasSelection()) return showError("#create-error", "Coche au moins un chapitre.");
   const form = engineForm();
-  form.append("num_questions", $("#num-questions").value);
+  form.append("num_questions", coverMode() ? "0" : $("#num-questions").value);
   form.append("difficulty", $("#difficulty").value);
   form.append("types", types.join(","));
   form.append("course_share", $("#course-share").value);
@@ -1981,8 +2006,10 @@ const manualLines = () => $("#manual").value.split("\n").map((l) => l.replace(/^
 
 function updateManualHint() {
   const mine = manualLines().length;
-  const total = Math.max(Number($("#num-questions").value) || 0, mine);
-  $("#manual-hint").textContent = mine
+  const total = coverMode() ? mine : Math.max(Number($("#num-questions").value) || 0, mine);
+  $("#manual-hint").textContent = mine && coverMode()
+    ? `Ton quiz : ${plural(mine, "question à toi", "questions à toi")}, puis celles de l'IA pour couvrir tout le chapitre. L'IA écrit les réponses et les propositions à partir du cours.`
+    : mine
     ? `Ton quiz : ${plural(mine, "question à toi", "questions à toi")}${total > mine ? ` + ${total - mine} créée${total - mine > 1 ? "s" : ""} par l'IA` : ""} (règle le nombre de questions plus haut). L'IA écrit les réponses et les propositions à partir du cours.`
     : "L'IA cherche la réponse dans ton cours et écrit les propositions. Une question sans réponse dans le cours est écartée.";
 }
@@ -2904,7 +2931,7 @@ $("#retro-list").addEventListener("click", async (e) => {
     make.disabled = true;
     const form = new FormData();
     form.append("provider", "local");
-    form.append("num_questions", "10");
+    form.append("num_questions", "0");  // tout le chapitre
     form.append("chapters", make.dataset.key);
     try {
       await api(`/api/courses/${make.dataset.retroMake}/quizzes/background`, { method: "POST", body: form });
@@ -2982,12 +3009,40 @@ function foldJobs() {
 }
 
 // `back` : la page d'où l'on lance le quiz (Réviser › un semestre ou un cours) ; sinon le cours du quiz.
-function startQuiz(quiz, questions = quiz.questions, { back = state.quizBack } = {}) {
+// Un grand quiz (banque de questions) : Pirouette en tire quelques-unes à chaque lancement, d'abord celles
+// ratées la dernière fois et celles jamais posées, puis les plus anciennes.
+api("/api/settings").then((s) => { state.quizSize = s.quiz_size; }).catch(() => {});
+function drawQuestions(quiz) {
+  const all = quiz.questions;
+  const size = state.quizSize ?? 10;
+  if (!size || all.length <= size + 2) return all;
+  const stats = quiz.stats || {};
+  const priority = (i) => {
+    const stat = stats[i];
+    if (!stat) return 2;
+    if (stat.last === false) return 3;
+    const days = stat.date ? (Date.now() - Date.parse(stat.date)) / 864e5 : 30;
+    return Math.min(days / 14, 1.5);
+  };
+  const picked = all.map((q, i) => [priority(i) + Math.random() * 0.6, q]).sort((a, b) => b[0] - a[0])
+    .slice(0, size).map(([, q]) => q);
+  return shuffle(picked);
+}
+
+function startQuiz(quiz, questions, { back = state.quizBack } = {}) {
   foldJobs();
+  const drawn = !questions;
+  questions = questions || drawQuestions(quiz);
   state.quizBack = back || null;
   state.quiz = quiz;
   state.questions = questions;
-  state.fullRun = questions.length === quiz.questions.length;
+  // Les scores comptent pour un passage complet ou un tirage (pas pour « refaire mes erreurs »)
+  state.fullRun = drawn || questions.length === quiz.questions.length;
+  const partial = drawn && questions.length < quiz.questions.length;
+  $("#quiz-draw").hidden = !partial;
+  $("#quiz-draw").innerHTML = partial
+    ? `${questions.length} questions tirées parmi les ${quiz.questions.length} de ce quiz, d'abord celles ratées ou jamais vues. `
+      + `<a href="#" id="quiz-draw-all">Faire les ${quiz.questions.length}</a>` : "";
   state.index = 0;
   state.results = [];
   $("#quiz-title").textContent = quiz.title;
@@ -3005,6 +3060,12 @@ function startQuiz(quiz, questions = quiz.questions, { back = state.quizBack } =
   show("quiz");
   renderQuestion();
 }
+
+$("#quiz-draw").addEventListener("click", (e) => {
+  if (e.target.id !== "quiz-draw-all") return;
+  e.preventDefault();
+  startQuiz(state.quiz, state.quiz.questions);
+});
 
 function backToCourse() {
   if (state.quizBack) return go(state.quizBack);
@@ -3245,6 +3306,7 @@ function next() {
 // ---------- Résultats ----------
 function showResults() {
   state.resultsFilter = "all";
+  $("#retry-btn").textContent = isBank(state.quiz) ? "Nouveau tirage" : "Refaire le quiz";
   renderResults();
   show("results");
   // Seules les sessions complètes comptent dans les scores du quiz.
@@ -3317,7 +3379,8 @@ $("#delete-q-btn").addEventListener("click", async () => {
   else backToCourse();
 });
 
-$("#retry-btn").addEventListener("click", () => startQuiz(state.quiz, shuffle(state.quiz.questions)));
+const isBank = (quiz) => Boolean(state.quizSize) && quiz.questions.length > state.quizSize + 2;
+$("#retry-btn").addEventListener("click", () => startQuiz(state.quiz, isBank(state.quiz) ? undefined : shuffle(state.quiz.questions)));
 $("#retry-wrong-btn").addEventListener("click", () =>
   startQuiz(state.quiz, state.results.filter((r) => !r.correct).map((r) => r.question)));
 
@@ -4373,7 +4436,7 @@ $("#prepare-go").addEventListener("click", async () => {
   form.append("model", state.config?.local?.default_model || "");
   form.append("quizzes", quizzes ? "1" : "");
   form.append("cards", cards ? "1" : "");
-  form.append("num_questions", $("#prepare-nq").value || "10");
+  form.append("num_questions", $("#prepare-nq").value || "0");
   form.append("cards_count", $("#prepare-nc").value || "10");
   try {
     await api(`/api/courses/${state.course.id}/prepare`, { method: "POST", body: form });
