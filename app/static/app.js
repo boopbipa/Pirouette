@@ -1176,6 +1176,7 @@ async function loadCourse(id) {
 }
 
 async function openCourse(id, tab, { keepScroll = false } = {}) {
+  if (state.course?.id !== id || !tab) state.chapterFilter = null;
   const course = await loadCourse(id);
   // Sans partie choisie : la page du cours, avec ses trois entrées. Sinon, la partie seule.
   if (!TABS.includes(tab)) tab = null;
@@ -1190,7 +1191,7 @@ async function openCourse(id, tab, { keepScroll = false } = {}) {
   // Cours tout neuf, sans fichier ni carte : on invite d'abord à importer le cours.
   const empty = !course.files.length && !course.quizzes.length && !course.cards.total;
   $("#start-drop").hidden = !empty;
-  $(".course-tiles").hidden = empty;
+  $("#course-chapters").hidden = empty;
   renderCourseRevise(course);
   renderQuizPanel(course);
   renderFiles(course);
@@ -1239,24 +1240,87 @@ $("#course-folder").addEventListener("change", async (e) => {
 // Recharge le cours affiché sans changer d'onglet ni de position.
 const refreshCourse = () => openCourse(state.course.id, state.tab, { keepScroll: true });
 
-function renderTiles(course) {
+// Page du cours : ses chapitres, avec ce qu'ils contiennent, « Créer » et « … » (voir, exporter).
+async function renderTiles(course) {
   document.querySelectorAll("[data-tab-link]").forEach((a) => { a.href = courseHash(a.dataset.tabLink); });
-  const quizzes = course.quizzes;
-  const done = quizzes.filter((q) => q.best_score);
-  const best = done.length ? Math.max(...done.map((q) => Math.round((100 * q.best_score.score) / q.best_score.total))) : null;
-  $("#tile-quiz-num").textContent = quizzes.length;
-  $("#tile-quiz-sub").textContent = !quizzes.length ? "Aucun quiz" : best === null ? "Pas encore fait" : `Meilleur score ${best} %`;
-  $("#tile-cards-num").textContent = course.cards.total;
-  $("#tile-cards-sub").textContent = course.cards.total ? "Voir et modifier les cartes" : "Aucune carte";
-  const chapters = course.files.reduce((n, f) => n + (f.chapters?.length || 0), 0);
-  $("#tile-files-num").textContent = course.files.length;
-  $("#tile-files-sub").textContent = !course.files.length ? "Dépose ton cours" : chapters ? `${chapters} chapitres` : "Tout le cours";
+  const data = (await api(`/api/mastery?course=${course.id}`).catch(() => []))[0] || { chapters: [] };
+  if (state.course?.id !== course.id) return;
+  const files = new Set(data.chapters.map((ch) => ch.file));
+  state.courseChapters = data.chapters;
+  $("#chapter-list").innerHTML = data.chapters.map((ch, i) => {
+    const header = files.size > 1 && (i === 0 || data.chapters[i - 1].file !== ch.file)
+      ? `<li class="mastery-file">${escapeHtml(ch.file.replace(/\.[^.]+$/, ""))}</li>` : "";
+    const contents = [ch.questions ? plural(ch.questions, "question", "questions") : "", ch.cards ? plural(ch.cards, "carte", "cartes") : ""]
+      .filter(Boolean).join(" · ") || "Rien encore";
+    return `${header}<li class="chapter-item">
+      <span class="chapter-name"><strong>${escapeHtml(ch.single ? "Tout le cours" : ch.title)}</strong><small class="muted">${contents}</small></span>
+      <span class="chapter-actions">
+        <button class="primary small" type="button" data-chapter-create="${i}">Créer</button>
+        <button class="icon more-btn" type="button" data-chapter-more="${i}" aria-label="Plus d'actions">•••</button>
+      </span></li>`;
+  }).join("") || `<li class="empty muted">Ajoute un fichier pour voir ses chapitres.</li>`;
 }
 
+// « Créer » et « … » d'un chapitre : un petit menu sous le bouton.
+$("#chapter-list").addEventListener("click", (e) => {
+  const button = e.target.closest("[data-chapter-create], [data-chapter-more]");
+  if (!button) return;
+  const i = button.dataset.chapterCreate ?? button.dataset.chapterMore;
+  const ch = state.courseChapters[i];
+  const items = button.dataset.chapterCreate !== undefined
+    ? [["quiz", "Un quiz"], ["cartes", "Des flashcards"]]
+    : [["see-quiz", "Voir les questions", !ch.questions], ["see-cards", "Voir les cartes", !ch.cards],
+       ["export", "Exporter le quiz", !ch.quizzes.length]];
+  openChapterMenu(button, items.map(([action, label, off]) => `<button type="button" role="menuitem" data-chapter-action="${action}"
+    data-i="${i}" ${off ? "disabled" : ""}><strong>${label}</strong></button>`).join(""));
+});
+function openChapterMenu(anchor, html) {
+  const menu = $("#chapter-menu");
+  menu.innerHTML = html;
+  menu.hidden = false;
+  const box = anchor.getBoundingClientRect();
+  menu.style.top = `${box.bottom + window.scrollY + 6}px`;
+  menu.style.left = `${Math.max(12, box.right + window.scrollX - 220)}px`;
+}
+document.addEventListener("click", (e) => {
+  if (!e.target.closest("#chapter-menu, [data-chapter-create], [data-chapter-more]")) $("#chapter-menu").hidden = true;
+});
+$("#chapter-menu").addEventListener("click", (e) => {
+  const item = e.target.closest("[data-chapter-action]");
+  if (!item) return;
+  $("#chapter-menu").hidden = true;
+  const ch = state.courseChapters[item.dataset.i];
+  const action = item.dataset.chapterAction;
+  if (action === "quiz" || action === "cartes") {
+    // Page de création avec seulement ce chapitre coché.
+    excludedSet().clear();
+    if (!ch.single) chapterUnits().forEach((u) => { if (u.key !== ch.key) excludedSet().add(u.key); });
+    state.keepSelection = true;
+    return go(`#/cours/${state.course.id}/nouveau/${action}`);
+  }
+  if (action === "export") return exportItem("quiz", ch.quizzes[0].id, "#course-chapters-status");
+  state.chapterFilter = ch.single ? null : ch.title;
+  go(courseHash(action === "see-quiz" ? "quiz" : "cartes"));
+});
+
+// Filtre « un chapitre » (depuis « Voir les questions / les cartes » d'un chapitre). « Chapitre 1 — X » = « Chapitre 1 : X ».
+const titleKey = (t) => String(t).toLowerCase().match(/[\p{L}\p{N}]+/gu)?.join(" ") || "";
+const inChapter = (scope) => !state.chapterFilter || (scope || []).some((t) => titleKey(t) === titleKey(state.chapterFilter));
+function chapterChip() {
+  return state.chapterFilter ? `<p class="chapter-chip">Chapitre : <b>${escapeHtml(state.chapterFilter)}</b>
+    <button class="link-button" type="button" data-clear-chapter>Tout afficher</button></p>` : "";
+}
+document.addEventListener("click", (e) => {
+  if (e.target.closest("[data-clear-chapter]")) { state.chapterFilter = null; renderQuizPanel(state.course); if (state.deck) renderCardGrid(); }
+  if (e.target.closest("[data-tab-link]")) state.chapterFilter = null;
+});
+
 function renderQuizPanel(course) {
-  $("#quiz-list").innerHTML = course.quizzes.length
-    ? course.quizzes.map((q, i) => quizItem(q, course, course.quizzes.length - i)).join("")
-    : `<li class="empty muted">Aucun quiz pour l'instant : clique sur « + Nouveau quiz ».</li>`;
+  const quizzes = course.quizzes.filter((q) => inChapter(q.scope));
+  $("#quiz-chip").innerHTML = chapterChip();
+  $("#quiz-list").innerHTML = quizzes.length
+    ? quizzes.map((q) => quizItem(q, course, course.quizzes.length - course.quizzes.indexOf(q))).join("")
+    : `<li class="empty muted">Aucun quiz ${state.chapterFilter ? "sur ce chapitre" : "pour l'instant"} : clique sur « + Nouveau quiz ».</li>`;
 }
 
 function renderFiles(course) {
@@ -1962,7 +2026,8 @@ function renderCardGrid() {
   $("#cards-count").textContent = none ? "" : `· ${cards.length}`;
   $("#cards-empty").hidden = !none;
   $("#cards-empty").textContent = "Pas encore de flashcards pour ce cours : clique sur « + Ajouter des cartes ».";
-  $("#card-grid").innerHTML = cards.map((c) => fcardHtml(c, { removable: true })).join("");
+  $("#cards-chip").innerHTML = chapterChip();
+  $("#card-grid").innerHTML = cards.filter((c) => inChapter(c.scope)).map((c) => fcardHtml(c, { removable: true })).join("");
 }
 
 function fcardHtml(c, { removable = false } = {}) {
@@ -2614,13 +2679,14 @@ async function renderScopeMain() {
     <small class="muted">${h.lapses ? `oubliée ${plural(h.lapses, "fois", "fois")}` : "ratée la dernière fois"}${
       scope.single ? "" : ` · ${escapeHtml(h.course)}`}</small></li>`).join("");
 
-  renderMastery();
-
-  // Quiz à passer
+  // Par chapitre (quiz, cartes, tout mélangé) ; les quiz qui ne tiennent pas à un chapitre, à part.
+  const byChapter = await renderMastery();
+  const placed = new Set(byChapter.flatMap((c) => c.chapters.flatMap((ch) => ch.quizzes.map((q) => q.id))));
   const names = Object.fromEntries(scoped.map((c) => [c.id, c.name]));
-  const mine = quizzes.filter((q) => ids.has(q.course_id)).map((q) => ({ ...q, course_name: scope.single ? "" : names[q.course_id] }));
-  $("#scope-quizzes-box").hidden = !mine.length;
-  $("#scope-quizzes").innerHTML = mine.map((q) => quizItem(q, null, null, { play: true })).join("");
+  const others = quizzes.filter((q) => ids.has(q.course_id) && !placed.has(q.id))
+    .map((q) => ({ ...q, course_name: scope.single ? "" : names[q.course_id] }));
+  $("#scope-quizzes-box").hidden = !others.length;
+  $("#scope-quizzes").innerHTML = others.map((q) => quizItem(q, null, null, { play: true })).join("");
 
   // Mode partiel : sur un cours. Depuis un semestre, on choisit le cours.
   const single = Boolean(scope.single);
@@ -2637,22 +2703,64 @@ async function renderScopeMain() {
 const MASTERY_NAMES = { acquis: "Acquis", en_cours: "En cours", fragile: "Fragile", a_voir: "À voir" };
 async function renderMastery() {
   const data = await api(`/api/mastery?${new URLSearchParams(reviewScope())}`).catch(() => []);
-  $("#mastery-card").hidden = !data.length;
-  const several = data.length > 1;
-  $("#mastery-list").innerHTML = data.map((c) => `
+  const withChapters = data.filter((c) => c.chapters.length);
+  $("#mastery-card").hidden = !withChapters.length;
+  const several = withChapters.length > 1;
+  state.chapterRows = {};
+  $("#mastery-list").innerHTML = withChapters.map((c) => `
     ${several ? `<h3>${escapeHtml(c.course)}</h3>` : ""}
     <ul class="mastery-rows">${c.chapters.map((ch, i) => {
       // Plusieurs fichiers (« PARTIE 2 » dans chacun) : le nom du fichier sépare les groupes.
       const files = new Set(c.chapters.map((x) => x.file));
       const header = files.size > 1 && (i === 0 || c.chapters[i - 1].file !== ch.file)
         ? `<li class="mastery-file">${escapeHtml(ch.file.replace(/\.[^.]+$/, ""))}</li>` : "";
+      const id = `${c.course_id}:${ch.key}`;
+      state.chapterRows[id] = { ...ch, course_id: c.course_id, course: c.course };
       const detail = [ch.cards ? `${ch.solid}/${ch.cards} cartes ancrées` : "", ch.weak ? `${ch.weak} difficile${ch.weak > 1 ? "s" : ""}` : "",
-        ch.quiz !== null ? `quiz ${ch.quiz} %` : ""].filter(Boolean).join(" · ");
-      return `${header}<li title="${escapeHtml(detail || "Pas encore révisé")}">
-        <span class="mastery-title">${escapeHtml(ch.title)}</span>
+        ch.quiz !== null ? `meilleur score ${ch.quiz} %` : ""].filter(Boolean).join(" · ");
+      return `${header}<li class="chapter-row" title="${escapeHtml(detail || "Pas encore révisé")}">
+        <span class="mastery-title">${escapeHtml(ch.single ? c.course : ch.title)}</span>
         <span class="mastery-bar"><span class="lvl ${ch.level}" style="width:${Math.max(ch.score, ch.level === "a_voir" ? 0 : 6)}%"></span></span>
-        <span class="mastery-level ${ch.level}">${MASTERY_NAMES[ch.level]}</span></li>`;
+        <span class="mastery-level ${ch.level}">${MASTERY_NAMES[ch.level]}</span>
+        <span class="chapter-actions">
+          <button class="ghost small" type="button" data-chapter-quiz="${escapeHtml(id)}" ${ch.questions ? "" : "disabled"}>Quiz${ch.questions ? ` (${ch.questions})` : ""}</button>
+          <button class="ghost small" type="button" data-chapter-cards="${escapeHtml(id)}" ${ch.cards ? "" : "disabled"}>Cartes${ch.cards ? ` (${ch.cards})` : ""}</button>
+          <button class="primary small" type="button" data-chapter-mix="${escapeHtml(id)}" ${ch.cards || ch.questions ? "" : "disabled"}>Tout</button>
+        </span></li>`;
     }).join("")}</ul>`).join("");
+  return data;
+}
+
+// Réviser un chapitre : son quiz (s'il y en a plusieurs, on choisit), ses cartes, ou tout mélangé.
+$("#mastery-list").addEventListener("click", async (e) => {
+  const button = e.target.closest("[data-chapter-quiz], [data-chapter-cards], [data-chapter-mix]");
+  if (!button) return;
+  const { chapterQuiz, chapterCards, chapterMix } = button.dataset;
+  const ch = state.chapterRows[chapterQuiz || chapterCards || chapterMix];
+  const title = ch.single ? ch.course : ch.title;
+  if (chapterQuiz) {
+    let quiz = ch.quizzes[0];
+    if (ch.quizzes.length > 1) {
+      const pick = await chooseQuiz(ch.quizzes);
+      if (!pick) return;
+      quiz = pick;
+    }
+    return startQuiz(await api(`/api/quizzes/${quiz.id}`), undefined, { back: state.reviewScope.hash });
+  }
+  startSession({ mode: "chapter", course: ch.course_id, chapter: ch.title, questions: chapterMix ? "1" : "0" },
+    { title: `${title}${chapterMix ? "" : " · cartes"}`, back: state.reviewScope.hash });
+});
+function chooseQuiz(quizzes) {
+  return new Promise((resolve) => {
+    const dialog = $("#choose-quiz-dialog");
+    $("#choose-quiz-list").innerHTML = quizzes.map((q, i) => `<button type="button" class="choose-quiz" data-i="${i}">
+      <strong>${escapeHtml(q.title)}</strong><small class="muted">${q.count} questions${q.best !== null ? ` · meilleur score ${q.best} %` : ""}</small></button>`).join("");
+    dialog.onclick = (e) => {
+      const b = e.target.closest("[data-i]");
+      if (b || e.target.closest("#choose-quiz-cancel")) { dialog.close(); resolve(b ? quizzes[b.dataset.i] : null); }
+    };
+    dialog.showModal();
+  });
 }
 
 function renderPlan(data) {
@@ -2781,7 +2889,7 @@ $("#retro-list").addEventListener("change", async (e) => {
 $("#retro-list").addEventListener("click", async (e) => {
   const cards = e.target.closest("[data-retro-cards]");
   if (cards) {
-    return startSession({ mode: "chapter", course: cards.dataset.retroCards, chapter: cards.dataset.title },
+    return startSession({ mode: "chapter", course: cards.dataset.retroCards, chapter: cards.dataset.title, questions: "0" },
       { title: cards.dataset.title, back: state.reviewScope.hash });
   }
   const start = e.target.closest("[data-retro-start]");

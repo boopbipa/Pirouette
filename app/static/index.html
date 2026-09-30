@@ -146,16 +146,17 @@
           <ol class="hard-list" id="hard-list"></ol>
         </div>
 
+        <!-- Par chapitre : sa maîtrise, son quiz, ses cartes, ou les deux mélangés -->
         <div class="card mastery-card" id="mastery-card" hidden>
-          <h2>Maîtrise par chapitre</h2>
-          <p class="muted small-text">D'après tes cartes (bien ancrées ou difficiles) et le meilleur score des quiz de chaque chapitre.</p>
+          <h2>Par chapitre</h2>
           <div id="mastery-list"></div>
           <p class="mastery-legend muted small-text"><span class="lvl acquis"></span>Acquis <span class="lvl en_cours"></span>En cours
             <span class="lvl fragile"></span>Fragile <span class="lvl a_voir"></span>À voir</p>
         </div>
 
-        <div class="scope-section" id="scope-quizzes-box">
-          <h2>Quiz</h2>
+        <div class="scope-section" id="scope-quizzes-box" hidden>
+          <h2>Autres quiz</h2>
+          <p class="muted small-text">Sur tout le cours, sur un thème ou sur plusieurs chapitres.</p>
           <ul class="quiz-list" id="scope-quizzes"></ul>
         </div>
 
@@ -597,20 +598,19 @@
         <span class="primary small fake-button">Choisir un fichier</span>
       </label>
 
-      <nav class="course-tiles" aria-label="Sections du cours">
-        <div class="course-tile" data-tab="quiz">
-          <a class="tile-link" data-tab-link="quiz"><svg class="tile-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .8-1 1.5v.4M12 17h.01"/></svg><span class="tile-num" id="tile-quiz-num">0</span><strong>Quiz</strong><small id="tile-quiz-sub"></small></a>
-          <button class="tile-plus" data-create="quiz" title="Nouveau quiz" aria-label="Nouveau quiz">+</button>
+      <!-- Le cours, chapitre par chapitre : ce qu'il contient, créer, gérer (on s'entraîne dans Réviser) -->
+      <div class="card course-chapters" id="course-chapters">
+        <div class="plan-head">
+          <h2>Chapitres</h2>
+          <span class="head-actions">
+            <label class="ghost small button-like" for="file-input">+ Ajouter un fichier</label>
+          </span>
         </div>
-        <div class="course-tile" data-tab="cartes">
-          <a class="tile-link" data-tab-link="cartes"><svg class="tile-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="6" width="13" height="15" rx="2"/><path d="M8 3h11a2 2 0 0 1 2 2v12"/></svg><span class="tile-num" id="tile-cards-num">0</span><strong>Flashcards</strong><small id="tile-cards-sub"></small></a>
-          <button class="tile-plus" data-create="cartes" title="Ajouter des flashcards" aria-label="Ajouter des flashcards">+</button>
-        </div>
-        <div class="course-tile" data-tab="fichiers">
-          <a class="tile-link" data-tab-link="fichiers"><svg class="tile-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="M6 3h8l5 5v13H6z"/><path d="M14 3v5h5"/></svg><span class="tile-num" id="tile-files-num">0</span><strong>Fichiers</strong><small id="tile-files-sub"></small></a>
-          <label class="tile-plus" for="file-input" title="Ajouter un fichier" aria-label="Ajouter un fichier">+</label>
-        </div>
-      </nav>
+        <ul class="course-chapter-list" id="chapter-list"></ul>
+        <p class="status" id="course-chapters-status" hidden></p>
+        <p class="course-links small-text"><a data-tab-link="quiz">Tous les quiz</a> · <a data-tab-link="cartes">Toutes les flashcards</a>
+          · <a data-tab-link="fichiers">Fichiers</a></p>
+      </div>
 
       <div class="revise-strip" id="course-revise">
         <span id="course-revise-text"></span>
@@ -649,6 +649,7 @@
         </div>
         <p class="status" id="quiz-status" hidden></p>
         <p class="muted small-text">Clique sur un quiz pour voir ses questions. Pour t'entraîner, passe-le depuis Réviser.</p>
+        <div id="quiz-chip"></div>
         <ul id="quiz-list" class="quiz-list"></ul>
       </section>
 
@@ -665,6 +666,7 @@
         <p class="muted small-text" id="cards-help">Clique sur une carte pour la retourner. Pour les apprendre, révise-les depuis Réviser.</p>
         <p id="cards-status" class="status ok" hidden></p>
         <input type="file" id="import-input" accept=".txt,.csv,.tsv,.md,text/plain" hidden>
+        <div id="cards-chip"></div>
         <div id="card-grid" class="card-grid"></div>
         <p id="cards-empty" class="empty-state muted" hidden></p>
         <div class="panel-foot" id="cards-foot"><button class="link-button danger" id="cards-clear">Effacer toutes les cartes</button></div>
@@ -1066,6 +1068,13 @@
       <button class="primary" type="button" id="update-dialog-quit">Quitter Pirouette</button>
       <button class="ghost" type="button" id="update-dialog-later">Plus tard</button>
     </div>
+  </dialog>
+
+  <div class="plus-menu more-menu chapter-menu" id="chapter-menu" role="menu" hidden></div>
+  <dialog id="choose-quiz-dialog" class="report-dialog">
+    <h2>Quel quiz ?</h2>
+    <div class="choose-quiz-list" id="choose-quiz-list"></div>
+    <div class="actions"><button class="ghost" type="button" id="choose-quiz-cancel">Annuler</button></div>
   </dialog>
 
   <dialog id="feedback-dialog" class="report-dialog">

@@ -1096,9 +1096,21 @@ async def session(mode: str = "today", course: str = "", folder: str = "", filte
         random.shuffle(asked)
         return {"mode": mode, "items": _interleave(cards, asked), "cards": len(cards), "questions": len(asked)}
     if mode == "chapter":
+        # Un chapitre : ses cartes, et (avec `questions`) les questions de ses quiz, mélangées.
+        # Un cours sans chapitres (un seul bloc) : toutes ses cartes et tous ses quiz.
+        single = bool(course) and len(_units(store.get_course(course), "")) == 1
         cards = [_card_item({"course": c, "card": card}) for c, deck in store._decks(ids) for card in deck
-                 if _same_title(chapter, card.get("scope") or [])]
-        return {"mode": mode, "items": cards, "cards": len(cards), "questions": 0}
+                 if single or _same_title(chapter, card.get("scope") or [])]
+        random.shuffle(cards)
+        asked = []
+        if questions:
+            for summary in store.list_quizzes():
+                if summary.get("course_id") in ids and (single or _same_title(chapter, summary.get("scope") or [])):
+                    quiz = store.get_quiz(summary["id"])
+                    asked += [_question_item({"quiz": quiz, "index": i, "stat": (quiz.get("stats") or {}).get(str(i))})
+                              for i in range(len(quiz["questions"]))]
+            random.shuffle(asked)
+        return {"mode": mode, "items": _interleave(cards, asked), "cards": len(cards), "questions": len(asked)}
     if mode == "today":
         cards = [_card_item(e) for e in store.today_cards(ids)]
         chosen = store.weak_questions(ids)[:SESSION_QUESTIONS]
@@ -1339,17 +1351,29 @@ async def mastery(folder: str = "", course: str = "") -> list[dict]:
         deck = (store.get_doc(c["id"], "cards") or {}).get("cards", [])
         units = _units(c, "")
         chapters = []
+        own = [q for q in quizzes if q.get("course_id") == c["id"]]
+        placed: set[str] = set()
         for key, title in units:
             single = len(units) == 1  # un seul chapitre : toutes les cartes et tous les quiz du cours
             cards = deck if single else [card for card in deck if _same_title(title, card.get("scope") or [])]
-            scores = [100 * q["best_score"]["score"] / max(q["best_score"]["total"], 1) for q in quizzes
-                      if q.get("course_id") == c["id"] and q.get("best_score")
-                      and (single or _same_title(title, q.get("scope") or []))]
+            mine = [q for q in own if single or _same_title(title, q.get("scope") or [])]
+            placed |= {q["id"] for q in mine}
+            scores = [100 * q["best_score"]["score"] / max(q["best_score"]["total"], 1) for q in mine if q.get("best_score")]
             file_name = next((f["name"] for f in c["files"] if key == f["id"] or key.startswith(f"{f['id']}-")), "")
-            chapters.append({"key": key, "title": title, "file": file_name} | _chapter_mastery(cards, scores))
-        if chapters:
-            result.append({"course_id": c["id"], "course": c["name"], "chapters": chapters})
+            chapters.append({"key": key, "title": title, "file": file_name, "single": single,
+                             "quizzes": [_quiz_brief(q) for q in mine], "questions": sum(q["count"] for q in mine)}
+                            | _chapter_mastery(cards, scores))
+        if chapters or own:
+            # Quiz sur tout le cours, sur un thème, ou sur plusieurs chapitres à la fois : à part.
+            result.append({"course_id": c["id"], "course": c["name"], "chapters": chapters,
+                           "other_quizzes": [_quiz_brief(q) for q in own if q["id"] not in placed]})
     return result
+
+
+def _quiz_brief(q: dict) -> dict:
+    best = q.get("best_score")
+    return {"id": q["id"], "title": q.get("custom_title") or q["title"], "count": q["count"],
+            "best": round(100 * best["score"] / max(best["total"], 1)) if best else None}
 
 
 @app.get("/api/progress")

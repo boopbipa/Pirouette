@@ -1064,3 +1064,38 @@ main { padding-bottom: 120px; }
 .claude-tips-box summary { cursor: pointer; font-size: 14px; font-weight: 600; color: var(--accent-ink); }
 .claude-tips-box p { margin: 8px 0 4px; }
 .claude-tips { margin: 6px 0 0; padding-left: 20px; display: grid; gap: 5px; font-size: 14px; }
+
+/* Réviser par chapitre */
+.mastery-rows li.chapter-row { grid-template-columns: minmax(0, 1fr) minmax(70px, 140px) 64px 256px; }
+.chapter-actions { display: flex; gap: 6px; justify-content: flex-end; }
+.chapter-actions .small { padding: 5px 11px; font-size: 13px; }
+.chapter-row { padding: 6px 0; border-bottom: 1px solid var(--border); }
+.chapter-row:last-child { border-bottom: 0; }
+@media (max-width: 760px) {
+  .mastery-rows li.chapter-row { grid-template-columns: 1fr 64px; }
+  .chapter-row .mastery-bar { grid-column: 1 / -1; grid-row: 2; }
+  .chapter-actions { grid-column: 1 / -1; justify-content: flex-start; }
+}
+.choose-quiz-list { display: grid; gap: 8px; margin: 14px 0; }
+.choose-quiz { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; text-align: left;
+               background: var(--bg); border: 1px solid var(--border); border-radius: 12px; color: var(--text); }
+.choose-quiz:hover { border-color: var(--text); }
+
+/* Page du cours : chapitres */
+.course-chapters { margin-top: 18px; }
+.course-chapter-list { list-style: none; margin: 10px 0 0; padding: 0; }
+.course-chapter-list .mastery-file { margin: 12px 0 4px; font-size: 12.5px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.chapter-item { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--border); }
+.chapter-item:last-child { border-bottom: 0; }
+.chapter-name { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.chapter-name strong { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chapter-name small { font-size: 13px; }
+.chapter-item .chapter-actions { display: flex; gap: 6px; align-items: center; }
+.button-like { display: inline-block; cursor: pointer; border-radius: 999px; padding: 6px 12px; font-size: 14px; border: 1px solid var(--border); }
+.button-like:hover { border-color: var(--text); }
+.course-links { margin: 14px 0 0; color: var(--muted); }
+.course-links a { color: var(--muted); cursor: pointer; }
+.course-links a:hover { color: var(--text); }
+.chapter-menu { position: absolute; right: auto; min-width: 210px; }
+.chapter-chip { display: flex; align-items: center; gap: 10px; margin: 0 0 12px; padding: 8px 12px; border-radius: 10px;
+                background: var(--accent-soft); font-size: 14px; }

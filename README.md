@@ -121,7 +121,7 @@ dans **Safari** → menu Fichier → **Ajouter au Dock** (ou, dans Chrome / Edge
 5. **Flashcards** : toutes les cartes du cours sont affichées, à regarder librement : un **clic** retourne la carte.
    On les apprend dans **Réviser**. Ajouter des cartes complète le paquet sans doublon. Au survol d'une carte : ✎ pour la corriger, ✕ pour la
    supprimer (✎ aussi pendant la révision). « ✎ Écrire une carte » en ajoute une à la main
-   (ou via le « + » de la tuile Flashcards → « Écrire une carte » ; « Ajouter et en écrire une autre » pour en enchaîner plusieurs ; Pirouette prévient si elle ressemble à une carte existante).
+   (« Écrire une carte » ; « Ajouter et en écrire une autre » pour en enchaîner plusieurs ; Pirouette prévient si elle ressemble à une carte existante).
 6. **Semestres** : « + Semestre » dans Mes cours. Glisse un cours sur un semestre pour l'y ranger,
    ou choisis son semestre en haut de la page du cours. Un semestre se replie, se renomme (✎) et s'**archive** une fois
    terminé : il passe dans « Archivés », replié, en bas de la page. Supprimer un semestre garde ses cours.
@@ -154,9 +154,11 @@ réflexion par défaut ; Réglages → IA locale → « Laisser le modèle réfl
 **Menu du haut** : **Accueil** (logo, message de bienvenue, cartes du jour et un seul bouton « Réviser » ; au premier
 lancement, un guide en 3 étapes : installer l'IA locale, créer son semestre, importer son premier cours), **Mes cours** (cours et semestres),
 **Réviser**, Réglages et **Feedback** (une idée, un bug : Pirouette prépare le mail).
-La page d'un cours sert à **ranger et fabriquer** : ses trois entrées (Quiz, Flashcards, Fichiers) ouvrent chacune sa
-page. On y crée, renomme et supprime les quiz (un clic montre leurs questions), on regarde et modifie les cartes ;
-on s'entraîne dans **Réviser** (lien « Réviser ce cours → »).
+La page d'un cours sert à **ranger et fabriquer** : la liste de ses **chapitres**, avec pour chacun ce qu'il contient
+(« 12 questions · 20 cartes »), un bouton **Créer** (un quiz ou des flashcards sur ce seul chapitre) et un menu « ••• »
+(voir les questions, voir les cartes, exporter). En bas, « Tous les quiz · Toutes les flashcards · Fichiers » ouvrent
+les pages complètes, où l'on renomme et supprime les quiz et modifie les cartes ; on s'entraîne dans **Réviser**
+(lien « Réviser ce cours → »).
 Un **fil d'Ariane** en haut (Mes cours › Cours › Quiz › …) permet de remonter d'un clic. Les menus déroulants
 sont aux couleurs de l'app.
 
@@ -167,9 +169,11 @@ puis trois onglets : **Réviser**, **Rétroplanning** et **Suivi**.
   un mot d'encouragement ; chaque séance commence par les cartes où tu bloques, puis les cartes du jour, avec
   quelques questions de quiz. Un cours rangé dans un semestre suit le plan du semestre.
 - **Là où tu bloques** : les 5 cartes les plus souvent oubliées, et « Revoir ces cartes ».
-- **Maîtrise par chapitre** : une barre par chapitre (Acquis, En cours, Fragile, À voir), d'après ses cartes (bien
-  ancrées — rappel à 7 jours ou plus — ou difficiles) et le meilleur score de ses quiz.
-- **Quiz** : les quiz du semestre ou du cours, à passer (« Passer »), avec le meilleur score.
+- **Par chapitre** : une ligne par chapitre avec sa barre de maîtrise (Acquis, En cours, Fragile, À voir, d'après ses
+  cartes — bien ancrées, rappel à 7 jours ou plus, ou difficiles — et le meilleur score de ses quiz) et trois boutons :
+  **Quiz** (le quiz du chapitre ; s'il y en a plusieurs, Pirouette demande lequel), **Cartes** (les cartes du
+  chapitre) et **Tout** (cartes et questions du chapitre mélangées).
+- **Autres quiz** : les quiz qui couvrent plusieurs chapitres ou tout le cours, à passer (« Passer »).
 - **Rétroplanning** : à partir de la semaine des partiels (on peut l'indiquer là), Pirouette date les séances d'ici
   là : d'abord les chapitres (un ou plusieurs par séance, avec « Quiz » — ou « Créer le quiz » — et « Cartes » du
   chapitre), des séances de révision entre deux, puis la consolidation (erreurs, cartes difficiles) et des partiels

@@ -128,3 +128,21 @@ def test_reset_course_stats_keeps_the_content(tmp_path, monkeypatch):
     assert card["status"] == "new" and card["reviews"] == 0 and "lapses" not in card and "due" not in card
     days = store.activity()
     assert all(cid not in per_course for per_course in days.values()) and any(other in d for d in days.values())
+
+
+def test_chapter_rows_and_mixed_session(tmp_path, monkeypatch):
+    store, client, folder, cid = _setup(tmp_path, monkeypatch)
+    quiz = store.save_quiz({"course_id": cid, "title": "Le neurone", "scope": ["Chapitre 1 : Le neurone"], "count": 2,
+                            "questions": [{"type": "reponse_courte", "question": f"Q{i} ?", "answer": "a", "choices": []}
+                                          for i in range(2)]})
+    store.save_quiz({"course_id": cid, "title": "Tout", "count": 1,
+                     "questions": [{"type": "reponse_courte", "question": "Q ?", "answer": "a", "choices": []}]})
+    data = client.get(f"/api/mastery?course={cid}").json()[0]
+    first = data["chapters"][0]
+    assert [q["id"] for q in first["quizzes"]] == [quiz["id"]] and first["questions"] == 2
+    assert [q["title"] for q in data["other_quizzes"]] == ["Tout"]
+    base = f"/api/session?mode=chapter&course={cid}&chapter=Chapitre 1 : Le neurone"
+    cards_only = client.get(base + "&questions=0").json()["items"]
+    mixed = client.get(base + "&questions=1").json()["items"]
+    assert all("card" in item for item in cards_only)
+    assert len(mixed) == len(cards_only) + 2 and sum("question" in item for item in mixed) == 2
