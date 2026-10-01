@@ -103,10 +103,13 @@
       </nav>
 
       <div id="scope-main" data-mode="jour">
-        <!-- Quatre façons de réviser : on en choisit une, seule sa partie s'affiche -->
+        <!-- En haut, la révision du jour (le mélange conseillé) ; dessous, trois accès distincts : flashcards, quiz, partiel -->
+        <div class="today-hero" id="today-hero" data-scope-mode="jour" role="tab" tabindex="0" aria-label="Révision du jour : détails et réglages">
+          <div class="today-hero-text"><h2>Révision du jour</h2><p id="hero-summary"></p></div>
+          <button class="primary" type="button" id="hero-start">Commencer →</button>
+        </div>
         <div class="mode-tiles" id="scope-modes" role="tablist" aria-label="Façon de réviser">
-          <button type="button" role="tab" data-scope-mode="jour"><strong>Révision du jour</strong><small id="mode-jour-note"></small></button>
-          <button type="button" role="tab" data-scope-mode="chapitres"><strong>Par chapitre</strong><small id="mode-chapitres-note"></small></button>
+          <button type="button" role="tab" data-scope-mode="cartes"><strong>Flashcards</strong><small id="mode-cartes-note"></small></button>
           <button type="button" role="tab" data-scope-mode="quiz"><strong>Quiz</strong><small id="mode-quiz-note"></small></button>
           <button type="button" role="tab" data-scope-mode="partiel"><strong>Partiel blanc</strong><small>note sur 20</small></button>
         </div>
@@ -144,23 +147,31 @@
         </div>
 
         <!-- Cours rangé dans un semestre : le plan se règle sur le semestre -->
-        <div class="card revise-card" id="today-card" data-mode="jour">
+        <div class="card revise-card" id="today-card" data-mode="jour" hidden>
           <h2>Révision du jour</h2>
           <p class="revise-count" id="today-summary"></p>
           <p class="muted small-text" id="today-note">Les cartes reviennent au bon moment, avec quelques questions de tes quiz.</p>
           <button class="primary" id="start-today">Commencer</button>
         </div>
 
-        <!-- Par chapitre : sa maîtrise, son quiz, ses cartes, ou les deux mélangés -->
-        <div class="card mastery-card" id="mastery-card" data-mode="chapitres" hidden>
-          <h2>Par chapitre</h2>
-          <div id="mastery-list"></div>
-          <p class="mastery-legend muted small-text"><span class="lvl acquis"></span>Acquis <span class="lvl en_cours"></span>En cours
-            <span class="lvl fragile"></span>Fragile <span class="lvl a_voir"></span>À voir</p>
+        <!-- Flashcards seules : un paquet (du jour, où je bloque, tout), pour tout le cours ou un chapitre -->
+        <div class="card cards-mode" data-mode="cartes">
+          <h2>Flashcards</h2>
+          <p class="muted small-text">Rien que des cartes, à retourner puis à glisser. Choisis un paquet :</p>
+          <div class="chips chapter-chips" id="cards-chapters" role="radiogroup" aria-label="Chapitre"></div>
+          <div class="decks" id="card-decks"></div>
+          <div class="option-row decks-options">
+            <span class="muted">Façon :</span>
+            <div class="filters mini" role="radiogroup" aria-label="Façon de réviser les cartes">
+              <button type="button" role="radio" data-card-mode="flip">Retourner</button>
+              <button type="button" role="radio" data-card-mode="type">Écrire</button>
+            </div>
+          </div>
         </div>
 
         <div class="scope-section" id="scope-quizzes-box" data-mode="quiz">
           <p class="muted small-text">Un quiz de plus de 10 questions en tire 10 à chaque fois : d'abord celles ratées ou jamais vues.</p>
+          <div class="chips chapter-chips" id="quiz-chapters" role="radiogroup" aria-label="Chapitre"></div>
           <ul class="quiz-list" id="scope-quizzes"></ul>
         </div>
 
@@ -225,6 +236,13 @@
       </div>
 
       <div id="scope-suivi" hidden>
+        <!-- Maîtrise par chapitre (et de quoi réviser chacun : son quiz, ses cartes, ou les deux mélangés) -->
+        <div class="card mastery-card" id="mastery-card" hidden>
+          <h2>Maîtrise par chapitre</h2>
+          <div id="mastery-list"></div>
+          <p class="mastery-legend muted small-text"><span class="lvl acquis"></span>Acquis <span class="lvl en_cours"></span>En cours
+            <span class="lvl fragile"></span>Fragile <span class="lvl a_voir"></span>À voir</p>
+        </div>
       <div class="card dashboard" id="dashboard">
         <div class="dash-body">
           <div class="today progress-stats">
@@ -926,7 +944,6 @@
         </div>
       </div>
       <div id="card-stage">
-        <div class="swipe-light left" aria-hidden="true"></div><div class="swipe-light right" aria-hidden="true"></div>
         <div class="tcg-table">
           <div class="tcg-pile" id="tcg-pile" aria-hidden="true"><span></span><span></span><span></span></div>
           <div class="flashcard tcg" id="flashcard" role="button" tabindex="0" aria-live="polite">
@@ -936,7 +953,7 @@
                   <span class="tcg-head"><span class="tcg-set" data-card-set></span><span class="tcg-rarity" data-card-rarity></span></span>
                   <span class="tcg-art"><span id="card-front"></span></span>
                   <span class="tcg-text"><small id="card-front-hint">Clique ou appuie sur Espace pour retourner</small></span>
-                  <span class="tcg-foot"><span data-card-number></span><span class="tcg-course" data-card-course></span></span>
+                  <span class="tcg-foot"><span data-card-number></span><svg class="tcg-cat" aria-hidden="true"><use href="#logo"/></svg><span class="tcg-course" data-card-course></span></span>
                 </span>
                 <span class="tcg-glare"></span>
               </span>
@@ -946,7 +963,7 @@
                   <small class="tcg-question" id="card-back-question"></small>
                   <span class="tcg-art tcg-answer"><span id="card-back"></span></span>
                   <span class="tcg-text"><small class="card-source" id="card-source"></small></span>
-                  <span class="tcg-foot"><span data-card-number></span><span class="tcg-course" data-card-course></span></span>
+                  <span class="tcg-foot"><span data-card-number></span><svg class="tcg-cat" aria-hidden="true"><use href="#logo"/></svg><span class="tcg-course" data-card-course></span></span>
                 </span>
                 <span class="tcg-glare"></span>
               </span>

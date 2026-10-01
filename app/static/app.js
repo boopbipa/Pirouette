@@ -3024,6 +3024,7 @@ async function openReviewScope(kind, id = "", sub = "") {
   }
   const base = `#/reviser/${kind}${id ? `/${id}` : ""}`;
   const tab = sub in SCOPE_TABS ? sub : "";
+  if (state.reviewScope?.base !== base) state.deckChapter = state.quizChapter = null;  // autre cours : tous les chapitres
   state.reviewScope = { params, name, hash: location.hash, base, single: kind === "cours", owner, parent };
   $("#review-scope-title").textContent = name;
   document.querySelectorAll("[data-scope-tab]").forEach((a) => {
@@ -3072,13 +3073,19 @@ async function renderScopeMain() {
 
   // Plan de révision
   $("#plan-card").hidden = !plan;
-  $("#today-card").hidden = Boolean(plan?.plan);
   if (plan) renderPlan(plan);
   const { today } = data;
   $("#today-summary").innerHTML = today.cards || today.questions
     ? `<b>${today.cards}</b> carte${today.cards > 1 ? "s" : ""}${today.questions ? ` · <b>${today.questions}</b> question${today.questions > 1 ? "s" : ""} de quiz` : ""}`
     : "Tout est à jour";
   $("#start-today").disabled = !today.cards && !(today.questions && mixQuestions());
+  // Le bandeau du haut : la séance du plan s'il y en a un, sinon la révision du jour
+  const planned = plan?.plan;
+  $("#hero-summary").innerHTML = planned
+    ? `${plan.status.done_today ? "Séance du jour faite" : "Séance du plan à faire"} · ${plural(plan.session.cards, "carte", "cartes")} environ · ${planned.minutes} min`
+    : (today.cards || today.questions ? `${$("#today-summary").innerHTML} à revoir · le mélange conseillé` : "Tout est à jour pour aujourd'hui");
+  $("#hero-start").disabled = planned ? false : $("#start-today").disabled;
+  $("#hero-start").textContent = planned && plan.status.done_today ? "Refaire une séance" : "Commencer →";
   $("#today-note").innerHTML = scope.parent
     ? `Le plan de révision se règle sur le semestre : <a href="#/reviser/dossier/${scope.parent.id}">${escapeHtml(scope.parent.name)} →</a>`
     : "Les cartes reviennent au bon moment, avec quelques questions de tes quiz.";
@@ -3092,18 +3099,19 @@ async function renderScopeMain() {
       scope.single ? "" : ` · ${escapeHtml(h.course)}`}</small></li>`).join("");
 
   // Par chapitre (quiz, cartes, tout mélangé) ; les quiz qui ne tiennent pas à un chapitre, à part.
-  const byChapter = await renderMastery();
+  const [byChapter, decks] = await Promise.all([renderMastery(), api(`/api/cards/decks?${new URLSearchParams(reviewScope())}`)]);
+  state.cardDecks = decks;
+  state.quizChapters = byChapter;
   const placed = new Set(byChapter.flatMap((c) => c.chapters.flatMap((ch) => ch.quizzes.map((q) => q.id))));
   const names = Object.fromEntries(scoped.map((c) => [c.id, c.name]));
   // Mode « Quiz » : tous les quiz du cours ou du semestre (ceux d'un chapitre d'abord)
   const all = quizzes.filter((q) => ids.has(q.course_id))
     .sort((a, b) => Number(!placed.has(a.id)) - Number(!placed.has(b.id)))
     .map((q) => ({ ...q, course_name: scope.single ? "" : names[q.course_id] }));
-  $("#scope-quizzes").innerHTML = all.length ? all.map((q) => quizItem(q, null, null, { play: true })).join("")
-    : `<li class="empty muted">Pas encore de quiz : crée-les depuis la page du cours (Mes cours).</li>`;
+  state.scopeQuizzes = all;
+  renderScopeQuizzes();
   $("#mode-quiz-note").textContent = plural(all.length, "quiz", "quiz");
-  $("#mode-jour-note").textContent = today.cards || today.questions ? `${today.cards + today.questions} à revoir` : "à jour";
-  $("#mode-chapitres-note").textContent = plural(byChapter.reduce((n, c) => n + c.chapters.length, 0), "chapitre", "chapitres");
+  renderDecks();
 
   // Mode partiel : sur un cours. Depuis un semestre, on choisit le cours.
   const single = Boolean(scope.single);
@@ -3116,6 +3124,82 @@ async function renderScopeMain() {
   }
   $("#start-partiel").disabled = !single && !scoped.length;
 }
+
+// ---- Mode Flashcards : des paquets (du jour, où je bloque, tout), pour tout le cours ou un chapitre ----
+const CARD_BACK = `<svg aria-hidden="true"><use href="#logo"/></svg>`;
+function chapterChips(list, chosen, attr) {
+  if (list.length < 2) return "";
+  const several = new Set(list.map((c) => c.course_id)).size > 1;
+  return [`<button type="button" class="${chosen === null ? "active" : ""}" ${attr}="">Tous les chapitres</button>`,
+    ...list.map((c, i) => `<button type="button" class="${chosen === i ? "active" : ""}" ${attr}="${i}">${
+      several ? `${escapeHtml(c.course)} · ` : ""}${escapeHtml(shortChapter(c.title))}</button>`)].join("");
+}
+function renderDecks() {
+  const data = state.cardDecks;
+  if (!data) return;
+  const chapters = data.chapters;
+  if (state.deckChapter !== null && !chapters[state.deckChapter]) state.deckChapter = null;
+  const ch = state.deckChapter === null ? null : chapters[state.deckChapter];
+  const n = ch || data.all;
+  $("#cards-chapters").innerHTML = chapterChips(chapters, state.deckChapter, "data-deck-chapter");
+  const deck = (kind, title, text, count, badge) => `<button type="button" class="deck ${kind}" data-deck="${kind}" ${count ? "" : "disabled"}>
+    ${badge ? `<em>${badge}</em>` : ""}<span class="deck-pile" aria-hidden="true"><i></i><i></i><i>${CARD_BACK}</i></span>
+    <b>${title}</b><small>${text}</small></button>`;
+  $("#card-decks").innerHTML = !data.all.total
+    ? `<p class="muted">Pas encore de flashcards : crée-les depuis la page du cours (Mes cours).</p>`
+    : deck("due", "À revoir aujourd'hui", n.due ? "Les cartes que la répétition espacée te ramène" : "Rien à revoir : tout est à jour", n.due, n.due || "")
+      + deck("weak", "Là où je bloque", n.weak ? `Les ${plural(n.weak, "carte", "cartes")} que tu rates le plus` : "Aucune carte difficile pour l'instant", n.weak, "")
+      + deck("all", "Tout le paquet", `${plural(n.total, "carte", "cartes")}, mélangées${ch ? ` · ${escapeHtml(shortChapter(ch.title))}` : ""}`, n.total, "");
+  $("#mode-cartes-note").textContent = data.all.total
+    ? `${plural(data.all.total, "carte", "cartes")}${data.all.due ? ` · ${data.all.due} à revoir` : ""}` : "aucune carte";
+}
+$("#cards-chapters").addEventListener("click", (e) => {
+  const chip = e.target.closest("[data-deck-chapter]");
+  if (!chip) return;
+  state.deckChapter = chip.dataset.deckChapter === "" ? null : Number(chip.dataset.deckChapter);
+  renderDecks();
+});
+$("#card-decks").addEventListener("click", (e) => {
+  const deck = e.target.closest("[data-deck]");
+  if (!deck || deck.disabled) return;
+  const ch = state.deckChapter === null ? null : state.cardDecks.chapters[state.deckChapter];
+  const mode = { due: "today", weak: "weak", all: "cards" }[deck.dataset.deck];
+  const where = ch ? { course: ch.course_id, chapter: ch.title } : reviewScope();
+  const title = { due: "Flashcards du jour", weak: "Là où je bloque", all: "Tout le paquet" }[deck.dataset.deck];
+  startSession({ ...where, mode, filter: "all", questions: "0" },
+    { title: ch ? `${title} · ${shortChapter(ch.title)}` : title, back: state.reviewScope.hash });
+});
+state.deckChapter = null;
+state.quizChapter = null;
+
+// Mode Quiz : tous les quiz, ou ceux d'un chapitre
+function renderScopeQuizzes() {
+  const chapters = (state.quizChapters || []).flatMap((c) => c.chapters.filter((ch) => ch.quizzes.length)
+    .map((ch) => ({ course_id: c.course_id, course: c.course, title: ch.single ? c.course : ch.title, ids: ch.quizzes.map((q) => q.id) })));
+  if (state.quizChapter !== null && !chapters[state.quizChapter]) state.quizChapter = null;
+  $("#quiz-chapters").innerHTML = chapterChips(chapters, state.quizChapter, "data-quiz-chapter");
+  const keep = state.quizChapter === null ? null : new Set(chapters[state.quizChapter].ids);
+  const shown = (state.scopeQuizzes || []).filter((q) => !keep || keep.has(q.id));
+  $("#scope-quizzes").innerHTML = shown.length ? shown.map((q) => quizItem(q, null, null, { play: true })).join("")
+    : `<li class="empty muted">Pas encore de quiz : crée-les depuis la page du cours (Mes cours).</li>`;
+}
+$("#quiz-chapters").addEventListener("click", (e) => {
+  const chip = e.target.closest("[data-quiz-chapter]");
+  if (!chip) return;
+  state.quizChapter = chip.dataset.quizChapter === "" ? null : Number(chip.dataset.quizChapter);
+  renderScopeQuizzes();
+});
+
+// Le bandeau « Révision du jour » : son bouton lance la séance (celle du plan s'il y en a un) ; ailleurs, il montre ses réglages
+$("#hero-start").addEventListener("click", (e) => {
+  e.stopPropagation();
+  if (state.scopePlan?.plan) $("#plan-start").click();
+  else $("#start-today").click();
+});
+$("#today-hero").addEventListener("click", () => setScopeMode("jour"));
+$("#today-hero").addEventListener("keydown", (e) => {
+  if ((e.key === "Enter" || e.key === " ") && e.target.id === "today-hero") { e.preventDefault(); setScopeMode("jour"); }
+});
 
 const MASTERY_NAMES = { acquis: "Acquis", en_cours: "En cours", fragile: "Fragile", a_voir: "À voir" };
 async function renderMastery() {
@@ -3360,6 +3444,7 @@ async function renderHomeHeat(guiding) {
 
 // Réviser : quatre modes (du jour, par chapitre, quiz, partiel) ; le dernier choisi est gardé
 function setScopeMode(mode) {
+  if (!["jour", "cartes", "quiz", "partiel"].includes(mode)) mode = mode === "chapitres" ? "cartes" : "jour";
   $("#scope-main").dataset.mode = mode;
   if (!$("#scope-main").hidden) $("#view-review-scope").dataset.place = mode;
   document.querySelectorAll("[data-scope-mode]").forEach((b) => {
@@ -3376,7 +3461,7 @@ try { setScopeMode(localStorage.getItem("pirouette.scopeMode") || "jour"); } cat
 
 // ---- Onglet Suivi ----
 async function renderProgress() {
-  const data = await api(`/api/progress?${new URLSearchParams(reviewScope())}`);
+  const [data] = await Promise.all([api(`/api/progress?${new URLSearchParams(reviewScope())}`), renderMastery()]);
   const { week } = data;
   const pctText = (v) => (v === null ? "—" : `${v} %`);
   $("#review-exam").hidden = !data.exam || data.exam.days <= -7;
@@ -3751,6 +3836,11 @@ const WELCOME = [
 ];
 // Les nouveautés de chaque version (le carton « Quoi de neuf » ne s'affiche que si la version en a)
 const WHATS_NEW = {
+  "0.41.0": [
+    ["🂠", "Flashcards dans Réviser", "Un accès rien que pour les cartes : à revoir, là où je bloque ou tout le paquet, par chapitre"],
+    ["?", "Quiz par chapitre", "Dans Réviser → Quiz, filtre les quiz d'un chapitre ; la maîtrise par chapitre passe dans Suivi"],
+    ["🐱", "Pirouette sur tes cartes", "La tête du chat, à la couleur que tu as choisie"],
+  ],
   "0.40.0": [
     ["⇆", "Flashcards à glisser", "Retourne la carte, puis lance-la à droite si tu savais, à gauche sinon (ou ← / →)"],
     ["?", "« Je ne sais pas »", "Pour les réponses à écrire : comptée fausse tout de suite, sans taper un mot au hasard"],

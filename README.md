@@ -205,11 +205,12 @@ jour, un seul carton « **Quoi de neuf** » avec les nouveautés de la version. 
 présentation ».
 
 **Flashcards à glisser** : une fois la carte retournée, attrape-la et lance-la **à droite** (« Je savais ») ou **à
-gauche** (« Je ne savais pas »), comme sur Tinder. Plus elle penche, plus la lumière de ce côté s'allume (vert à droite,
-rouge à gauche) et plus le bouton de ce côté grandit, jusqu'à devenir tout vert ou tout rouge. Relâchée trop tôt, elle
+gauche** (« Je ne savais pas »), comme sur Tinder. Plus elle penche, plus le bouton de ce côté (vert à droite, rouge
+à gauche) grandit, jusqu'à devenir tout vert ou tout rouge. Relâchée trop tôt, elle
 revient au centre ; pas encore retournée, elle résiste (« Retourne d'abord la carte »). Les deux boutons ✕ / ✓ restent
 cliquables ; « À moitié » a disparu. Sur chaque carte : le chapitre en court en haut (« Chapitre 1 ») et le nom du
-cours en bas (« Psychanalyse »), comme l'extension d'une carte à collectionner.
+cours en bas (« Psychanalyse »), comme l'extension d'une carte à collectionner, avec la tête de Pirouette au milieu
+(dans la couleur choisie dans Réglages → Couleur de l'app).
 
 **Tout au clavier** : quiz, révisions et partiels blancs se font sans la souris. Par défaut : **1 à 6** choisit une
 réponse (**V** / **F** pour vrai/faux), **Entrée** valide puis passe à la suite, **←** / **→** question précédente /
@@ -226,16 +227,20 @@ où tu en es : « 19 à revoir aujourd'hui », la **maîtrise** (part des cartes
 se remplit ; l'en-tête du semestre affiche les partiels (« J-75 ») et « **Réviser le semestre** ».
 
 **Réviser** (répétition espacée, comme Anki) : d'abord on choisit un semestre (« Réviser le semestre ») ou un cours,
-puis trois onglets : **Réviser**, **Rétroplanning** et **Suivi**. Dans l'onglet Réviser, quatre **modes** en haut
-(« Révision du jour », « Par chapitre », « Quiz », « Partiel blanc ») : on en choisit un et seule sa partie s'affiche
-(le dernier choisi est gardé). Le mode **Quiz** liste tous les quiz, avec « Faire le quiz ».
+puis trois onglets : **Réviser**, **Rétroplanning** et **Suivi**. Dans l'onglet Réviser : en haut, le bandeau
+**Révision du jour** (le mélange conseillé, cartes et questions, avec « Commencer » ; un clic sur le bandeau montre son
+plan et ses réglages), puis trois accès distincts : **Flashcards**, **Quiz** et **Partiel blanc** (le dernier choisi est
+gardé).
+- **Flashcards** (rien que des cartes) : trois paquets, **À revoir aujourd'hui**, **Là où je bloque** et **Tout le
+  paquet**, pour tout le cours ou un chapitre (puces « Chapitre 1 », « Chapitre 2 »…), en mode Retourner ou Écrire.
+- **Quiz** : tous les quiz, ou ceux d'un chapitre (mêmes puces), avec « Faire le quiz ».
 - **Plan de révision** (sur un semestre, ou un cours sans semestre) : « une séance tous les 1 / 2 / 3 / 7 jours, de
   15 / 30 / 45 minutes ». Pirouette affiche la séance à faire ou la prochaine date, les séances tenues (« 4 sur 5 ») et
   un mot d'encouragement ; chaque séance commence par les cartes où tu bloques, puis les cartes du jour, avec
   quelques questions de quiz. Un cours rangé dans un semestre suit le plan du semestre.
 - **Là où tu bloques** (replié tout en bas, un clic le déplie) : les 5 cartes les plus souvent oubliées, et « Revoir
   ces cartes ».
-- **Par chapitre** : une ligne par chapitre avec sa barre de maîtrise (Acquis, En cours, Fragile, À voir, d'après ses
+- **Maîtrise par chapitre** (onglet Suivi) : une ligne par chapitre avec sa barre de maîtrise (Acquis, En cours, Fragile, À voir, d'après ses
   cartes — bien ancrées, rappel à 7 jours ou plus, ou difficiles — et le meilleur score de ses quiz) et trois boutons :
   **Quiz** (le quiz du chapitre ; s'il y en a plusieurs, Pirouette demande lequel), **Cartes** (les cartes du
   chapitre) et **Tout** (cartes et questions du chapitre mélangées).
@@ -247,7 +252,7 @@ puis trois onglets : **Réviser**, **Rétroplanning** et **Suivi**. Dans l'ongle
   jour-là) ; « Recalculer » repart d'aujourd'hui sans reprogrammer les chapitres déjà vus.
 - **Révision du jour** (sans plan) : les cartes dont le rappel est arrivé, plus 20 nouvelles cartes au plus par jour, avec des
   questions de tes quiz glissées entre les cartes (celles ratées, jamais faites ou réussies il y a plus d'une semaine).
-  Après chaque carte : **Je ne savais pas / À moitié / Je savais** (touches 1 à 3). Pirouette en déduit quand la
+  Après chaque carte : **Je ne savais pas / Je savais** (glisser la carte, ou ← / →). Pirouette en déduit quand la
   reposer (plus tôt si on ne savait pas, de plus en plus tard si on savait), sans l'afficher. Un clic sur la carte la
   retourne, un autre revient à la question. À la fin : « Voir la correction » (tout, ou mes erreurs seulement) et
   « Refaire mes erreurs ».

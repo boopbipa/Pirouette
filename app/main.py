@@ -1251,24 +1251,50 @@ async def session(mode: str = "today", course: str = "", folder: str = "", filte
                               for i in range(len(quiz["questions"]))]
             random.shuffle(asked)
         return {"mode": mode, "items": _interleave(cards, asked), "cards": len(cards), "questions": len(asked)}
+    # Mode Flashcards de Réviser : un paquet (du jour, points faibles, tout) peut se limiter à un chapitre
+    in_chapter = (lambda e: _same_title(chapter, e["card"].get("scope") or [])) if chapter else (lambda e: True)
     if mode == "today":
-        cards = [_card_item(e) for e in store.today_cards(ids)]
+        cards = [_card_item(e) for e in store.today_cards(ids) if in_chapter(e)]
         chosen = store.weak_questions(ids)[:SESSION_QUESTIONS]
         chosen += store.review_questions(ids)[:SESSION_QUESTIONS - len(chosen)]
         asked = [_question_item(e) for e in chosen] if questions else []
         random.shuffle(asked)
     elif mode == "weak":
-        cards = [_card_item(e) for e in store.weak_cards(ids)[:30]]
+        cards = [_card_item(e) for e in store.weak_cards(ids) if in_chapter(e)][:30]
         asked = [_question_item(e) for e in store.weak_questions(ids)[:20]] if questions else []
     elif mode == "cards":
         tests = {"review": lambda c: c["status"] != "known", "known": lambda c: c["status"] == "known"}
         test = tests.get(filter, lambda c: True)
-        cards = [_card_item({"course": c, "card": card}) for c, deck in store._decks(ids) for card in deck if test(card)]
+        cards = [_card_item({"course": c, "card": card}) for c, deck in store._decks(ids) for card in deck
+                 if test(card) and in_chapter({"card": card})]
         random.shuffle(cards)
         asked = []
     else:
         raise HTTPException(400, "Type de révision inconnu.")
     return {"mode": mode, "items": _interleave(cards, asked), "cards": len(cards), "questions": len(asked)}
+
+
+@app.get("/api/cards/decks")
+async def card_decks(course: str = "", folder: str = "") -> dict:
+    """Les paquets du mode Flashcards de Réviser : pour tout le périmètre et pour chaque chapitre, le nombre de
+    cartes à revoir aujourd'hui, de cartes où l'on bloque et de cartes en tout."""
+    ids = _scope(course, folder)
+    due = {e["card"]["id"] for e in store.today_cards(ids)}
+    weak = {e["card"]["id"] for e in store.weak_cards(ids)}
+    count = lambda cards: {"due": sum(c["id"] in due for c in cards), "weak": sum(c["id"] in weak for c in cards),  # noqa: E731
+                           "total": len(cards)}
+    every, chapters = [], []
+    for c, deck in store._decks(ids):
+        every += deck
+        groups: dict[str, list] = {}
+        for card in deck:
+            title = (card.get("scope") or [""])[0]
+            if title:
+                groups.setdefault(title, []).append(card)
+        number = lambda t: [int(n) for n in re.findall(r"\d+", t)[:2]] or [9999]  # noqa: E731
+        chapters += [{"course_id": c["id"], "course": c["name"], "title": t, **count(cards)}
+                     for t, cards in sorted(groups.items(), key=lambda g: number(g[0]))]
+    return {"all": count(every), "chapters": chapters}
 
 
 # ---------- Plan de révision et rétroplanning ----------
