@@ -547,6 +547,7 @@ code { font-family: "SF Mono", Menlo, monospace; font-size: .88em; background: v
 .filters { display: inline-flex; gap: 4px; padding: 4px; background: var(--sunken); border-radius: 999px; margin-bottom: 10px; }
 .filters button { padding: 6px 14px; font-size: 14px; background: transparent; color: var(--muted); }
 .filters button span { font-weight: 700; margin-left: 2px; }
+.filters button:disabled { opacity: .45; cursor: not-allowed; }
 .filters button.active { background: var(--surface); color: var(--text); box-shadow: 0 1px 3px rgba(0, 0, 0, .12); }
 .card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 14px; margin-top: 8px; }
 .fcard { position: relative; height: 190px; perspective: 1000px; cursor: pointer; outline: none; transition: opacity .25s, transform .25s; }
@@ -1445,3 +1446,5 @@ dialog.prepare-dialog { width: min(520px, 92vw); }
 dialog.prepare-dialog h2 { margin-top: 0; }
 .tree-fold > summary .fold-action { margin-left: auto; align-self: center; }
 dialog.prepare-dialog.prepare { margin: auto; border: 0; }
+
+.prepare-local-off { margin: -4px 0 10px; }

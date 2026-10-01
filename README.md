@@ -88,6 +88,7 @@ dans **Safari** → menu Fichier → **Ajouter au Dock** (ou, dans Chrome / Edge
    éviter les autres apps gourmandes. En haut de la fenêtre, choisis l'IA : « IA locale » (sur ton Mac) ou
    « L'app Claude » : Pirouette affiche alors la demande toute prête, « Copier la demande » la copie, et il
    suffit de la coller dans l'app Claude (si elle s'arrête en route, redis-lui « continue »).
+   Si l'IA locale n'est pas installée ou n'a pas de modèle, son bouton est grisé et la fenêtre dit quoi faire.
    **Fichiers** : dépose les fichiers du cours. Quand tu avances, redépose le fichier **sous le même nom** :
    la nouvelle version remplace l'ancienne (les quiz déjà créés sont conservés et marqués « cours mis à jour depuis »).
    Pirouette découpe chaque fichier en chapitres (titres « Chapitre 2 », « II. », titres Word…), puis l'IA affine

@@ -5044,9 +5044,21 @@ function openPrepare(course = state.course) {
     : "Pirouette peut tout créer maintenant pour ce cours :";
   showError("#prepare-error", "");
   $("#prepare-status").hidden = true;
-  if (!state.prepareEngine) state.prepareEngine = state.config?.local?.available === false ? "app" : "local";
-  setPrepareEngine(state.prepareEngine);
+  setPrepareLocal(state.config);
   if (!$("#prepare-panel").open) $("#prepare-panel").showModal();
+  // L'IA locale a pu être installée ou fermée entre-temps : on revérifie à chaque ouverture
+  api("/api/config").then((config) => { state.config = config; setPrepareLocal(config); }).catch(() => {});
+}
+// IA locale absente ou sans modèle : son bouton est grisé, on passe par l'app Claude et on dit quoi faire
+function setPrepareLocal(config) {
+  const ready = config?.local?.available !== false;
+  const local = document.querySelector("[data-prepare-engine=local]");
+  local.disabled = !ready;
+  local.title = ready ? "" : "IA locale pas encore prête sur ce Mac";
+  $("#prepare-local-off").hidden = ready;
+  if (!ready) $("#prepare-local-off").innerHTML = `IA locale indisponible. ${localProblem(config)}`;
+  if (!state.prepareEngine || !ready) state.prepareEngine = ready ? "local" : "app";
+  setPrepareEngine(state.prepareEngine);
 }
 // Avec quelle IA : l'IA locale crée tout en arrière-plan ; l'app Claude reçoit une demande à copier-coller
 function setPrepareEngine(engine) {
@@ -5076,7 +5088,7 @@ function prepareRequest() {
 }
 document.querySelector(".prepare-engine").addEventListener("click", (e) => {
   const button = e.target.closest("[data-prepare-engine]");
-  if (button) setPrepareEngine(button.dataset.prepareEngine);
+  if (button && !button.disabled) setPrepareEngine(button.dataset.prepareEngine);
 });
 ["#prepare-quizzes", "#prepare-cards", "#prepare-nq", "#prepare-nc"].forEach((id) =>
   $(id).addEventListener("change", () => { if (state.prepareEngine === "app") $("#prepare-request").textContent = prepareRequest(); }));
@@ -5116,3 +5128,4 @@ $("#prepare-go").addEventListener("click", async () => {
     showError("#prepare-error", err.message);
   }
 });
+$("#prepare-local-off").addEventListener("click", (e) => { if (e.target.closest("a")) $("#prepare-panel").close(); });
