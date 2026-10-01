@@ -179,9 +179,11 @@ comme un arbre qui part du fichier importé :
 - **Ton cours** (en haut, replié : juste le nom du fichier ; « Modifier » le déplie) : le ou les fichiers du cours. « **Nouvelle version** » dépose la version à jour : elle
   remplace l'ancienne (même un PDF à la place d'un Keynote), les chapitres sont redécoupés, tes quiz et tes cartes
   gardés ; « **Redécouper** » relance le repérage des chapitres ; on peut aussi y glisser un fichier.
-- **+ Ajouter un cours** (en haut, à gauche de « Gérer le cours ») : un autre cours de la même matière (CM2, TD…). Ses
-  chapitres, quiz et flashcards s'ajoutent à ceux du cours, rien n'est remplacé (seul un fichier du même nom remplace
-  l'ancien, comme une nouvelle version).
+- **Une matière, plusieurs cours** : « **+ Ajouter un cours** » (en haut, à gauche de « Gérer le cours ») dépose un
+  autre cours de la matière (CM2, TD, glossaire…). Chaque fichier est un cours à part : ses noms s'affichent en
+  pastilles en haut de l'arbre, et un clic choisit le cours affiché. En dessous, seulement **ses** chapitres, **ses**
+  quiz et **ses** flashcards ; « Tout préparer » et « + Nouveau quiz » ne portent que sur lui (Pirouette retient le
+  cours choisi). Rien n'est remplacé (seul un fichier du même nom remplace l'ancien, comme une nouvelle version).
 - « **Replier chapitres, quiz et flashcards** » (sous le fichier) range les trois dépliants d'un coup, avec un résumé
   (« 4 chapitres · 2 quiz · 9 flashcards ») ; Pirouette s'en souvient pour chaque cours.
 - En dessous, reliés au fichier par un trait, trois **dépliants** :

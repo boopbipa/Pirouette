@@ -1582,3 +1582,12 @@ dialog.prepare-dialog.prepare { margin: auto; border: 0; }
   transition: transform .2s; }
 .course-tree.folded .tree-chev { transform: rotate(-45deg); }
 .course-tree.folded .tree-branches { display: none; }
+
+/* Une matière, plusieurs cours : on choisit le cours affiché (ses chapitres, quiz et flashcards) */
+.source-names.picker { flex-direction: row; flex-wrap: wrap; gap: 8px; }
+.source-pick { display: inline-flex; align-items: center; gap: 8px; padding: 7px 14px 7px 10px; border-radius: 999px;
+  border: 1px solid var(--border); background: var(--surface); color: var(--muted); cursor: pointer; max-width: 100%; }
+.source-pick strong { font-size: 15px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: inherit; }
+.source-pick .ico { width: 18px; height: 18px; color: inherit; }
+.source-pick:hover { border-color: var(--text); color: var(--text); }
+.source-pick.active { background: var(--accent-soft); border-color: var(--accent); color: var(--accent-ink); box-shadow: 0 0 0 1px var(--accent) inset; }

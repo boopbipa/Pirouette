@@ -1210,9 +1210,6 @@ async function openCourse(id, tab, { keepScroll = false } = {}) {
   renderCourseRevise(course);
   renderQuizPanel(course);
   renderFiles(course);
-  const questions = course.quizzes.reduce((n, q) => n + q.count, 0);
-  $("#fold-quiz-count").textContent = course.quizzes.length
-    ? `· ${plural(course.quizzes.length, "quiz", "quiz")}, ${plural(questions, "question", "questions")}` : "· aucun pour l'instant";
   await loadDeck();
 
   const scroll = window.scrollY;
@@ -1310,13 +1307,13 @@ async function renderTiles(course) {
   if (state.course?.id !== course.id) return;
   state.courseChapters = data.chapters;
   const fileOf = (ch) => course.files.find((f) => ch.key === f.id || ch.key.startsWith(`${f.id}-`));
-  const several = course.files.length > 1;
-  $("#fold-chapitres-count").textContent = data.chapters.length ? `· ${data.chapters.length}` : "";
+  const focus = focusFile(course);
+  const shown = data.chapters.filter((ch) => !focus || fileOf(ch) === focus).length;
+  $("#fold-chapitres-count").textContent = shown ? `· ${shown}` : "";
   $("#chapter-list").innerHTML = data.chapters.map((ch, i) => {
-    // Plusieurs fichiers : les chapitres de chacun sous son nom
-    const f = fileOf(ch);
-    const header = several && f && (i === 0 || fileOf(data.chapters[i - 1]) !== f)
-      ? `<li class="chapter-group">${ICON_FILE}${escapeHtml(f.name)}</li>` : "";
+    // Plusieurs fichiers : seulement les chapitres du cours affiché
+    if (focus && fileOf(ch) !== focus) return "";
+    const header = "";
     const contents = [ch.questions ? plural(ch.questions, "question", "questions") : "", ch.cards ? plural(ch.cards, "carte", "cartes") : ""]
       .filter(Boolean).join(" · ") || "Rien encore";
     return `${header}<li class="chapter-item">
@@ -1405,6 +1402,48 @@ $("#chapter-menu").addEventListener("click", (e) => {
 // Filtre « un chapitre » (depuis « Voir les questions / les cartes » d'un chapitre). « Chapitre 1 — X » = « Chapitre 1 : X ».
 const titleKey = (t) => String(t).toLowerCase().match(/[\p{L}\p{N}]+/gu)?.join(" ") || "";
 const inChapter = (scope) => !state.chapterFilter || (scope || []).some((t) => titleKey(t) === titleKey(state.chapterFilter));
+// Une matière, plusieurs cours (un fichier = un cours) : la page en montre un à la fois, avec ses propres chapitres,
+// quiz et flashcards, sans mélange. Le cours choisi est gardé pour chaque matière.
+function focusFile(course = state.course) {
+  if (!course || course.files.length < 2) return null;
+  let id = null;
+  try { id = localStorage.getItem(`pirouette.fileFocus.${course.id}`); } catch {}
+  return course.files.find((f) => f.id === id) || course.files[0];
+}
+function setFocusFile(id, course = state.course) {
+  try { localStorage.setItem(`pirouette.fileFocus.${course.id}`, id); } catch {}
+}
+const fileTitles = (f) => new Set((f.chapters?.length ? f.chapters.map((c) => c.title) : [f.name]).map(titleKey));
+// Le cours (fichier) d'où vient un quiz ou une carte : d'après le nom du fichier noté à la création, sinon ses chapitres
+function ownerFile(scope, sources = []) {
+  const files = state.course.files;
+  for (const s of sources || []) {
+    const f = files.find((x) => String(s).split(" — ")[0] === x.name);
+    if (f) return f;
+  }
+  return files.find((f) => (scope || []).some((t) => fileTitles(f).has(titleKey(t)))) || files[0];
+}
+const inFocus = (scope, sources) => { const f = focusFile(); return !f || ownerFile(scope, sources)?.id === f.id; };
+// Les chapitres du cours affiché (tous s'il n'y a qu'un fichier)
+const focusUnits = (course = state.course) => {
+  const f = focusFile(course);
+  return chapterUnits(course).filter((u) => !f || u.file === f.id);
+};
+function refocus(id) {
+  setFocusFile(id);
+  renderFiles(state.course);
+  renderTiles(state.course);
+  renderQuizPanel(state.course);
+  if (state.deck) renderCardGrid();
+}
+document.addEventListener("click", (e) => {
+  const pick = e.target.closest("[data-file-focus]");
+  if (!pick) return;
+  e.preventDefault();  // dans le titre repliable « Modifier » : on change de cours sans le déplier
+  e.stopPropagation();
+  refocus(pick.dataset.fileFocus);
+}, true);
+
 function chapterChip() {
   return state.chapterFilter ? `<p class="chapter-chip">Chapitre : <b>${escapeHtml(state.chapterFilter)}</b>
     <button class="link-button" type="button" data-clear-chapter>Tout afficher</button></p>` : "";
@@ -1414,7 +1453,11 @@ document.addEventListener("click", (e) => {
 });
 
 function renderQuizPanel(course) {
-  const quizzes = course.quizzes.filter((q) => inChapter(q.scope));
+  const mine = course.quizzes.filter((q) => inFocus(q.scope, q.sources));
+  const questions = mine.reduce((n, q) => n + q.count, 0);
+  $("#fold-quiz-count").textContent = mine.length
+    ? `· ${plural(mine.length, "quiz", "quiz")}, ${plural(questions, "question", "questions")}` : "· aucun pour l'instant";
+  const quizzes = mine.filter((q) => inChapter(q.scope));
   $("#quiz-chip").innerHTML = chapterChip();
   $("#quiz-list").innerHTML = quizzes.length
     ? quizzes.map((q) => quizItem(q, course, course.quizzes.length - course.quizzes.indexOf(q))).join("")
@@ -1423,8 +1466,13 @@ function renderQuizPanel(course) {
 
 // Le(s) fichier(s) du cours, à la racine de l'arbre : nouvelle version, redécoupage des chapitres, retrait.
 function renderFiles(course) {
-  $("#source-names").innerHTML = course.files.map((f) => `<span class="source-name">${ICON_FILE}<strong>${escapeHtml(f.name)}</strong></span>`).join("")
+  const focus = focusFile(course);
+  $("#source-names").innerHTML = (focus
+    ? course.files.map((f) => `<button type="button" class="source-name source-pick${f === focus ? " active" : ""}" data-file-focus="${f.id}"
+        aria-pressed="${f === focus}" title="${f === focus ? "Cours affiché" : "Afficher ce cours"}">${ICON_FILE}<strong>${escapeHtml(f.name.replace(/\.[^.]+$/, ""))}</strong></button>`).join("")
+    : course.files.map((f) => `<span class="source-name">${ICON_FILE}<strong>${escapeHtml(f.name)}</strong></span>`).join(""))
     || `<span class="muted">Aucun fichier</span>`;
+  $("#source-names").classList.toggle("picker", Boolean(focus));
   $("#file-list").innerHTML = course.files.length ? course.files.map((f) => {
     const chapters = f.chapters || [];
     const found = chapters.length
@@ -1622,6 +1670,13 @@ document.addEventListener("click", async (e) => {
     if (create === "cartes") return openCardsMenu(target);
     if (create) {
       if (!state.course.files.length) return go(courseHash("fichiers"));
+      const focus = focusFile();
+      if (focus) {  // plusieurs cours dans la matière : sur le cours affiché seulement
+        const excluded = excludedSet();
+        excluded.clear();
+        chapterUnits().filter((u) => u.file !== focus.id).forEach((u) => excluded.add(u.key));
+        state.keepSelection = true;
+      }
       go(courseHash(`nouveau/${create}`));
     }
     if (fileCreate) {
@@ -1699,6 +1754,7 @@ async function uploadFiles(fileList) {
     // Puis l'IA repère les chapitres des fichiers déposés (si un moteur est prêt).
     const names = Object.keys(results).map((n) => n.toLowerCase());
     const ids = course.files.filter((f) => names.includes(f.name.toLowerCase())).map((f) => f.id);
+    if (ids.length) setFocusFile(ids[0]);  // le cours déposé s'affiche (ses chapitres, puis ses quiz et cartes)
     await detectChapters(ids, { quiet: true });
     // Chapitres repérés : Pirouette propose de tout préparer (un quiz et des flashcards par chapitre).
     state.offerPrepare = state.course.id;
@@ -2218,7 +2274,7 @@ const cardIsKnown = (card) => card.status === "known";
 
 // Toutes les cartes du cours, à regarder librement : un clic retourne la carte. La révision se fait dans Réviser.
 function renderCardGrid() {
-  const cards = state.deck.cards;
+  const cards = state.deck.cards.filter((c) => inFocus(c.scope));
   const none = !cards.length;
   $("#cards-help").hidden = $("#cards-foot").hidden = none;
   $("#fold-cards-count").textContent = none ? "· aucune pour l'instant" : `· ${cards.length}`;
@@ -3891,6 +3947,11 @@ const WELCOME = [
 ];
 // Les nouveautés de chaque version (le carton « Quoi de neuf » ne s'affiche que si la version en a)
 const WHATS_NEW = {
+  "0.42.0": [
+    ["📚", "Une matière, plusieurs cours", "« + Ajouter un cours » : chaque fichier a ses chapitres, quiz et flashcards, sans mélange"],
+    ["⇆", "Flashcards : Mélanger", "Rebats les cartes qui restent, à tout moment de la séance"],
+    ["▾", "Page du cours plus courte", "Chapitres, quiz et flashcards se replient d'un coup"],
+  ],
   "0.41.0": [
     ["🂠", "Flashcards dans Réviser", "Un accès rien que pour les cartes : à revoir, là où je bloque ou tout le paquet, par chapitre"],
     ["?", "Quiz par chapitre", "Dans Réviser → Quiz, filtre les quiz d'un chapitre ; la maîtrise par chapitre passe dans Suivi"],
@@ -5361,11 +5422,13 @@ document.addEventListener("click", (e) => {
 // « Tout préparer » : une fenêtre (bouton en tête des chapitres) ; elle s'ouvre d'elle-même une fois, juste après
 // l'import d'un cours et le repérage de ses chapitres.
 function openPrepare(course = state.course) {
-  const units = course.files.length ? chapterUnits(course) : [];
+  const units = course.files.length ? focusUnits(course) : [];
   if (!units.length) return go(courseHash("fichiers"));
+  const focus = focusFile(course);
+  const which = focus ? ` dans « ${focus.name.replace(/\.[^.]+$/, "")} »` : "";
   $("#prepare-text").textContent = units.length > 1
-    ? `${units.length} chapitres repérés. Pirouette peut tout créer maintenant, chapitre par chapitre :`
-    : "Pirouette peut tout créer maintenant pour ce cours :";
+    ? `${units.length} chapitres repérés${which}. Pirouette peut tout créer maintenant, chapitre par chapitre :`
+    : `Pirouette peut tout créer maintenant pour ce cours${which} :`;
   showError("#prepare-error", "");
   $("#prepare-status").hidden = true;
   setPrepareLocal(state.config);
@@ -5400,7 +5463,7 @@ function setPrepareEngine(engine) {
 }
 function prepareRequest() {
   const course = state.course;
-  const units = chapterUnits(course);
+  const units = focusUnits(course);
   const quizzes = $("#prepare-quizzes").checked, cards = $("#prepare-cards").checked;
   const nq = Number($("#prepare-nq").value), nc = Number($("#prepare-nc").value);
   const quizText = nq ? `un quiz de ${nq} questions` : "un quiz qui couvre tout le chapitre (chaque définition et chaque notion importante a sa question)";
@@ -5473,6 +5536,7 @@ $("#prepare-go").addEventListener("click", async () => {
   form.append("cards", cards ? "1" : "");
   form.append("num_questions", $("#prepare-nq").value || "0");
   form.append("cards_count", $("#prepare-nc").value || "0");
+  form.append("chapters", focusFile()?.id || "");  // plusieurs cours : celui affiché seulement
   try {
     await api(`/api/courses/${state.course.id}/prepare`, { method: "POST", body: form });
     state.offerPrepare = null;
