@@ -765,7 +765,7 @@ input.cloze-input:disabled { opacity: 1; }
 .home { min-height: calc(100vh - 220px); display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; }
 .home .hero { padding-top: 0; }
 .home .greeting { font-size: 48px; }
-.home .exam-countdown { margin-top: 18px; }
+.home .exam-countdown { margin-top: 28px; font-size: 14px; }
 .home-actions { justify-content: center; }
 .home #home-start { padding: 13px 34px; font-size: 17px; }
 .home .today { margin-top: 30px; }
@@ -1570,3 +1570,9 @@ dialog.prepare-dialog.prepare { margin: auto; border: 0; }
 .tcg-pile.shuffling span:nth-child(3) { animation: pile-riffle .5s ease .12s; }
 @keyframes pile-riffle { 40% { translate: 26px -6px; rotate: 7deg; } 70% { translate: -18px 4px; rotate: -5deg; } }
 @media (prefers-reduced-motion: reduce) { .tcg-pile.shuffling span { animation: none !important; } }
+
+/* Petite pastille « bêta » au coin de l'icône */
+.app-icon { position: relative; }
+.beta-badge { position: absolute; right: -9px; bottom: -6px; padding: 1px 4px; border-radius: 99px; background: var(--text); color: var(--bg);
+  font: 700 7px/1.3 var(--sans); letter-spacing: .03em; box-shadow: 0 0 0 2px var(--bg); pointer-events: none; }
+.home-brand .beta-badge { right: -14px; bottom: -7px; padding: 2px 7px; font-size: 11px; }
