@@ -1583,19 +1583,27 @@ dialog.prepare-dialog.prepare { margin: auto; border: 0; }
 .course-tree.folded .tree-chev { transform: rotate(-45deg); }
 .course-tree.folded .tree-branches { display: none; }
 
-/* Une matière, plusieurs cours : de vrais onglets, et le cours de l'onglet dans sa propre case */
-.course-tabs { display: flex; align-items: flex-end; gap: 4px; padding: 0 0 0 10px; overflow-x: auto; scrollbar-width: none; }
-.course-tab { display: inline-flex; align-items: center; gap: 8px; flex: none; max-width: 280px; margin: 0; padding: 10px 16px 9px;
-  border: 1px solid var(--border); border-bottom: 0; border-radius: 14px 14px 0 0; background: var(--sunken); color: var(--muted);
-  font: 500 15px/1.2 var(--sans); cursor: pointer; }
+/* Une matière, plusieurs cours : des onglets qui font corps avec la case du cours (même fond, sans contour,
+   coins arrondis vers l'intérieur au pied de l'onglet actif, comme les onglets d'un navigateur) */
+.course-tabs { --tab-bg: var(--accent-soft); --tab-r: 14px; display: flex; align-items: flex-end; gap: 6px; padding: 0 var(--tab-r);
+  overflow-x: auto; overflow-y: hidden; scrollbar-width: none; }
+.course-tabs::-webkit-scrollbar { display: none; }
+.course-tab { position: relative; display: inline-flex; align-items: center; gap: 8px; flex: none; max-width: 280px; margin: 0;
+  padding: 10px 16px; border: 0; border-radius: var(--tab-r) var(--tab-r) 0 0; background: var(--sunken); color: var(--muted);
+  font: 500 15px/1.2 var(--sans); cursor: pointer; transition: background .15s, color .15s; }
 .course-tab span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .course-tab .ico { width: 17px; height: 17px; flex: none; }
 .course-tab:hover { color: var(--text); }
-.course-tab.active { position: relative; z-index: 1; background: var(--accent-soft); color: var(--accent-ink); font-weight: 650;
-  border-color: var(--accent); padding-bottom: 10px; margin-bottom: -1px; }
-.course-tab.add { padding: 10px 14px 9px; font-size: 17px; font-weight: 600; }
-.course-tree.tabbed .tree-body { border: 1px solid var(--accent); border-radius: 0 18px 18px 18px; padding: 14px 14px 10px;
-  background: var(--accent-soft); }
+.course-tab.active { background: var(--tab-bg); color: var(--accent-ink); font-weight: 650; padding-bottom: 12px; }
+/* Les deux petits coins creusés qui raccordent l'onglet actif à la case */
+.course-tab.active::before, .course-tab.active::after { content: ""; position: absolute; bottom: 0; width: var(--tab-r); height: var(--tab-r);
+  pointer-events: none; }
+.course-tab.active::before { left: calc(-1 * var(--tab-r));
+  background: radial-gradient(circle at 0 0, transparent calc(var(--tab-r) - .5px), var(--tab-bg) var(--tab-r)); }
+.course-tab.active::after { right: calc(-1 * var(--tab-r));
+  background: radial-gradient(circle at 100% 0, transparent calc(var(--tab-r) - .5px), var(--tab-bg) var(--tab-r)); }
+.course-tab.add { padding: 10px 14px; font-size: 17px; font-weight: 600; }
+.course-tree.tabbed .tree-body { border-radius: 20px; padding: 16px 16px 12px; background: var(--accent-soft); }
 .course-tree.tabbed .tree-body .tree-source { box-shadow: none; }
 
 .review-files { margin: -4px 0 14px; }
