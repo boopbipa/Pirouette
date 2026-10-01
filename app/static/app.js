@@ -3034,6 +3034,7 @@ async function openReviewScope(kind, id = "", sub = "") {
   });
   $("#scope-tabs").hidden = !owner && !parent;  // « Tous mes cours » : pas de plan
   $("#scope-main").hidden = tab !== "";
+  $("#view-review-scope").dataset.place = tab || $("#scope-main").dataset.mode;
   $("#scope-planning").hidden = tab !== "planning";
   $("#scope-suivi").hidden = tab !== "suivi";
   setCardMode(cardMode());
@@ -3067,7 +3068,7 @@ async function renderScopeMain() {
   const ids = new Set(scoped.map((c) => c.id));
   state.scopePlan = plan;
   $("#review-exam").hidden = !data.exam || data.exam.days <= -7;
-  if (data.exam) $("#review-exam").innerHTML = examSentence(data.exam);
+  if (data.exam) $("#review-exam").innerHTML = examSentence(data.exam, "", { short: true });
 
   // Plan de révision
   $("#plan-card").hidden = !plan;
@@ -3360,6 +3361,7 @@ async function renderHomeHeat(guiding) {
 // Réviser : quatre modes (du jour, par chapitre, quiz, partiel) ; le dernier choisi est gardé
 function setScopeMode(mode) {
   $("#scope-main").dataset.mode = mode;
+  if (!$("#scope-main").hidden) $("#view-review-scope").dataset.place = mode;
   document.querySelectorAll("[data-scope-mode]").forEach((b) => {
     b.classList.toggle("active", b.dataset.scopeMode === mode);
     b.setAttribute("aria-selected", String(b.dataset.scopeMode === mode));
@@ -3378,7 +3380,7 @@ async function renderProgress() {
   const { week } = data;
   const pctText = (v) => (v === null ? "—" : `${v} %`);
   $("#review-exam").hidden = !data.exam || data.exam.days <= -7;
-  if (data.exam) $("#review-exam").innerHTML = examSentence(data.exam);
+  if (data.exam) $("#review-exam").innerHTML = examSentence(data.exam, "", { short: true });
   $("#pg-cards").textContent = week.cards;
   $("#pg-cards-success").textContent = pctText(week.cards_success);
   $("#pg-questions-success").textContent = pctText(week.questions_success);
@@ -4885,7 +4887,10 @@ function examLabel(iso) {
   if (days <= -7) return `Partiels passés (${dayLong(iso)})`;
   return `Partiels le ${dayLong(iso)} · J-${days}`;
 }
-function examSentence(exam, name = "") {
+function examSentence(exam, name = "", { short = false } = {}) {
+  // Réviser : la phrase complète seulement en Partiel blanc et Rétroplanning ; ailleurs une petite mention (J-74)
+  if (short) return `<span class="exam-full">${examSentence(exam, name)}</span><span class="exam-short">${
+    exam.days <= 0 ? "Semaine de partiels" : `Partiels le ${dayLong(exam.date)} · J-${exam.days}`}</span>`;
   const who = name ? ` <span class="muted">(${escapeHtml(name)})</span>` : "";
   if (exam.days <= 0) return `<b>Semaine de partiels en cours</b>${who} : les cartes reviennent chaque jour.`;
   return `<b>Partiels dans ${plural(exam.days, "jour", "jours")}</b>, le ${dayLong(exam.date)}${who}. Les révisions s'organisent pour que tout soit revu avant.`;

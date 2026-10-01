@@ -281,7 +281,7 @@ cartes dont la phrase du cours a disparu (« Ton cours a changé : … ne corres
 à supprimer, les autres sont gardées et ne sont plus signalées.
 
 **Semaine des partiels** : sur un semestre (icône calendrier, pour tous ses cours) ou sur un cours (menu « ••• »), le
-premier jour de la semaine d'examens. L'accueil et Réviser affichent « Partiels dans N jours » ; les rappels des cartes
+premier jour de la semaine d'examens. L'accueil affiche « Partiels dans N jours » (en grand aussi dans Réviser → Partiel blanc et Rétroplanning ; ailleurs dans Réviser, une petite mention « Partiels le … · J-N » sous le titre) ; les rappels des cartes
 tombent toujours avant la semaine, se resserrent les deux dernières semaines, puis reviennent chaque jour pendant la
 semaine ; les nouvelles cartes sont étalées pour être toutes vues à temps.
 

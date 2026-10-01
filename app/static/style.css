@@ -1501,3 +1501,21 @@ dialog.prepare-dialog.prepare { margin: auto; border: 0; }
 .ratings.locked .rating:hover { border-color: var(--border); }
 #card-stage:has(.dragging) .rating { transition: none; }
 @media (max-width: 560px) { .ratings .rating b { font-size: 14px; } }
+
+/* Sélection de texte (moteur Safari de l'app Mac) : sans ça, le surlignage déborde jusqu'aux bords de la fenêtre.
+   Une transformation neutre fait de chaque bloc de texte sa propre « zone de sélection ». On évite les blocs qui
+   contiennent un menu (il serait coincé dessous). */
+:where(h1, h2, h3, blockquote, .choice > span, .feedback, .tcg-text,
+       p:not(:has(.plus-menu, .qtools-menu, .dd-list, .qtools)), li:not(:has(.plus-menu, .qtools-menu, .dd-list, .qtools))) {
+  transform: translate(0);
+}
+
+/* Réviser : le compte à rebours des partiels en grand seulement là où il compte (Partiel blanc, Rétroplanning) */
+#review-exam .exam-short { display: none; }
+#view-review-scope:not([data-place="partiel"]):not([data-place="planning"]) #review-exam {
+  display: flex; width: fit-content; align-items: center; gap: 7px; margin: -6px 0 14px; padding: 0; background: none;
+  font-size: 13.5px; color: var(--muted); }
+#view-review-scope:not([data-place="partiel"]):not([data-place="planning"]) #review-exam::before {
+  content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--accent); }
+#view-review-scope:not([data-place="partiel"]):not([data-place="planning"]) #review-exam .exam-full { display: none; }
+#view-review-scope:not([data-place="partiel"]):not([data-place="planning"]) #review-exam .exam-short { display: inline; }
