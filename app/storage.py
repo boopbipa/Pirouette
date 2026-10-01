@@ -458,7 +458,7 @@ class Store:
         shutil.rmtree(path)
 
     def add_file(self, course_id: str, filename: str, data: bytes, text: str, chapters: list[dict] | None = None,
-                 extract_version: int = 1) -> str:
+                 extract_version: int = 1, chapters_by: str = "auto") -> str:
         """Ajoute un fichier au cours, ou remplace celui qui porte le même nom. Renvoie "added" ou "updated"."""
         course = self.get_course(course_id)
         files_dir = self._course_dir(course_id) / "files"
@@ -480,7 +480,7 @@ class Store:
         (files_dir / f"{entry['id']}{ext}.orig").write_bytes(data)
         (files_dir / f"{entry['id']}.txt").write_text(text, encoding="utf-8")
         entry.update(name=name, size=len(data), chars=len(text), updated_at=_now(), revisions=entry["revisions"] + 1,
-                     chapters=chapters or [], chapters_by="auto", extract_version=extract_version)
+                     chapters=chapters or [], chapters_by=chapters_by, extract_version=extract_version)
         if existing is None:
             course["files"].append(entry)
         course["version"] += 1

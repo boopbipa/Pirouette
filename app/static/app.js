@@ -1210,6 +1210,7 @@ async function openCourse(id, tab, { keepScroll = false } = {}) {
   renderCourseRevise(course);
   renderQuizPanel(course);
   renderFiles(course);
+  renderSplitOffer(course);
   await loadDeck();
 
   const scroll = window.scrollY;
@@ -1429,9 +1430,44 @@ const focusUnits = (course = state.course) => {
   const f = focusFile(course);
   return chapterUnits(course).filter((u) => !f || u.file === f.id);
 };
+// L'encart « découper ce cours ? » : pour le cours affiché, tant qu'il n'est ni découpé ni gardé d'un seul bloc
+function renderSplitOffer(course = state.course) {
+  const f = focusFile(course) || course?.files[0];
+  const show = Boolean(f && f.chapters_by === "none" && !chaptersRunning(f.id));
+  $("#split-offer").hidden = !show;
+  if (show) $("#split-offer-title").textContent = `« ${baseName(f.name)} » est d'un seul bloc.`;
+}
+const splitTarget = () => focusFile() || state.course.files[0];
+$("#split-ai").addEventListener("click", async () => {
+  await detectChapters([splitTarget().id]);
+  renderSplitOffer();
+});
+$("#split-auto").addEventListener("click", async () => {
+  const { course } = await api(`/api/courses/${state.course.id}/files/${splitTarget().id}/chapters/auto`, { method: "POST" });
+  const found = course.files.find((x) => x.id === splitTarget().id)?.chapters.length || 0;
+  await refreshCourse();
+  const status = $("#chapters-status");
+  status.hidden = false;
+  status.className = found ? "status ok" : "status ko";
+  status.textContent = found ? `${plural(found, "chapitre repéré", "chapitres repérés")}.`
+    : "Aucun titre de chapitre évident : essaie « Découper avec l'IA », ou garde le cours en un seul bloc.";
+});
+$("#split-keep").addEventListener("click", async () => {
+  await api(`/api/courses/${state.course.id}/files/${splitTarget().id}/chapters?keep=true`, { method: "DELETE" });
+  refreshCourse();
+});
+document.addEventListener("click", async (e) => {
+  const clear = e.target.closest("[data-clear-chapters]");
+  if (!clear) return;
+  if (!confirm("Effacer les chapitres de ce fichier ? Il redevient un seul bloc. Tes quiz et tes flashcards sont gardés.")) return;
+  await api(`/api/courses/${state.course.id}/files/${clear.dataset.clearChapters}/chapters`, { method: "DELETE" });
+  refreshCourse();
+});
+
 function refocus(id) {
   setFocusFile(id);
   renderFiles(state.course);
+  renderSplitOffer();
   renderTiles(state.course);
   renderQuizPanel(state.course);
   if (state.deck) renderCardGrid();
@@ -1494,7 +1530,8 @@ function renderFiles(course) {
       <div class="file-actions">
         <button class="ghost small" type="button" data-replace-file="${f.id}" title="Dépose la version à jour : les chapitres sont redécoupés, tes quiz et cartes gardés">Nouvelle version</button>
         <button class="ghost small" type="button" data-detect-file="${f.id}" ${chaptersRunning(f.id) ? "disabled" : ""} title="${
-          f.chapters_by === "ai" ? "Relancer l'IA pour repérer les chapitres" : "Repérer les chapitres avec l'IA"}">Redécouper</button>
+          f.chapters_by === "ai" ? "Relancer l'IA pour repérer les chapitres" : "Repérer les chapitres avec l'IA"}">${chapters.length ? "Redécouper" : "Découper"}</button>
+        ${chapters.length ? `<button class="ghost small" type="button" data-clear-chapters="${f.id}" title="Le fichier redevient un seul bloc ; quiz et cartes déjà créés sont gardés">Effacer les chapitres</button>` : ""}
         <button class="icon" data-remove-file="${f.id}" aria-label="Retirer ${escapeHtml(f.name)}" title="Retirer du cours">✕</button>
       </div>
     </li>`;
@@ -1755,13 +1792,16 @@ async function uploadFiles(fileList) {
     status.textContent = Object.entries(results)
       .map(([name, r]) => `${r === "updated" ? "Nouvelle version enregistrée" : "Ajouté"} : ${name}`).join(" · ");
     status.className = "status ok";
-    // Puis l'IA repère les chapitres des fichiers déposés (si un moteur est prêt).
     const names = Object.keys(results).map((n) => n.toLowerCase());
     const ids = course.files.filter((f) => names.includes(f.name.toLowerCase())).map((f) => f.id);
     if (ids.length) setFocusFile(ids[0]);  // le cours déposé s'affiche (ses chapitres, puis ses quiz et cartes)
-    await detectChapters(ids, { quiet: true });
-    // Chapitres repérés : Pirouette propose de tout préparer (un quiz et des flashcards par chapitre).
-    state.offerPrepare = state.course.id;
+    // Un nouveau fichier reste d'un seul bloc : l'encart « découper ? » le propose. Une nouvelle version d'un fichier
+    // déjà découpé est redécoupée par l'IA (si elle est prête), puis Pirouette propose de tout préparer.
+    const updated = course.files.filter((f) => results[f.name] === "updated" && f.chapters_by === "auto").map((f) => f.id);
+    if (updated.length) {
+      await detectChapters(updated, { quiet: true });
+      state.offerPrepare = state.course.id;
+    }
     await refreshCourse();
   } catch (err) {
     status.textContent = err.message;
@@ -4000,6 +4040,11 @@ const WELCOME = [
 ];
 // Les nouveautés de chaque version (le carton « Quoi de neuf » ne s'affiche que si la version en a)
 const WHATS_NEW = {
+  "0.44.0": [
+    ["✂", "Découper quand tu veux", "Un cours importé reste d'un bloc : Pirouette propose de le découper (IA, rapide ou pas du tout)"],
+    ["⌫", "Effacer les chapitres", "Dans « Modifier », un fichier peut redevenir un seul bloc (quiz et cartes gardés)"],
+    ["◌", "Barre en verre", "La barre du haut laisse voir la page en transparence"],
+  ],
   "0.43.0": [
     ["📚", "Un onglet par cours", "Dans une matière, chaque cours (fichier) a son onglet : ses chapitres, quiz et flashcards à part"],
     ["🎯", "Réviser un seul cours", "Dans Réviser, choisis « Toute la matière » ou un cours ; « Tout réviser » mélange cartes et quiz"],

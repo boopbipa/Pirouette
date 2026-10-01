@@ -424,7 +424,7 @@ def _reextract(course_id: str, entry: dict) -> None:
         store.replace_text(course_id, entry["id"], store.file_text(course_id, entry["id"]), EXTRACT_VERSION)
         return
     # Mêmes lignes qu'avant (seules les marques de gras / italique s'ajoutent) : les chapitres de l'IA restent valables.
-    chapters = detect_chapters(text) if entry.get("chapters_by") != "ai" else None
+    chapters = detect_chapters(text) if entry.get("chapters_by") == "auto" else None
     store.replace_text(course_id, entry["id"], text, EXTRACT_VERSION, chapters)
 
 
@@ -519,9 +519,36 @@ async def upload_files(course_id: str, files: list[UploadFile] = File(...)) -> d
         if not text:
             raise HTTPException(400, f"Aucun texte trouvé dans {name}. Un PDF scanné (images) doit d'abord passer par un OCR.")
         extracted.append((name, data, text))
-    results = {name: store.add_file(course_id, name, data, text, detect_chapters(text), EXTRACT_VERSION)
-               for name, data, text in extracted}
+    # Un nouveau fichier reste d'un seul bloc : Pirouette propose de le découper (l'utilisateur choisit). Une nouvelle
+    # version garde le choix d'avant : pas de chapitres s'il n'y en avait pas, sinon le repérage automatique.
+    known = {f["name"].lower(): f for f in store.get_course(course_id)["files"]}
+    results = {}
+    for name, data, text in extracted:
+        before = known.get(Path(name).name.lower())
+        whole = before is None or before.get("chapters_by") in UNSPLIT
+        results[name] = store.add_file(course_id, name, data, text, [] if whole else detect_chapters(text), EXTRACT_VERSION,
+                                       chapters_by=(before or {}).get("chapters_by", "none") if whole else "auto")
     return {"results": results, "course": store.get_course(course_id)}
+
+
+# Fichier pas découpé : « none » = pas encore décidé (Pirouette propose de découper), « whole » = gardé en un seul bloc
+UNSPLIT = ("none", "whole")
+
+
+@app.post("/api/courses/{course_id}/files/{file_id}/chapters/auto")
+async def split_chapters(course_id: str, file_id: str) -> dict:
+    """Découpage rapide, sans IA : les titres évidents du document (« Chapitre 2 », « II. », titres Word…)."""
+    chapters = detect_chapters(store.file_text(course_id, file_id))
+    store.set_chapters(course_id, file_id, chapters, "auto" if chapters else "none")  # rien trouvé : toujours à découper
+    return {"course": store.get_course(course_id)}
+
+
+@app.delete("/api/courses/{course_id}/files/{file_id}/chapters")
+async def clear_chapters(course_id: str, file_id: str, keep: bool = False) -> dict:
+    """Efface les chapitres d'un fichier : il redevient un seul bloc (quiz et cartes déjà créés sont gardés).
+    `keep` : l'utilisateur garde le fichier en un seul bloc (Pirouette ne propose plus de le découper)."""
+    store.set_chapters(course_id, file_id, [], "whole" if keep else "none")
+    return {"course": store.get_course(course_id)}
 
 
 async def _find_chapters(course_id: str, file_id: str, provider: str, model: str, on_progress=None) -> int:

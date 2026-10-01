@@ -2,6 +2,7 @@ import time
 
 from fastapi.testclient import TestClient
 
+from tests.helpers import split_all
 from app import main
 from app.providers import ollama_provider
 from app.storage import Store
@@ -29,6 +30,7 @@ def test_one_quiz_per_chapter_in_the_background(tmp_path, monkeypatch):
     with TestClient(main.app) as client:
         cid = client.post("/api/courses", json={"name": "Neuro"}).json()["id"]
         client.post(f"/api/courses/{cid}/files", files=[("files", ("neuro.txt", COURSE.encode(), "text/plain"))])
+        split_all(client, cid)
         fid = client.get(f"/api/courses/{cid}").json()["files"][0]["id"]
         created = client.post(f"/api/courses/{cid}/quizzes/background", data={
             "provider": "local", "model": "m", "num_questions": "2", "types": "qcm", "per_chapter": "1",
@@ -77,6 +79,7 @@ def test_prepare_everything_when_a_course_is_added(tmp_path, monkeypatch):
     with TestClient(main.app) as client:
         cid = client.post("/api/courses", json={"name": "Neuro"}).json()["id"]
         client.post(f"/api/courses/{cid}/files", files=[("files", ("neuro.txt", COURSE.encode(), "text/plain"))])
+        split_all(client, cid)
         created = client.post(f"/api/courses/{cid}/prepare", data={"provider": "local", "model": "m",
                                                                    "num_questions": "2", "cards_count": "3"}).json()["jobs"]
         assert [(j["kind"], j["label"][:10]) for j in created] == [

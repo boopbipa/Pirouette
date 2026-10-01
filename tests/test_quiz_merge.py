@@ -2,6 +2,7 @@ import time
 
 from fastapi.testclient import TestClient
 
+from tests.helpers import split_all
 from app import main
 from app.providers import ollama_provider
 from app.storage import Store
@@ -56,6 +57,7 @@ def test_second_quiz_on_a_chapter_feeds_the_first(tmp_path, monkeypatch):
     with TestClient(main.app) as client:
         cid = client.post("/api/courses", json={"name": "Neuro"}).json()["id"]
         client.post(f"/api/courses/{cid}/files", files=[("files", ("neuro.txt", COURSE.encode(), "text/plain"))])
+        split_all(client, cid)
         fid = client.get(f"/api/courses/{cid}").json()["files"][0]["id"]
 
         def make():

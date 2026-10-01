@@ -1,5 +1,6 @@
 from fastapi.testclient import TestClient
 
+from tests.helpers import split_all
 from app import main, news
 from app.storage import Store
 
@@ -23,6 +24,7 @@ def test_news_after_a_new_version(tmp_path, monkeypatch):
     upload = lambda text: client.post(f"/api/courses/{cid}/files",  # noqa: E731
                                       files=[("files", ("neuro.txt", text.encode(), "text/plain"))])
     upload(BASE)
+    split_all(client, cid)
     assert client.get(f"/api/courses/{cid}/news").json()["units"] == []  # premier dépôt : rien de « nouveau »
     upload(BASE.replace("\n\nChapitre 2", " " + ADDED + "\n\nChapitre 2"))
     units = client.get(f"/api/courses/{cid}/news").json()["units"]

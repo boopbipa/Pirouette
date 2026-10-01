@@ -710,6 +710,16 @@
           <p id="chapters-status" class="status" hidden></p>
         </details>
 
+        <!-- Cours importé d'un seul bloc : Pirouette propose de le découper en chapitres (rien n'est fait sans l'accord) -->
+        <div class="split-offer" id="split-offer" hidden>
+          <p><strong id="split-offer-title">Ce cours est d'un seul bloc.</strong>
+            <span class="muted">Le découper en chapitres permet de créer quiz et flashcards chapitre par chapitre.</span></p>
+          <div class="split-actions">
+            <button class="primary small" type="button" id="split-ai">Découper avec l'IA</button>
+            <button class="ghost small" type="button" id="split-auto" title="Sans IA : les titres évidents (« Chapitre 2 », « II. »…)">Découpage rapide</button>
+            <button class="link-button" type="button" id="split-keep">Garder en un seul bloc</button>
+          </div>
+        </div>
         <!-- Chapitres, quiz et flashcards se replient d'un coup (beaucoup de cours = une longue page) -->
         <button type="button" class="tree-toggle" id="tree-toggle" aria-expanded="true" aria-controls="tree-branches">
           <span class="tree-chev" aria-hidden="true"></span><span id="tree-toggle-text">Replier</span></button>

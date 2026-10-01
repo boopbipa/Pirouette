@@ -2,6 +2,7 @@ from datetime import date, timedelta
 
 from fastapi.testclient import TestClient
 
+from tests.helpers import split_all
 from app import main, plan, reminder
 from app.storage import Store
 
@@ -45,6 +46,7 @@ def _setup(tmp_path, monkeypatch):
     client.put(f"/api/courses/{cid}/folder", json={"folder_id": folder})
     text = "Chapitre 1 : Le neurone\n" + "Le neurone transmet l'influx. " * 20 + "\nChapitre 2 : La synapse\n" + "La synapse. " * 30
     client.post(f"/api/courses/{cid}/files", files=[("files", ("neuro.txt", text.encode(), "text/plain"))])
+    split_all(client, cid)
     cards = [{"id": f"c{i}", "front": f"Question {i}", "back": "Réponse", "status": "new", "scope": ["Chapitre 1 : Le neurone"]}
              for i in range(40)]
     cards[3].update(status="review", reviews=4, lapses=3, last_rating="again", due=TODAY.isoformat())

@@ -46,3 +46,23 @@ def test_revise_one_course_of_the_subject(tmp_path, monkeypatch):
     assert first["cards"] == 2 and first["questions"] == 1
     decks = client.get(f"/api/cards/decks?course={cid}&file={glossary}").json()
     assert decks["all"]["total"] == 1
+
+
+def test_new_file_is_not_split_until_asked(tmp_path, monkeypatch):
+    store = Store(tmp_path)
+    monkeypatch.setattr(main, "store", store)
+    client = TestClient(main.app)
+    cid = client.post("/api/courses", json={"name": "Psy"}).json()["id"]
+    text = "Chapitre 1 : Le moi\n" + "Le moi. " * 40 + "\nChapitre 2 : Le ça\n" + "Le ça. " * 40
+    send = lambda: client.post(f"/api/courses/{cid}/files", files=[("files", ("cm.txt", text.encode(), "text/plain"))])  # noqa: E731
+    send()
+    f = client.get(f"/api/courses/{cid}").json()["files"][0]
+    assert f["chapters"] == [] and f["chapters_by"] == "none"  # un seul bloc : Pirouette propose de découper
+    send()  # nouvelle version d'un fichier pas découpé : toujours pas découpé
+    assert client.get(f"/api/courses/{cid}").json()["files"][0]["chapters"] == []
+    split = client.post(f"/api/courses/{cid}/files/{f['id']}/chapters/auto").json()["course"]["files"][0]
+    assert [c["title"] for c in split["chapters"]] == ["Chapitre 1 : Le moi", "Chapitre 2 : Le ça"]
+    cleared = client.delete(f"/api/courses/{cid}/files/{f['id']}/chapters").json()["course"]["files"][0]
+    assert cleared["chapters"] == [] and cleared["chapters_by"] == "none"
+    kept = client.delete(f"/api/courses/{cid}/files/{f['id']}/chapters?keep=true").json()["course"]["files"][0]
+    assert kept["chapters_by"] == "whole"

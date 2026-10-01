@@ -4,6 +4,7 @@ import json
 import pytest
 from fastapi.testclient import TestClient
 
+from tests.helpers import split_all
 from app import main
 from app.chapters import ai_candidates, chapter_text, chapters_from_ai, detect_chapters
 from app.extract import extract_text
@@ -99,6 +100,7 @@ def test_generation_uses_only_chosen_chapters(client, monkeypatch):
     cid = client.post("/api/courses", json={"name": "Bio"}).json()["id"]
     client.post(f"/api/courses/{cid}/files", files=[("files", ("bio.txt", COURSE.encode(), "text/plain")),
                                                     ("files", ("autre.txt", b"Annexe sans chapitre.", "text/plain"))])
+    split_all(client, cid)
     files = client.get(f"/api/courses/{cid}").json()["files"]
     bio, other = files
     assert len(bio["chapters"]) == 3 and bio["chapters_by"] == "auto" and other["chapters"] == []

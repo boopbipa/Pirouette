@@ -178,7 +178,12 @@ La page d'un cours est l'**atelier** : tout s'y règle et s'y modifie, **Révise
 comme un arbre qui part du fichier importé :
 - **Ton cours** (en haut, replié : juste le nom du fichier ; « Modifier » le déplie) : le ou les fichiers du cours. « **Nouvelle version** » dépose la version à jour : elle
   remplace l'ancienne (même un PDF à la place d'un Keynote), les chapitres sont redécoupés, tes quiz et tes cartes
-  gardés ; « **Redécouper** » relance le repérage des chapitres ; on peut aussi y glisser un fichier.
+  gardés ; « **Redécouper** » relance le repérage des chapitres ; « **Effacer les chapitres** » remet le fichier en un
+  seul bloc (quiz et cartes gardés) ; on peut aussi y glisser un fichier.
+- **Découpage en chapitres à la demande** : un cours importé reste d'**un seul bloc**. Un encart propose de le découper :
+  « **Découper avec l'IA** » (IA locale, en arrière-plan), « **Découpage rapide** » (sans IA : les titres évidents,
+  « Chapitre 2 », « II. »…) ou « **Garder en un seul bloc** » (l'encart ne revient plus). Une nouvelle version d'un
+  fichier déjà découpé est redécoupée comme avant.
 - **Une matière, plusieurs cours** : « **+ Ajouter un cours** » (en haut, à gauche de « Gérer le cours ») dépose un
   autre cours de la matière (CM2, TD, glossaire…). Chaque fichier est un cours à part, dans son **onglet** (même s'il n'y en a qu'un ; au-dessus
   de l'arbre ; « + » en ajoute un) : un clic sur l'onglet affiche ce cours dans sa propre case. En dessous, seulement **ses** chapitres, **ses**
