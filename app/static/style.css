@@ -1439,3 +1439,9 @@ dialog.welcome::backdrop { background: rgba(23, 21, 18, .35); backdrop-filter: b
   background-size: 40% 100%, 100% 100%; animation: job-bar 1.4s ease-in-out infinite; }
 @keyframes job-bar { from { background-position: -60% 0, 0 0; } to { background-position: 160% 0, 0 0; } }
 @media (prefers-reduced-motion: reduce) { .job.running .job-main::after { animation: none; background: var(--accent); opacity: .5; } }
+
+/* « Tout préparer » : une fenêtre, ouverte depuis l'en-tête des chapitres */
+dialog.prepare-dialog { width: min(520px, 92vw); }
+dialog.prepare-dialog h2 { margin-top: 0; }
+.tree-fold > summary .fold-action { margin-left: auto; align-self: center; }
+dialog.prepare-dialog.prepare { margin: auto; border: 0; }

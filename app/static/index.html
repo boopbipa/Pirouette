@@ -682,7 +682,8 @@
 
         <div class="tree-branches">
           <details class="card tree-fold" id="panel-chapitres">
-            <summary><span class="fold-title">Chapitres</span><small class="muted" id="fold-chapitres-count"></small></summary>
+            <summary><span class="fold-title">Chapitres</span><small class="muted" id="fold-chapitres-count"></small>
+              <button class="primary small fold-action" type="button" id="prepare-open">Tout préparer</button></summary>
             <div class="fold-body">
               <ul class="course-chapter-list" id="chapter-list"></ul>
               <p class="status" id="course-chapters-status" hidden></p>
@@ -733,22 +734,6 @@
         <span id="course-revise-text"></span>
         <a class="button primary small" id="course-revise-link" href="#/reviser">Réviser ce cours →</a>
       </div>
-      </div>
-
-      <div class="card prepare" id="prepare-panel" hidden>
-        <h2>Tout préparer pour ce cours ?</h2>
-        <p class="muted" id="prepare-text"></p>
-        <div class="option-row"><label><input type="checkbox" id="prepare-quizzes" checked> Un quiz par chapitre</label>
-          <select id="prepare-nq" class="chip" aria-label="Questions par quiz"><option value="0" selected>tout le chapitre</option><option value="5">5 questions</option><option value="10">10 questions</option><option value="15">15 questions</option><option value="20">20 questions</option><option value="30">30 questions</option></select></div>
-        <div class="option-row"><label><input type="checkbox" id="prepare-cards" checked> Des flashcards par chapitre</label>
-          <select id="prepare-nc" class="chip" aria-label="Cartes par chapitre"><option value="0" selected>tout le chapitre</option><option value="5">5 cartes</option><option value="10">10 cartes</option><option value="15">15 cartes</option><option value="20">20 cartes</option><option value="30">30 cartes</option><option value="40">40 cartes</option></select></div>
-        <p class="heat-note">Tout se crée en arrière-plan, chapitre après chapitre : tu peux commencer à réviser dès que le premier
-          est prêt. Ton Mac peut chauffer un peu pendant ce temps : évite d'ouvrir d'autres apps gourmandes.</p>
-        <p class="error" id="prepare-error" hidden></p>
-        <div class="actions">
-          <button class="primary" type="button" id="prepare-go">Tout préparer</button>
-          <button class="ghost" type="button" id="prepare-later">Plus tard</button>
-        </div>
       </div>
 
     </section>
@@ -1150,6 +1135,23 @@
     </form>
   </dialog>
 
+  <!-- Tout préparer : un quiz et des flashcards par chapitre, en arrière-plan -->
+  <dialog class="report-dialog prepare-dialog prepare" id="prepare-panel" aria-label="Tout préparer">
+    <h2>Tout préparer pour ce cours ?</h2>
+    <p class="muted" id="prepare-text"></p>
+    <div class="option-row"><label><input type="checkbox" id="prepare-quizzes" checked> Un quiz par chapitre</label>
+      <select id="prepare-nq" class="chip" aria-label="Questions par quiz"><option value="0" selected>tout le chapitre</option><option value="5">5 questions</option><option value="10">10 questions</option><option value="15">15 questions</option><option value="20">20 questions</option><option value="30">30 questions</option></select></div>
+    <div class="option-row"><label><input type="checkbox" id="prepare-cards" checked> Des flashcards par chapitre</label>
+      <select id="prepare-nc" class="chip" aria-label="Cartes par chapitre"><option value="0" selected>tout le chapitre</option><option value="5">5 cartes</option><option value="10">10 cartes</option><option value="15">15 cartes</option><option value="20">20 cartes</option><option value="30">30 cartes</option><option value="40">40 cartes</option></select></div>
+    <p class="heat-note">Tout se crée en arrière-plan, chapitre après chapitre : tu peux commencer à réviser dès que le premier
+      est prêt. Ton Mac peut chauffer un peu pendant ce temps : évite d'ouvrir d'autres apps gourmandes.</p>
+    <p class="error" id="prepare-error" hidden></p>
+    <div class="actions">
+      <button class="primary" type="button" id="prepare-go">Tout préparer</button>
+      <button class="ghost" type="button" id="prepare-later">Plus tard</button>
+    </div>
+  </dialog>
+
   <!-- Cartons de bienvenue (premier lancement) et « Quoi de neuf » (après une mise à jour) -->
   <dialog id="welcome-dialog" class="welcome" aria-label="Présentation de Pirouette">
     <div class="welcome-art" id="welcome-art"></div>
@@ -1164,7 +1166,7 @@
   </dialog>
 
   <!-- Importer un paquet : à quel cours rattacher chaque cours du paquet -->
-  <dialog id="pack-dialog" class="pack-dialog">
+  <dialog id="pack-dialog" class="report-dialog pack-dialog">
     <h2>Importer des quiz et flashcards</h2>
     <p class="muted small-text">Pour chaque cours du paquet, choisis où l'importer. Pirouette a retrouvé ceux qui portent le même nom ;
       les autres peuvent être rattachés à un de tes cours, créés, ou ignorés. Les questions et cartes déjà présentes ne sont pas doublées.</p>

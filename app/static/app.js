@@ -5030,32 +5030,33 @@ document.addEventListener("click", (e) => {
 }, true);
 
 // ---------- Au dépôt d'un cours : tout préparer (un quiz et des flashcards par chapitre) ----------
-function prepareDismissed(id) {
-  try { return JSON.parse(localStorage.getItem("pirouette.prepareLater") || "[]").includes(id); } catch { return false; }
-}
 // Case décochée : son nombre (questions ou cartes) est grisé.
 [["#prepare-quizzes", "#prepare-nq"], ["#prepare-cards", "#prepare-nc"]].forEach(([box, count]) =>
   $(box).addEventListener("change", () => { $(count).disabled = !$(box).checked; }));
 
-function renderPrepare(course, tab) {
+// « Tout préparer » : une fenêtre (bouton en tête des chapitres) ; elle s'ouvre d'elle-même une fois, juste après
+// l'import d'un cours et le repérage de ses chapitres.
+function openPrepare(course = state.course) {
   const units = course.files.length ? chapterUnits(course) : [];
-  const fresh = !course.quizzes.length && !course.cards.total && !prepareDismissed(course.id);
-  const show = units.length > 0 && (tab === null || tab === "fichiers") && (state.offerPrepare === course.id || fresh);
-  $("#prepare-panel").hidden = !show;
-  if (!show) return;
+  if (!units.length) return go(courseHash("fichiers"));
   $("#prepare-text").textContent = units.length > 1
     ? `${units.length} chapitres repérés. Pirouette peut tout créer maintenant, chapitre par chapitre :`
     : "Pirouette peut tout créer maintenant pour ce cours :";
   showError("#prepare-error", "");
+  if (!$("#prepare-panel").open) $("#prepare-panel").showModal();
 }
-$("#prepare-later").addEventListener("click", () => {
-  try {
-    const list = JSON.parse(localStorage.getItem("pirouette.prepareLater") || "[]");
-    localStorage.setItem("pirouette.prepareLater", JSON.stringify([...list, state.course.id]));
-  } catch {}
+function renderPrepare(course) {
+  $("#prepare-open").hidden = !course.files.length;
+  if (state.offerPrepare !== course.id || !chapterUnits(course).length) return;
   state.offerPrepare = null;
-  $("#prepare-panel").hidden = true;
+  openPrepare(course);
+}
+$("#prepare-open").addEventListener("click", (e) => {
+  e.preventDefault();  // un bouton dans le titre du dépliant ne le replie pas
+  e.stopPropagation();
+  openPrepare();
 });
+$("#prepare-later").addEventListener("click", () => $("#prepare-panel").close());
 $("#prepare-go").addEventListener("click", async () => {
   const quizzes = $("#prepare-quizzes").checked, cards = $("#prepare-cards").checked;
   if (!quizzes && !cards) return showError("#prepare-error", "Coche au moins les quiz ou les flashcards.");
@@ -5069,7 +5070,7 @@ $("#prepare-go").addEventListener("click", async () => {
   try {
     await api(`/api/courses/${state.course.id}/prepare`, { method: "POST", body: form });
     state.offerPrepare = null;
-    $("#prepare-panel").hidden = true;
+    $("#prepare-panel").close();
     jobsState.open = true;
     refreshJobs();
   } catch (err) {
