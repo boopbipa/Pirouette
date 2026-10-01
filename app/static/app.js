@@ -5043,8 +5043,43 @@ function openPrepare(course = state.course) {
     ? `${units.length} chapitres repérés. Pirouette peut tout créer maintenant, chapitre par chapitre :`
     : "Pirouette peut tout créer maintenant pour ce cours :";
   showError("#prepare-error", "");
+  $("#prepare-status").hidden = true;
+  if (!state.prepareEngine) state.prepareEngine = state.config?.local?.available === false ? "app" : "local";
+  setPrepareEngine(state.prepareEngine);
   if (!$("#prepare-panel").open) $("#prepare-panel").showModal();
 }
+// Avec quelle IA : l'IA locale crée tout en arrière-plan ; l'app Claude reçoit une demande à copier-coller
+function setPrepareEngine(engine) {
+  state.prepareEngine = engine;
+  document.querySelectorAll("[data-prepare-engine]").forEach((b) => {
+    b.classList.toggle("active", b.dataset.prepareEngine === engine);
+    b.setAttribute("aria-checked", String(b.dataset.prepareEngine === engine));
+  });
+  const app = engine === "app";
+  $("#prepare-local-note").hidden = app;
+  $("#prepare-app").hidden = !app;
+  $("#prepare-go").textContent = app ? "Copier la demande" : "Tout préparer";
+  if (app) $("#prepare-request").textContent = prepareRequest();
+}
+function prepareRequest() {
+  const course = state.course;
+  const units = chapterUnits(course);
+  const quizzes = $("#prepare-quizzes").checked, cards = $("#prepare-cards").checked;
+  const nq = Number($("#prepare-nq").value), nc = Number($("#prepare-nc").value);
+  const quizText = nq ? `un quiz de ${nq} questions` : "un quiz qui couvre tout le chapitre (chaque définition et chaque notion importante a sa question)";
+  const cardsText = nc ? `${nc} flashcards` : "des flashcards qui couvrent tout le chapitre (une par définition et par notion importante)";
+  const todo = [quizzes ? `${quizText} (pirouette_creer_quiz)` : "", cards ? `${cardsText} (pirouette_ajouter_cartes)` : ""].filter(Boolean).join(", puis ");
+  return `Pirouette : prépare le cours « ${course.name} » chapitre par chapitre.\n`
+    + `Cours : ${course.id} · chapitres : ${units.map((u) => `${u.key} (${u.title})`).join(", ")}\n`
+    + `Va droit au but : ne liste pas les cours. Pour chaque chapitre, l'un après l'autre : lis-le (pirouette_lire avec sa clé), `
+    + `puis crée ${todo}, avec la clé du chapitre dans « chapitres ». Réponds ensuite par un résumé court.`;
+}
+document.querySelector(".prepare-engine").addEventListener("click", (e) => {
+  const button = e.target.closest("[data-prepare-engine]");
+  if (button) setPrepareEngine(button.dataset.prepareEngine);
+});
+["#prepare-quizzes", "#prepare-cards", "#prepare-nq", "#prepare-nc"].forEach((id) =>
+  $(id).addEventListener("change", () => { if (state.prepareEngine === "app") $("#prepare-request").textContent = prepareRequest(); }));
 function renderPrepare(course) {
   $("#prepare-open").hidden = !course.files.length;
   if (state.offerPrepare !== course.id || !chapterUnits(course).length) return;
@@ -5060,6 +5095,10 @@ $("#prepare-later").addEventListener("click", () => $("#prepare-panel").close())
 $("#prepare-go").addEventListener("click", async () => {
   const quizzes = $("#prepare-quizzes").checked, cards = $("#prepare-cards").checked;
   if (!quizzes && !cards) return showError("#prepare-error", "Coche au moins les quiz ou les flashcards.");
+  if (state.prepareEngine === "app") {
+    await copyText(prepareRequest());
+    return setStatus("#prepare-status", "Demande copiée : colle-la dans l'app Claude. Quiz et flashcards apparaîtront dans ce cours au fur et à mesure.", true);
+  }
   const form = new FormData();
   form.append("provider", "local");
   form.append("model", state.config?.local?.default_model || "");

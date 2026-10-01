@@ -1139,12 +1139,23 @@
   <dialog class="report-dialog prepare-dialog prepare" id="prepare-panel" aria-label="Tout préparer">
     <h2>Tout préparer pour ce cours ?</h2>
     <p class="muted" id="prepare-text"></p>
+    <div class="filters prepare-engine" role="radiogroup" aria-label="Avec quelle IA">
+      <button type="button" role="radio" data-prepare-engine="local">IA locale (sur ton Mac)</button>
+      <button type="button" role="radio" data-prepare-engine="app">L'app Claude</button>
+    </div>
     <div class="option-row"><label><input type="checkbox" id="prepare-quizzes" checked> Un quiz par chapitre</label>
       <select id="prepare-nq" class="chip" aria-label="Questions par quiz"><option value="0" selected>tout le chapitre</option><option value="5">5 questions</option><option value="10">10 questions</option><option value="15">15 questions</option><option value="20">20 questions</option><option value="30">30 questions</option></select></div>
     <div class="option-row"><label><input type="checkbox" id="prepare-cards" checked> Des flashcards par chapitre</label>
       <select id="prepare-nc" class="chip" aria-label="Cartes par chapitre"><option value="0" selected>tout le chapitre</option><option value="5">5 cartes</option><option value="10">10 cartes</option><option value="15">15 cartes</option><option value="20">20 cartes</option><option value="30">30 cartes</option><option value="40">40 cartes</option></select></div>
-    <p class="heat-note">Tout se crée en arrière-plan, chapitre après chapitre : tu peux commencer à réviser dès que le premier
+    <p class="heat-note" id="prepare-local-note">Tout se crée en arrière-plan, chapitre après chapitre : tu peux commencer à réviser dès que le premier
       est prêt. Ton Mac peut chauffer un peu pendant ce temps : évite d'ouvrir d'autres apps gourmandes.</p>
+    <div class="app-request" id="prepare-app" hidden>
+      <p class="small-text">Copie cette demande et colle-la dans l'app Claude : il lit chaque chapitre dans Pirouette et y
+        enregistre quiz et flashcards. Pas besoin de garder Pirouette ouverte.</p>
+      <p class="app-request-text" id="prepare-request"></p>
+      <p class="small-text muted">Long cours ? Claude peut s'arrêter en route (forfait) : redis-lui simplement « continue ».</p>
+    </div>
+    <p class="status" id="prepare-status" hidden></p>
     <p class="error" id="prepare-error" hidden></p>
     <div class="actions">
       <button class="primary" type="button" id="prepare-go">Tout préparer</button>

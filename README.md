@@ -85,7 +85,9 @@ dans **Safari** → menu Fichier → **Ajouter au Dock** (ou, dans Chrome / Edge
 2. **Tout préparer** : une fenêtre, ouverte par le bouton « Tout préparer » en tête du dépliant Chapitres (et une
    fois d'elle-même juste après le dépôt d'un cours), pour créer d'un coup un quiz et des flashcards par chapitre
    (« tout le chapitre » par défaut), en arrière-plan, chapitre après chapitre ; « Plus tard » la ferme. Pendant la création, le Mac peut chauffer un peu : mieux vaut
-   éviter les autres apps gourmandes.
+   éviter les autres apps gourmandes. En haut de la fenêtre, choisis l'IA : « IA locale » (sur ton Mac) ou
+   « L'app Claude » : Pirouette affiche alors la demande toute prête, « Copier la demande » la copie, et il
+   suffit de la coller dans l'app Claude (si elle s'arrête en route, redis-lui « continue »).
    **Fichiers** : dépose les fichiers du cours. Quand tu avances, redépose le fichier **sous le même nom** :
    la nouvelle version remplace l'ancienne (les quiz déjà créés sont conservés et marqués « cours mis à jour depuis »).
    Pirouette découpe chaque fichier en chapitres (titres « Chapitre 2 », « II. », titres Word…), puis l'IA affine
