@@ -3721,6 +3721,73 @@ function showWhatsNew(version) {
     html: `<ul class="w-whatsnew">${items.map(([icon, title, text]) => `<li><span class="w-ic">${icon}</span><div>${title}<small>${text}</small></div></li>`).join("")}</ul>` }],
   { onDone: () => api("/api/settings", jsonBody("PUT", { welcome_seen: version })).catch(() => {}) });
 }
+// Tuto de l'IA locale (Réglages) : installer Ollama, télécharger un modèle (ici ou au Terminal), vérifier
+const cmd = (text) => `<div class="w-cmd"><code>${escapeHtml(text)}</code><button class="ghost small" type="button" data-copy="${escapeHtml(text)}">Copier</button></div>`;
+function localTutoSlides(st) {
+  const model = st?.recommended || "qwen3.5:4b";
+  const ram = st?.ram_gb ? `${String(st.ram_gb).replace(".", ",")} Go` : null;
+  const size = st?.options?.find((o) => o.name === model)?.size_gb;
+  return [
+    { art: `<div class="w-col"><div class="w-mac"><span class="w-llama">🦙</span><span>Ollama</span></div>
+            <span class="w-check">✓ Gratuit · hors ligne · sur ton Mac</span></div>`,
+      title: "L'IA locale, c'est quoi ?",
+      text: "Une IA qui tourne <b>directement sur ton Mac</b>, grâce à l'app gratuite <b>Ollama</b> : pas d'internet, pas de forfait. "
+        + "Pirouette s'en sert pour découper tes cours en chapitres, et peut aussi créer quiz et flashcards avec.",
+      tips: [ram ? `Ton Mac a ${ram} de mémoire${st.enough_ram ? " : c'est bon" : " : c'est trop juste (il faut au moins 8 Go)"}` : "Il faut au moins 8 Go de mémoire (16 Go, c'est mieux)",
+        "Environ 10 minutes, dont surtout du téléchargement", "Sans IA locale, l'app Claude crée quand même tes quiz"] },
+    { art: `<div class="w-file w-dmg"><b>OLLAMA</b><span>🦙</span></div><span class="w-arrow">→</span>
+            <div class="w-file w-dmg"><b>APPLICATIONS</b><span>📁</span></div>`,
+      title: "1. Installe Ollama",
+      text: "Télécharge Ollama, ouvre le fichier téléchargé et <b>glisse Ollama dans Applications</b>. Lance-le ensuite depuis tes Applications (la première fois, macOS demande de confirmer : clique sur « Ouvrir »).",
+      html: `<div class="actions"><a class="button primary small" href="https://ollama.com/download" target="_blank" rel="noopener">Télécharger Ollama ↗</a></div>` },
+    { art: `<div class="w-col"><div class="w-menubar"><span></span><span>🦙</span><span>📶</span><span>🔋</span><span>10:42</span></div>
+            <span class="w-check">✓ Ollama est ouvert</span></div>`,
+      title: "2. Vérifie qu'il est ouvert",
+      text: "Quand Ollama tourne, un <b>petit lama</b> apparaît en haut de l'écran, dans la barre des menus. Pirouette le détecte toute seule : dans Réglages → IA locale, l'étape 1 passe au vert.",
+      tips: ["Pas de lama ? Relance Ollama depuis tes Applications", "Il peut se lancer tout seul à l'ouverture de ton Mac"] },
+    { art: `<div class="w-col"><div class="w-bubble"><div class="w-who"><i></i>Réglages › IA locale</div>
+            ◉ ${escapeHtml(model)}${size ? ` · ${String(size).replace(".", ",")} Go` : ""}<span class="w-copy">Télécharger le modèle</span></div></div>`,
+      title: "3. Télécharge un modèle",
+      text: `Le modèle, c'est le « cerveau » de l'IA. Le plus simple : dans <b>Réglages → IA locale</b>, choisis <b>${escapeHtml(model)}</b> (conseillé pour ton Mac) puis « Télécharger le modèle ». Ça prend quelques minutes.`,
+      tips: ["Un seul modèle suffit", "Pas besoin de régler la « mémoire de lecture » dans Ollama : Pirouette s'en occupe"] },
+    { art: `<div class="w-term"><div class="w-term-bar"><i></i><i></i><i></i></div>
+            <p><span>~ %</span> ollama pull ${escapeHtml(model)}</p><p class="dim">pulling manifest… 100%</p><p class="dim">success</p>
+            <p><span>~ %</span> ollama list</p><p class="dim">${escapeHtml(model)}</p></div>`,
+      title: "Ou par le Terminal",
+      text: "Si tu préfères : ouvre le <b>Terminal</b> (⌘ + Espace, tape « Terminal », Entrée), colle cette commande puis Entrée :",
+      html: `${cmd(`ollama pull ${model}`)}<p class="small-text">Pour vérifier ce qui est installé :</p>${cmd("ollama list")}
+        <p class="small-text muted">Évite les modèles dont le nom finit par <b>-cloud</b> : ils tournent sur les serveurs d'Ollama, pas sur ton Mac.
+        Inutile de lancer « ollama run » : Pirouette parle à Ollama toute seule.</p>` },
+    { art: `<div class="w-chaps w-steps"><div>✓ <span>Installer et ouvrir Ollama</span></div><div>✓ <span>Télécharger un modèle</span></div>
+            <div>✓ <span>Mémoire de lecture</span></div><div>✓ <span>C'est prêt</span></div></div>`,
+      title: "C'est prêt !",
+      text: "Dans <b>Réglages → IA locale</b>, les 4 étapes sont au vert. Le bouton « IA locale » de « Tout préparer » n'est plus grisé.",
+      tips: ["Pirouette ne trouve pas Ollama ? Quitte-le (lama › Quit Ollama) puis rouvre-le", "Le Mac chauffe pendant la création : c'est normal, ferme les apps gourmandes"],
+      done: "Voir l'IA locale" },
+  ];
+}
+async function showLocalTuto() {
+  const st = await api("/api/ollama/status").catch(() => null);
+  openWelcome(localTutoSlides(st), { onDone: (finished) => {
+    if (!finished) return;
+    go("#/reglages");
+    setTimeout(() => { $("#local-ai")?.scrollIntoView({ behavior: "smooth", block: "start" }); refreshLocalAi(); }, 300);
+  } });
+}
+$("#welcome-body").addEventListener("click", async (e) => {
+  const button = e.target.closest("[data-copy]");
+  if (!button) return;
+  await copyText(button.dataset.copy);
+  button.textContent = "Copié ✓";
+  setTimeout(() => { button.textContent = "Copier"; }, 1500);
+});
+$("#local-tuto").addEventListener("click", showLocalTuto);
+$("#prepare-local-off").addEventListener("click", (e) => {
+  if (!e.target.closest("[data-local-tuto]")) return;
+  $("#prepare-panel").close();
+  showLocalTuto();
+});
+
 // Au lancement : les cartons une seule fois, puis le « Quoi de neuf » de chaque version qui en a
 api("/api/settings").then((settings) => {
   if (!settings.welcome_seen) return showWelcome(settings);
@@ -5056,7 +5123,8 @@ function setPrepareLocal(config) {
   local.disabled = !ready;
   local.title = ready ? "" : "IA locale pas encore prête sur ce Mac";
   $("#prepare-local-off").hidden = ready;
-  if (!ready) $("#prepare-local-off").innerHTML = `IA locale indisponible. ${localProblem(config)}`;
+  if (!ready) $("#prepare-local-off").innerHTML = `IA locale indisponible. ${localProblem(config)}
+    <button class="link-button" type="button" data-local-tuto>Suivre le tuto pas à pas</button>`;
   if (!state.prepareEngine || !ready) state.prepareEngine = ready ? "local" : "app";
   setPrepareEngine(state.prepareEngine);
 }

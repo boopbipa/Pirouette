@@ -27,7 +27,8 @@ masqué ; il se réactive en lançant l'app avec `PIROUETTE_CLAUDE=1`. Comparais
    Réglages Système → Confidentialité et sécurité → **Ouvrir quand même** (une seule fois).
    Si macOS dit que l'app « est endommagée » : `xattr -dr com.apple.quarantine /Applications/Pirouette.app`.
 4. Dans Pirouette → **Réglages** : ton prénom, l'**assistant IA locale** (installe Ollama et télécharge le modèle
-   adapté à la mémoire du Mac, sans Terminal) ou ta clé Claude, et **Récupérer mes anciens cours**
+   adapté à la mémoire du Mac, sans Terminal ; le bouton « Tuto pas à pas » l'explique en cartons : installer
+   Ollama, vérifier le lama dans la barre des menus, télécharger un modèle ici ou par le Terminal) ou ta clé Claude, et **Récupérer mes anciens cours**
    (choisis le dossier `data` de la version lancée avec `run.sh`).
 
 Les données de l'app sont dans `~/Bibliothèque/Application Support/Pirouette`.

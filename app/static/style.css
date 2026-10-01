@@ -1448,3 +1448,28 @@ dialog.prepare-dialog h2 { margin-top: 0; }
 dialog.prepare-dialog.prepare { margin: auto; border: 0; }
 
 .prepare-local-off { margin: -4px 0 10px; }
+
+/* Tuto de l'IA locale (cartons) */
+.local-tuto { margin: 4px 0 12px; }
+.w-mac { width: 150px; height: 96px; border-radius: 14px; background: #fff; box-shadow: 0 10px 20px -12px rgba(0, 0, 0, .4);
+  display: grid; place-items: center; align-content: center; gap: 4px; color: #171512; font-weight: 700; font-size: 13px; }
+.w-llama { font-size: 34px; line-height: 1; }
+.w-dmg { display: grid; place-items: center; align-content: center; text-align: center; }
+.w-dmg span { font-size: 32px; }
+.w-menubar { display: flex; gap: 14px; align-items: center; background: rgba(255, 255, 255, .92); color: #171512; border-radius: 9px;
+  padding: 6px 14px; font-size: 13px; font-weight: 600; box-shadow: 0 8px 18px -12px rgba(0, 0, 0, .5); }
+.w-menubar span:first-child { width: 60px; height: 8px; border-radius: 4px; background: #E8E4DA; }
+.w-menubar span:nth-child(2) { background: var(--accent-soft); border-radius: 6px; padding: 1px 5px; outline: 2px solid var(--accent); }
+.w-term { width: 280px; border-radius: 10px; background: #1E1C19; color: #F3F0E8; font: 11px/1.5 ui-monospace, Menlo, monospace;
+  padding: 0 12px 10px; box-shadow: 0 12px 24px -12px rgba(0, 0, 0, .6); text-align: left; }
+.w-term-bar { display: flex; gap: 5px; padding: 8px 0 6px; }
+.w-term-bar i { width: 9px; height: 9px; border-radius: 50%; background: #FF5F57; }
+.w-term-bar i:nth-child(2) { background: #FEBC2E; } .w-term-bar i:nth-child(3) { background: #28C840; }
+.w-term p { margin: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.w-term p span { color: #E8A27F; }
+.w-term p.dim { color: #9C968A; }
+.w-steps div { width: 200px; color: #2F7D4F; }
+.w-steps span { color: #171512; }
+.w-cmd { display: flex; align-items: center; gap: 8px; margin: 8px 0; padding: 6px 6px 6px 12px; border-radius: 10px;
+  background: var(--sunken); }
+.w-cmd code { flex: 1; font: 13px ui-monospace, Menlo, monospace; overflow-wrap: anywhere; }
