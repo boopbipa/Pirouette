@@ -121,7 +121,9 @@ dans **Safari** → menu Fichier → **Ajouter au Dock** (ou, dans Chrome / Edge
    de questions choisi. Nouveau type **Texte à trous** : une phrase du cours avec un mot essentiel à retrouver
    (réponse tapée dans la phrase, petites fautes de frappe tolérées).
 4. **Quiz** : correction, explication et **mots-clés définis** après chaque réponse (la bonne réponse est surlignée).
-   « Question précédente » pour revoir une question déjà faite (avec sa correction). Signaler une erreur ou supprimer
+   « Question précédente » pour revoir une question déjà faite (avec sa correction). Réponse à écrire (réponse
+   courte, texte à trous) : à côté de « Valider », **« Je ne sais pas »** compte la question fausse tout de suite et
+   montre la réponse attendue, sans avoir à taper un mot au hasard (aussi dans Réviser). Signaler une erreur ou supprimer
    une question hors sujet : la petite bulle à droite des boutons.
    À la fin : score, correction (tout ou mes erreurs seulement), « Refaire mes erreurs » ou « Refaire le quiz ».
    Un quiz se renomme en entier (y compris « Quiz 3 · ») avec le crayon dans la liste. Une question hors sujet se

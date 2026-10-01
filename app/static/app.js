@@ -2659,6 +2659,7 @@ function showSessionQuestion(item) {
   showFigure("#sq-figure", q, item.course_id);
   $("#sq-feedback").hidden = true;
   $("#sq-validate").hidden = false;
+  $("#sq-dunno").hidden = !isTyped(q);
   $("#sq-next").hidden = true;
   const area = $("#sq-answers");
   if (q.type === "texte_a_trous") {
@@ -2699,6 +2700,7 @@ function sessionFeedback(q, correct, verdict = "") {
   fb.innerHTML = `${verdict}${q.explanation ? `<p>${escapeHtml(cleanExplanation(q.explanation))}</p>` : ""}${sourceHtml(q)}${keyTermsHtml(q)}${SQ_DELETE}`;
   fb.hidden = false;
   $("#sq-validate").hidden = true;
+  $("#sq-dunno").hidden = true;
   $("#sq-next").hidden = false;
   $("#sq-next").focus();
 }
@@ -2723,6 +2725,7 @@ function validateSessionQuestion() {
       <div class="actions"><button class="primary" id="sq-right">J'avais bon</button><button class="ghost" id="sq-wrong">J'avais faux</button></div>${SQ_DELETE}`;
     fb.hidden = false;
     $("#sq-validate").hidden = true;
+    $("#sq-dunno").hidden = true;
     const grade = (correct) => { recordSessionAnswer(item, given, correct); nextItem(); };
     $("#sq-right").onclick = () => grade(true);
     $("#sq-wrong").onclick = () => grade(false);
@@ -2741,6 +2744,15 @@ function validateSessionQuestion() {
   sessionFeedback(q, correct);
 }
 $("#sq-validate").addEventListener("click", validateSessionQuestion);
+$("#sq-dunno").addEventListener("click", () => {
+  const s = state.session;
+  const item = s.items[s.index];
+  if ($("#sq-validate").hidden || item?.kind !== "question" || !isTyped(item.question)) return;
+  const input = $("#sq-short");
+  if (input) { input.value = ""; input.disabled = true; }
+  recordSessionAnswer(item, DUNNO, false);
+  sessionFeedback(item.question, false, `<p><strong>Réponse attendue :</strong> ${escapeHtml(item.question.answer)}</p>`);
+});
 $("#sq-next").addEventListener("click", nextItem);
 
 const RATING_NAMES = { again: "Je ne savais pas", hard: "À moitié", good: "Je savais", easy: "Je savais" };
@@ -3435,6 +3447,7 @@ function renderQuestion() {
   showFigure("#question-figure", q, state.quiz?.course_id);
   $("#feedback").hidden = true;
   $("#validate-btn").hidden = false;
+  $("#dunno-btn").hidden = !isTyped(q);
   $("#next-btn").hidden = true;
 
   const area = $("#answer-area");
@@ -3459,7 +3472,7 @@ function renderQuestion() {
 function showAnswered(q, result) {
   state.answered = true;
   const input = $("#short-answer");
-  if (input) { input.value = result.given; input.disabled = true; }
+  if (input) { input.value = result.given === DUNNO ? "" : result.given; input.disabled = true; }
   document.querySelectorAll(".choice").forEach((label, i) => {
     const radio = label.querySelector("input");
     radio.disabled = true;
@@ -3474,6 +3487,7 @@ function showAnswered(q, result) {
   fb.hidden = false;
   showReportButton(q, result.given);
   $("#validate-btn").hidden = true;
+  $("#dunno-btn").hidden = true;
   $("#next-btn").hidden = false;
   const last = state.index + 1 >= state.questions.length;
   $("#next-btn").textContent = last ? "Voir le résultat" : "Question suivante";
@@ -3860,6 +3874,13 @@ function examKeys(e) {
 }
 
 $("#validate-btn").addEventListener("click", validate);
+// « Je ne sais pas » (réponse à écrire) : compté faux tout de suite, sans taper un mot au hasard
+$("#dunno-btn").addEventListener("click", () => {
+  const q = state.questions[state.index];
+  if (state.answered || !isTyped(q)) return;
+  document.querySelectorAll("#short-answer").forEach((input) => { input.value = ""; input.disabled = true; });
+  record(q, DUNNO, false);
+});
 $("#next-btn").addEventListener("click", next);
 document.addEventListener("keydown", (e) => {
   if (document.querySelector("dialog[open]") || state.capturingKey) return;  // une fenêtre ouverte, ou on règle une touche
@@ -3892,6 +3913,10 @@ function editDistance(a, b) {
   }
   return row[b.length];
 }
+
+// Les questions où l'on écrit sa réponse (réponse courte, texte à trous)
+const isTyped = (q) => q.type === "reponse_courte" || q.type === "texte_a_trous" || !q.choices?.length;
+const DUNNO = "Je ne savais pas";
 
 function validate() {
   const q = state.questions[state.index];
@@ -3930,6 +3955,7 @@ function validateShort(q) {
 `;
   fb.hidden = false;
   $("#validate-btn").hidden = true;
+  $("#dunno-btn").hidden = true;
   // La réponse attendue et l'explication sont déjà affichées : on passe directement à la suite.
   const selfGrade = (correct) => { saveAnswer(q, correct); state.results.push({ question: q, given, correct }); next(); };
   $("#self-right").onclick = () => selfGrade(true);
@@ -3950,8 +3976,9 @@ function record(q, given, correct) {
   const fb = $("#feedback");
   fb.className = `feedback ${correct ? "ok" : "ko"}`;
   // QCM et vrai/faux : la bonne réponse est déjà surlignée en vert, inutile de la répéter.
-  const verdict = q.type === "reponse_courte" || q.type === "texte_a_trous"
-    ? `<p><strong>Bonne réponse !</strong>${q.type === "texte_a_trous" && given !== q.answer ? ` (${escapeHtml(q.answer)})` : ""}</p>` : "";
+  const verdict = !isTyped(q) ? ""
+    : correct ? `<p><strong>Bonne réponse !</strong>${q.type === "texte_a_trous" && given !== q.answer ? ` (${escapeHtml(q.answer)})` : ""}</p>`
+    : `<p><strong>Réponse attendue :</strong> ${escapeHtml(q.answer)}</p>`;
   fb.innerHTML = `${verdict}
     ${q.explanation ? `<p>${escapeHtml(cleanExplanation(q.explanation))}</p>` : ""}
     ${sourceHtml(q)}
@@ -3959,6 +3986,7 @@ function record(q, given, correct) {
 `;
   fb.hidden = false;
   $("#validate-btn").hidden = true;
+  $("#dunno-btn").hidden = true;
   $("#next-btn").hidden = false;
   $("#next-btn").textContent = state.index + 1 < state.questions.length ? "Question suivante" : "Voir le résultat";
   $("#next-btn").focus();
