@@ -55,8 +55,6 @@
         <p class="home-heat-title">Ta régularité <span id="home-heat-note"></span></p>
         <div class="heatmap" id="home-heatmap" aria-label="Jours de révision des 12 dernières semaines"></div>
       </div>
-      <!-- La date des partiels, tout en bas : le haut de l'accueil reste léger -->
-      <p class="exam-countdown" id="home-exam" hidden></p>
     </section>
 
     <!-- Mes cours : cours et dossiers -->
@@ -92,11 +90,12 @@
       <h1>Réviser</h1>
       <p class="muted">Choisis ce que tu veux réviser.</p>
       <div class="review-pick" id="review-pick"></div>
+      <!-- La date des partiels, en bas de Réviser -->
+      <p class="exam-countdown exam-bottom" id="review-home-exam" hidden></p>
     </section>
 
     <section id="view-review-scope" class="view" hidden>
       <h1 id="review-scope-title"></h1>
-      <p class="exam-countdown" id="review-exam" hidden></p>
       <nav class="filters scope-tabs" id="scope-tabs" role="tablist" aria-label="Réviser">
         <a role="tab" data-scope-tab="">Réviser</a>
         <a role="tab" data-scope-tab="planning">Rétroplanning</a>
@@ -272,6 +271,8 @@
         </div>
       </div>
       </div>
+      <!-- La date des partiels, en bas de Réviser -->
+      <p class="exam-countdown exam-bottom" id="review-exam" hidden></p>
     </section>
 
     <!-- Mode partiel : préparation -->

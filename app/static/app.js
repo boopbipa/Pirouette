@@ -210,9 +210,6 @@ async function openHome() {
   renderStats(stats);
   const start = $("#home-start");
   start.textContent = !stats.courses ? "Créer mon premier cours" : "Réviser";
-  const exam = stats.next_exam;
-  $("#home-exam").hidden = !exam;
-  if (exam) $("#home-exam").innerHTML = examSentence(exam);
   setCrumbs();
   show("home");
 }
@@ -3024,8 +3021,11 @@ function renderCourseRevise(course) {
 async function openReview() {
   state.course = null;
   state.newCards = null;
-  const [data, folders] = await Promise.all([api("/api/progress"), api("/api/folders")]);
+  const [data, folders, stats] = await Promise.all([api("/api/progress"), api("/api/folders"), api("/api/stats").catch(() => ({}))]);
   const courses = data.courses;
+  const exam = stats.next_exam;  // les prochains partiels, rappelés en bas de la page
+  $("#review-home-exam").hidden = !exam;
+  if (exam) $("#review-home-exam").innerHTML = examSentence(exam);
   // Même grille que Mes cours, mais chaque carte dit où tu en es : maîtrise (cartes sues) et ce qui est à revoir.
   const card = (c) => {
     const mastery = c.cards ? Math.round((100 * c.known) / c.cards) : 0;
@@ -3137,7 +3137,7 @@ async function renderScopeMain() {
   const ids = new Set(scoped.map((c) => c.id));
   state.scopePlan = plan;
   $("#review-exam").hidden = !data.exam || data.exam.days <= -7;
-  if (data.exam) $("#review-exam").innerHTML = examSentence(data.exam, "", { short: true });
+  if (data.exam) $("#review-exam").innerHTML = examSentence(data.exam);
 
   // Plan de révision
   $("#plan-card").hidden = !plan;
@@ -3533,7 +3533,7 @@ async function renderProgress() {
   const { week } = data;
   const pctText = (v) => (v === null ? "—" : `${v} %`);
   $("#review-exam").hidden = !data.exam || data.exam.days <= -7;
-  if (data.exam) $("#review-exam").innerHTML = examSentence(data.exam, "", { short: true });
+  if (data.exam) $("#review-exam").innerHTML = examSentence(data.exam);
   $("#pg-cards").textContent = week.cards;
   $("#pg-cards-success").textContent = pctText(week.cards_success);
   $("#pg-questions-success").textContent = pctText(week.questions_success);
@@ -5045,10 +5045,7 @@ function examLabel(iso) {
   if (days <= -7) return `Partiels passés (${dayLong(iso)})`;
   return `Partiels le ${dayLong(iso)} · J-${days}`;
 }
-function examSentence(exam, name = "", { short = false } = {}) {
-  // Réviser : la phrase complète seulement en Partiel blanc et Rétroplanning ; ailleurs une petite mention (J-74)
-  if (short) return `<span class="exam-full">${examSentence(exam, name)}</span><span class="exam-short">${
-    exam.days <= 0 ? "Semaine de partiels" : `Partiels le ${dayLong(exam.date)} · J-${exam.days}`}</span>`;
+function examSentence(exam, name = "") {
   const who = name ? ` <span class="muted">(${escapeHtml(name)})</span>` : "";
   if (exam.days <= 0) return `<b>Semaine de partiels en cours</b>${who} : les cartes reviennent chaque jour.`;
   return `<b>Partiels dans ${plural(exam.days, "jour", "jours")}</b>, le ${dayLong(exam.date)}${who}. Les révisions s'organisent pour que tout soit revu avant.`;

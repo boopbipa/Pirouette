@@ -958,7 +958,6 @@ input.cloze-input:disabled { opacity: 1; }
 .exam-chip { display: inline-flex; align-items: center; gap: 6px; padding: 7px 14px; border-radius: 999px; font-size: 14.5px;
              background: var(--accent-soft); color: var(--accent-ink); border: 0; font-weight: 600; }
 .exam-chip .ico { width: 16px; height: 16px; }
-#view-review-scope .exam-countdown { margin: 0 0 16px; }
 
 /* Mise à jour */
 .version-row { align-items: center; gap: 14px; }
@@ -1508,15 +1507,7 @@ dialog.prepare-dialog.prepare { margin: auto; border: 0; }
   transform: translate(0);
 }
 
-/* Réviser : le compte à rebours des partiels en grand seulement là où il compte (Partiel blanc, Rétroplanning) */
-#review-exam .exam-short { display: none; }
-#view-review-scope:not([data-place="partiel"]):not([data-place="planning"]) #review-exam {
-  display: flex; width: fit-content; align-items: center; gap: 7px; margin: -6px 0 14px; padding: 0; background: none;
-  font-size: 13.5px; color: var(--muted); }
-#view-review-scope:not([data-place="partiel"]):not([data-place="planning"]) #review-exam::before {
-  content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--accent); }
-#view-review-scope:not([data-place="partiel"]):not([data-place="planning"]) #review-exam .exam-full { display: none; }
-#view-review-scope:not([data-place="partiel"]):not([data-place="planning"]) #review-exam .exam-short { display: inline; }
+.exam-countdown.exam-bottom { margin: 28px 0 0; font-size: 14px; }
 
 /* Réviser : la révision du jour en bandeau, puis Flashcards / Quiz / Partiel blanc */
 .today-hero { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 16px 20px; margin: 4px 0 10px;
