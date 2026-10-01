@@ -206,9 +206,10 @@ présentation ».
 
 **Flashcards à glisser** : une fois la carte retournée, attrape-la et lance-la **à droite** (« Je savais ») ou **à
 gauche** (« Je ne savais pas »), comme sur Tinder. Plus elle penche, plus le bouton de ce côté (vert à droite, rouge
-à gauche) grandit, jusqu'à devenir tout vert ou tout rouge. Relâchée trop tôt, elle
-revient au centre ; pas encore retournée, elle résiste (« Retourne d'abord la carte »). Les deux boutons ✕ / ✓ restent
-cliquables ; « À moitié » a disparu. Sur chaque carte : le chapitre en court en haut (« Chapitre 1 ») et le nom du
+à gauche) grandit, jusqu'à devenir tout vert ou tout rouge. Lancée, elle garde son élan et file hors
+de l'écran sans marquer d'arrêt. Relâchée trop tôt, elle revient au centre ; pas encore retournée, elle résiste (« Retourne d'abord la carte »). Les deux boutons ✕ / ✓ restent
+cliquables ; « À moitié » a disparu. Dans une séance mélangée, une question de quiz arrive en glissant doucement
+depuis la droite (fondu court) et repart vers la gauche une fois finie ; la carte qui suit une question arrive de même. Sur chaque carte : le chapitre en court en haut (« Chapitre 1 ») et le nom du
 cours en bas (« Psychanalyse »), comme l'extension d'une carte à collectionner, avec la tête de Pirouette au milieu
 (dans la couleur choisie dans Réglages → Couleur de l'app).
 

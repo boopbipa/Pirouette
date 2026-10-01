@@ -1551,3 +1551,12 @@ dialog.prepare-dialog.prepare { margin: auto; border: 0; }
   color: var(--on-accent); border-radius: 99px; padding: 2px 8px; }
 .decks-options { margin-top: 14px; }
 @media (max-width: 640px) { .decks { grid-template-columns: 1fr; } .today-hero { flex-direction: column; align-items: stretch; } }
+
+/* Lancée à la souris : elle file dans la direction du geste, en accélérant dès le départ */
+.flashcard.tcg.thrown { transition: transform .3s cubic-bezier(.3, .6, .5, 1), opacity .3s ease-in; opacity: 0; pointer-events: none; }
+/* Séance : passage sobre d'une question à la suite (glissement court, en fondu) */
+.stage-in { animation: stage-in .3s cubic-bezier(.2, .8, .2, 1) both; }
+.stage-out { animation: stage-out .17s ease-in both; pointer-events: none; }
+@keyframes stage-in { from { opacity: 0; transform: translateX(28px); } }
+@keyframes stage-out { to { opacity: 0; transform: translateX(-28px); } }
+@media (prefers-reduced-motion: reduce) { .stage-in, .stage-out { animation: none; } }

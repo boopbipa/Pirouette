@@ -2452,11 +2452,14 @@ function showItem() {
   const several = new Set(s.items.map((i) => i.course_id)).size > 1;
   $("#session-origin").textContent = item.kind === "question"
     ? `Question de quiz · ${several ? `${item.course_name} · ` : ""}${item.quiz_title}` : several ? item.course_name : "";
+  const after = s.items[s.index - 1]?.kind;
   $("#card-stage").hidden = item.kind !== "card";
   $("#question-stage").hidden = item.kind !== "question";
   $("#session-mode").hidden = item.kind !== "card";
   if (item.kind === "card") showCard();
   else showSessionQuestion(item);
+  if (item.kind === "question") slideIn($("#question-stage"));
+  else if (after === "question") { $("#flashcard").classList.remove("dealing"); slideIn($("#card-stage")); }
 }
 
 function showCard() {
@@ -2497,8 +2500,12 @@ function shortChapter(title) {
 function dressCard(card, s) {
   const el = $("#flashcard");
   const rarity = cardRarity(card);
-  el.classList.remove("rare", "holo", "fly-again", "fly-good", "dragging");
+  // La nouvelle carte repart du centre d'un coup (pas de retour animé depuis le bord de l'écran)
+  el.style.transition = "none";
+  el.classList.remove("rare", "holo", "fly-again", "fly-good", "dragging", "thrown");
   ["--dx", "--dy", "--dr"].forEach((v) => el.style.removeProperty(v));
+  void el.offsetWidth;
+  el.style.transition = "";
   leanCard(0);
   if (rarity.cls) el.classList.add(rarity.cls);
   const item = s.items[s.index];
@@ -2624,7 +2631,7 @@ $("#typed-answer").addEventListener("keydown", (e) => {
   if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); e.stopPropagation(); checkTyped(); }
 });
 
-function rateCard(rating) {
+function rateCard(rating, { thrown = false } = {}) {
   const s = state.session;
   const item = s?.items[s.index];
   if (!item || item.kind !== "card" || !s.revealed) return;
@@ -2644,8 +2651,23 @@ function rateCard(rating) {
   if (matchMedia("(prefers-reduced-motion: reduce)").matches) return nextItem();
   s.leaving = true;
   const el = $("#flashcard");
-  el.classList.remove("tilting", "dealing", "dragging");
   leanCard(rating === "good" ? 1 : -1);
+  if (thrown) {
+    // Lancée à la souris : elle continue sa course depuis là où on l'a lâchée, sans s'arrêter
+    const dir = rating === "good" ? 1 : -1;
+    el.classList.remove("tilting", "dealing");
+    el.classList.add("thrown");
+    el.classList.remove("dragging");
+    el.style.setProperty("--dx", `${dir * (innerWidth * 0.75 + 200)}px`);
+    el.style.setProperty("--dy", `${(parseFloat(el.style.getPropertyValue("--dy")) || 0) + 40}px`);
+    el.style.setProperty("--dr", `${dir * 28}deg`);
+    setTimeout(() => {
+      s.leaving = false;
+      if (state.session === s) nextItem();
+    }, 300);
+    return;
+  }
+  el.classList.remove("tilting", "dealing", "dragging");
   el.classList.add(`fly-${rating}`);
   setTimeout(() => {
     s.leaving = false;
@@ -2702,7 +2724,7 @@ function endSwipe() {
   setTimeout(() => { swipe.justDragged = false; }, 0);
   const s = state.session;
   const el = $("#flashcard");
-  if (s?.revealed && Math.abs(dx) >= SWIPE_AT) return rateCard(dx > 0 ? "good" : "again");
+  if (s?.revealed && Math.abs(dx) >= SWIPE_AT) return rateCard(dx > 0 ? "good" : "again", { thrown: true });
   if (!s?.revealed && Math.abs(dx) > 12) showCardToast("Retourne d'abord la carte");
   el.classList.remove("dragging");
   ["--dx", "--dy", "--dr"].forEach((v) => el.style.removeProperty(v));
@@ -2713,9 +2735,33 @@ $("#flashcard").addEventListener("pointercancel", endSwipe);
 
 function nextItem() {
   const s = state.session;
+  // Une question finie glisse doucement vers la gauche avant la suite (les cartes, elles, sont lancées)
+  const leaving = s.items[s.index]?.kind === "question" && !$("#question-stage").hidden && !reducedMotion();
+  if (leaving) {
+    if (s.sliding) return;
+    s.sliding = true;
+    $("#question-stage").classList.add("stage-out");
+    setTimeout(() => {
+      $("#question-stage").classList.remove("stage-out");
+      s.sliding = false;
+      if (state.session === s) advance(s);
+    }, 170);
+    return;
+  }
+  advance(s);
+}
+function advance(s) {
   s.index += 1;
   if (s.index < s.items.length) showItem();
   else finishSession();
+}
+const reducedMotion = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
+// Ce qui arrive glisse depuis la droite, en fondu : questions de quiz, et la carte qui suit une question
+function slideIn(el) {
+  if (reducedMotion()) return;
+  el.classList.remove("stage-in");
+  void el.offsetWidth;
+  el.classList.add("stage-in");
 }
 
 // ---- Questions de quiz dans la séance ----
