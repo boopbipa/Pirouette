@@ -1493,6 +1493,7 @@ function renderQuizPanel(course) {
   const questions = mine.reduce((n, q) => n + q.count, 0);
   $("#fold-quiz-count").textContent = mine.length
     ? `· ${plural(mine.length, "quiz", "quiz")}, ${plural(questions, "question", "questions")}` : "· aucun pour l'instant";
+  $("#quiz-revise").hidden = !mine.length;
   const quizzes = mine.filter((q) => inChapter(q.scope));
   $("#quiz-chip").innerHTML = chapterChip();
   $("#quiz-list").innerHTML = quizzes.length
@@ -5590,11 +5591,24 @@ function renderPrepare(course) {
   openPrepare(course);
 }
 // Flashcards du cours → Réviser, mode Flashcards (les paquets de ce cours)
+// Flashcards ou quiz du cours → Réviser, dans le bon mode, sur le cours (fichier) de l'onglet affiché
+function reviseFrom(mode) {
+  const focus = focusFile();
+  try {
+    if (focus) localStorage.setItem(`pirouette.reviewFile.${state.course.id}`, focus.id);
+  } catch {}
+  setScopeMode(mode);
+  go(`#/reviser/cours/${state.course.id}`);
+}
 $("#cards-revise").addEventListener("click", (e) => {
   e.preventDefault();  // un bouton dans le titre du dépliant ne le replie pas
   e.stopPropagation();
-  setScopeMode("cartes");
-  go(`#/reviser/cours/${state.course.id}`);
+  reviseFrom("cartes");
+});
+$("#quiz-revise").addEventListener("click", (e) => {
+  e.preventDefault();
+  e.stopPropagation();
+  reviseFrom("quiz");
 });
 // Replier / déplier chapitres, quiz et flashcards (gardé pour chaque cours)
 function treeFolded(id) { try { return localStorage.getItem(`pirouette.treeFolded.${id}`) === "1"; } catch { return false; } }

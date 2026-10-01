@@ -1634,3 +1634,6 @@ dialog.prepare-dialog.prepare { margin: auto; border: 0; }
   border: 0; border-radius: 50%; background: transparent; color: var(--muted); font-size: 24px; line-height: 1; cursor: pointer; }
 .dialog-x:hover { background: var(--sunken); color: var(--text); }
 dialog > h2:first-of-type, dialog > h3:first-of-type { padding-right: 36px; }
+
+/* Pas de rebond élastique (macOS) en haut ou en bas de page : la barre du haut reste immobile */
+html, body { overscroll-behavior-y: none; }

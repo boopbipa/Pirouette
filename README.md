@@ -248,7 +248,7 @@ gardé).
 - **Une matière à plusieurs cours** : sous le titre, « **Toute la matière** » ou un cours. Tout Réviser suit ce choix
   (révision du jour, flashcards, quiz). « **Tout réviser** » (dans le bandeau) lance toutes les cartes et toutes les
   questions des quiz du cours choisi, de la matière ou du semestre, mélangées.
-- **Flashcards** (rien que des cartes ; aussi depuis la page du cours, bouton « Réviser → » du dépliant Flashcards) : trois paquets, **À revoir aujourd'hui**, **Là où je bloque** et **Tout le
+- **Flashcards** (rien que des cartes ; aussi depuis la page du cours, bouton « Réviser → » du dépliant Flashcards ; celui du dépliant Quiz mène au mode Quiz, sur le cours de l'onglet) : trois paquets, **À revoir aujourd'hui**, **Là où je bloque** et **Tout le
   paquet** (tiré dans un ordre différent à chaque fois), pour tout le cours ou un chapitre (puces « Chapitre 1 », « Chapitre 2 »…), en mode Retourner ou Écrire.
 - **Quiz** : tous les quiz du cours ou du semestre, avec « Faire le quiz ».
 - **Plan de révision** (sur un semestre, ou un cours sans semestre) : « une séance tous les 1 / 2 / 3 / 7 jours, de
