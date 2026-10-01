@@ -2231,6 +2231,7 @@ function renderCardGrid() {
   $("#card-grid").innerHTML = cards.filter((c) => inChapter(c.scope)).map((c) => fcardHtml(c, { removable: true })).join("");
   $("#cards-flip-all").textContent = "Voir les réponses";
   $("#cards-flip-all").hidden = none;
+  $("#cards-revise").hidden = none;
 }
 
 function fcardHtml(c, { removable = false } = {}) {
@@ -5417,6 +5418,13 @@ function renderPrepare(course) {
   state.offerPrepare = null;
   openPrepare(course);
 }
+// Flashcards du cours → Réviser, mode Flashcards (les paquets de ce cours)
+$("#cards-revise").addEventListener("click", (e) => {
+  e.preventDefault();  // un bouton dans le titre du dépliant ne le replie pas
+  e.stopPropagation();
+  setScopeMode("cartes");
+  go(`#/reviser/cours/${state.course.id}`);
+});
 $("#prepare-open").addEventListener("click", (e) => {
   e.preventDefault();  // un bouton dans le titre du dépliant ne le replie pas
   e.stopPropagation();

@@ -232,7 +232,7 @@ puis trois onglets : **Réviser**, **Rétroplanning** et **Suivi**. Dans l'ongle
 **Révision du jour** (le mélange conseillé, cartes et questions, avec « Commencer » ; un clic sur le bandeau montre son
 plan et ses réglages), puis trois accès distincts : **Flashcards**, **Quiz** et **Partiel blanc** (le dernier choisi est
 gardé).
-- **Flashcards** (rien que des cartes) : trois paquets, **À revoir aujourd'hui**, **Là où je bloque** et **Tout le
+- **Flashcards** (rien que des cartes ; aussi depuis la page du cours, bouton « Réviser → » du dépliant Flashcards) : trois paquets, **À revoir aujourd'hui**, **Là où je bloque** et **Tout le
   paquet**, pour tout le cours ou un chapitre (puces « Chapitre 1 », « Chapitre 2 »…), en mode Retourner ou Écrire.
 - **Quiz** : tous les quiz, ou ceux d'un chapitre (mêmes puces), avec « Faire le quiz ».
 - **Plan de révision** (sur un semestre, ou un cours sans semestre) : « une séance tous les 1 / 2 / 3 / 7 jours, de
