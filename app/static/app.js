@@ -3517,7 +3517,13 @@ api("/api/settings").then(applyShortcuts).catch(() => {});
 const KEY_NAMES = { " ": "Espace", Enter: "Entrée", Escape: "Échap", ArrowLeft: "←", ArrowRight: "→", ArrowUp: "↑",
                     ArrowDown: "↓", Backspace: "⌫", Tab: "Tab", Delete: "Suppr" };
 const keyName = (key) => KEY_NAMES[key] || (key?.length === 1 ? key.toUpperCase() : key || "—");
-const pressedKey = (e) => (e.key.length === 1 ? e.key.toLowerCase() : e.key);
+// Les chiffres valent par leur place : sur un clavier français, la rangée du haut tape & é " ' ( … sans Maj,
+// et elle compte quand même pour 1, 2, 3… (comme le pavé numérique)
+const pressedKey = (e) => {
+  const digit = /^(?:Digit|Numpad)(\d)$/.exec(e.code || "");
+  if (digit && !e.metaKey && !e.ctrlKey && !e.altKey) return digit[1];
+  return e.key.length === 1 ? e.key.toLowerCase() : e.key;
+};
 const isKey = (e, id) => pressedKey(e) === state.keys[id];
 
 // Les touches rappelées sur l'écran : sous les boutons et devant les réponses

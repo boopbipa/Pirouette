@@ -205,7 +205,8 @@ présentation ».
 **Tout au clavier** : quiz, révisions et partiels blancs se font sans la souris. Par défaut : **1 à 6** choisit une
 réponse (**V** / **F** pour vrai/faux), **Entrée** valide puis passe à la suite, **←** / **→** question précédente /
 suivante, **Espace** retourne une flashcard puis **1 / 2 / 3** (je ne savais pas / à moitié / je savais), **Échap**
-quitte (avec confirmation). Les touches sont rappelées à l'écran (pastilles à côté des réponses et des boutons).
+quitte (avec confirmation). Les chiffres marchent aussi sans pavé numérique ni Maj : sur un clavier français, la
+rangée du haut (& é " ' ( …) compte pour 1, 2, 3, 4, 5… Les touches sont rappelées à l'écran (pastilles à côté des réponses et des boutons).
 **Réglages → Clavier** (dépliant, en bas de la page) : un clic sur une touche, puis la nouvelle ; Pirouette refuse une touche déjà utilisée au même
 moment ; « Valider dès que je choisis une réponse » ; « Rétablir les touches par défaut ».
 
