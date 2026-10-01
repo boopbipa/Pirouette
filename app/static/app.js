@@ -2474,7 +2474,8 @@ function showCard() {
   $("#typed-answer").value = "";
   $("#typed-answer").disabled = false;
   $("#typed-result").hidden = true;
-  $("#ratings").hidden = true;
+  $("#ratings").hidden = false;
+  $("#ratings").classList.add("locked");  // les deux boutons attendent que la réponse soit vue
   renderKeyHints();
   (typing ? $("#typed-answer") : $("#flashcard")).focus();
 }
@@ -2489,7 +2490,9 @@ function cardRarity(card) {
 function dressCard(card, s) {
   const el = $("#flashcard");
   const rarity = cardRarity(card);
-  el.classList.remove("rare", "holo", "fly-again", "fly-hard", "fly-good");
+  el.classList.remove("rare", "holo", "fly-again", "fly-good", "dragging");
+  ["--dx", "--dy", "--dr"].forEach((v) => el.style.removeProperty(v));
+  leanCard(0);
   if (rarity.cls) el.classList.add(rarity.cls);
   const item = s.items[s.index];
   const set = card.scope?.[0] || item.course_name || "Flashcard";
@@ -2513,7 +2516,7 @@ $("#flashcard").addEventListener("animationend", (e) => {
 
 // Relief : la carte s'incline sous la souris, avec un reflet (holographique pour les cartes acquises)
 $("#flashcard").addEventListener("pointermove", (e) => {
-  if (e.pointerType === "touch" || matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  if (e.pointerType === "touch" || swipe.moved && swipe.x !== null || matchMedia("(prefers-reduced-motion: reduce)").matches) return;
   const el = $("#flashcard");
   const box = el.getBoundingClientRect();
   const x = (e.clientX - box.left) / box.width;
@@ -2557,6 +2560,7 @@ function flipCard() {
 function showRatings(suggested = null) {
   document.querySelectorAll("#ratings [data-rating]").forEach((b) => b.classList.toggle("suggested", b.dataset.rating === suggested));
   $("#ratings").hidden = false;
+  $("#ratings").classList.remove("locked");
 }
 
 // ---- Mode « j'écris la réponse » : comparaison souple avec le verso ----
@@ -2602,7 +2606,7 @@ function checkTyped() {
   box.innerHTML = `<strong>${{ right: "✓ C'est juste !", close: "≈ Presque", wrong: "✗ Pas tout à fait" }[verdict]}</strong>
     <span class="muted">${Math.round(score * 100)} % des mots importants de la réponse (surlignés sur la carte). À toi de juger :</span>`;
   box.hidden = false;
-  showRatings({ right: "good", close: "hard", wrong: "again" }[verdict]);
+  showRatings({ right: "good", wrong: "again" }[verdict] || null);
   $("#ratings .suggested")?.focus();
 }
 
@@ -2627,11 +2631,12 @@ function rateCard(rating) {
       if (before !== "holo" && cardRarity(card).cls === "holo") showCardToast("★ Carte acquise !");
     })
     .catch(() => {});
-  // La carte part (à gauche : ratée, en bas : à moitié, à droite : sue), puis la suivante est tirée de la pile
+  // La carte part (à gauche : ratée, à droite : sue), puis la suivante est tirée de la pile
   if (matchMedia("(prefers-reduced-motion: reduce)").matches) return nextItem();
   s.leaving = true;
   const el = $("#flashcard");
-  el.classList.remove("tilting", "dealing");
+  el.classList.remove("tilting", "dealing", "dragging");
+  leanCard(rating === "good" ? 1 : -1);
   el.classList.add(`fly-${rating}`);
   setTimeout(() => {
     s.leaving = false;
@@ -2641,8 +2646,61 @@ function rateCard(rating) {
 }
 $("#ratings").addEventListener("click", (e) => {
   const button = e.target.closest("[data-rating]");
-  if (button) rateCard(button.dataset.rating);
+  if (!button) return;
+  if ($("#ratings").classList.contains("locked")) return flipCard();  // réponse pas encore vue : on la montre
+  rateCard(button.dataset.rating);
 });
+
+// ---- Glisser la carte : à droite « Je savais », à gauche « Je ne savais pas » (comme Tinder) ----
+// Plus la carte penche d'un côté, plus la lumière de ce côté s'allume et plus son bouton grandit et se colore.
+function leanCard(lean) {
+  const l = Math.max(-1, Math.min(1, lean));
+  const stage = $("#card-stage");
+  stage.style.setProperty("--lean-left", String(Math.max(0, -l)));
+  stage.style.setProperty("--lean-right", String(Math.max(0, l)));
+  document.querySelector("#ratings .again").classList.toggle("full", l <= -1);
+  document.querySelector("#ratings .good").classList.toggle("full", l >= 1);
+}
+const SWIPE_AT = 110;  // pixels à parcourir pour lancer la carte
+const swipe = { x: null, y: 0, dx: 0, moved: false };
+$("#flashcard").addEventListener("pointerdown", (e) => {
+  const s = state.session;
+  if (e.button !== 0 || !s || s.leaving || s.items[s.index]?.kind !== "card") return;
+  Object.assign(swipe, { x: e.clientX, y: e.clientY, dx: 0, moved: false, id: e.pointerId });
+});
+$("#flashcard").addEventListener("pointermove", (e) => {
+  if (swipe.x === null || e.pointerId !== swipe.id) return;
+  const s = state.session;
+  let dx = e.clientX - swipe.x;
+  if (!swipe.moved && Math.abs(dx) < 6) return;
+  if (!swipe.moved) { swipe.moved = true; $("#flashcard").setPointerCapture(e.pointerId); window.getSelection().removeAllRanges(); }
+  if (!s.revealed) dx *= 0.25;  // réponse pas encore vue : la carte résiste
+  swipe.dx = dx;
+  const el = $("#flashcard");
+  el.classList.remove("tilting");
+  el.classList.add("dragging");
+  el.style.setProperty("--dx", `${dx}px`);
+  el.style.setProperty("--dy", `${(e.clientY - swipe.y) * 0.25}px`);
+  el.style.setProperty("--dr", `${dx / 16}deg`);
+  if (s.revealed) leanCard(dx / SWIPE_AT);
+});
+function endSwipe() {
+  if (swipe.x === null) return;
+  const { dx, moved } = swipe;
+  swipe.x = null;
+  if (!moved) return;
+  swipe.justDragged = true;  // le clic qui suit le glisser ne retourne pas la carte
+  setTimeout(() => { swipe.justDragged = false; }, 0);
+  const s = state.session;
+  const el = $("#flashcard");
+  if (s?.revealed && Math.abs(dx) >= SWIPE_AT) return rateCard(dx > 0 ? "good" : "again");
+  if (!s?.revealed && Math.abs(dx) > 12) showCardToast("Retourne d'abord la carte");
+  el.classList.remove("dragging");
+  ["--dx", "--dy", "--dr"].forEach((v) => el.style.removeProperty(v));
+  leanCard(0);
+}
+$("#flashcard").addEventListener("pointerup", endSwipe);
+$("#flashcard").addEventListener("pointercancel", endSwipe);
 
 function nextItem() {
   const s = state.session;
@@ -2843,6 +2901,7 @@ function sessionCrumbs(back, title) {
 $("#session-done-back").addEventListener("click", (e) => { state.sessionBack = state.session?.back; leaveSession(e); });
 
 $("#flashcard").addEventListener("click", () => {
+  if (swipe.justDragged) return;
   if (!window.getSelection().toString()) flipCard();
 });
 $("#card-edit-current").addEventListener("click", () => {
@@ -3513,16 +3572,17 @@ const KEY_ACTIONS = [
   { id: "previous", group: "Répondre", label: "Question précédente", key: "ArrowLeft" },
   { id: "next", group: "Répondre", label: "Question suivante", key: "ArrowRight" },
   { id: "flip", group: "Flashcards", label: "Retourner la carte", key: " " },
-  { id: "again", group: "Flashcards", label: "Je ne savais pas", key: "1" },
-  { id: "hard", group: "Flashcards", label: "À moitié", key: "2" },
-  { id: "good", group: "Flashcards", label: "Je savais", key: "3" },
+  { id: "again", group: "Flashcards", label: "Je ne savais pas", key: "ArrowLeft" },
+  { id: "good", group: "Flashcards", label: "Je savais", key: "ArrowRight" },
   { id: "quit", group: "Partout", label: "Quitter (quiz, révision, partiel)", key: "Escape" },
 ];
 const DEFAULT_KEYS = Object.fromEntries(KEY_ACTIONS.map((a) => [a.id, a.key]));
 state.keys = { ...DEFAULT_KEYS };
 state.keysInstant = false;
 function applyShortcuts(settings) {
-  state.keys = { ...DEFAULT_KEYS, ...(settings.shortcuts || {}) };
+  // Seulement les actions qui existent encore (« À moitié » a disparu)
+  const saved = Object.entries(settings.shortcuts || {}).filter(([id]) => id in DEFAULT_KEYS);
+  state.keys = { ...DEFAULT_KEYS, ...Object.fromEntries(saved) };
   state.keysInstant = Boolean(settings.keys_instant);
   renderKeyHints();
 }
@@ -3544,8 +3604,8 @@ const isKey = (e, id) => pressedKey(e) === state.keys[id];
 function renderKeyHints() {
   $("#validate-key").textContent = keyName(state.keys.validate);
   $("#card-keys-text").textContent = cardMode() === "type"
-    ? `${keyName(state.keys.validate)} pour vérifier, puis ${["again", "hard", "good"].map((a) => keyName(state.keys[a])).join(", ")} pour répondre`
-    : `${keyName(state.keys.flip)} pour retourner la carte, puis ${["again", "hard", "good"].map((a) => keyName(state.keys[a])).join(", ")} pour répondre`;
+    ? `${keyName(state.keys.validate)} pour vérifier, puis glisse la carte (ou ${keyName(state.keys.again)} / ${keyName(state.keys.good)})`
+    : `${keyName(state.keys.flip)} pour retourner la carte, puis glisse-la (ou ${keyName(state.keys.again)} / ${keyName(state.keys.good)})`;
   document.querySelectorAll("#ratings [data-rating]").forEach((b) => {
     let hint = b.querySelector("kbd");
     if (!hint) b.append(hint = Object.assign(document.createElement("kbd"), { className: "key-hint" }));
@@ -3680,6 +3740,11 @@ const WELCOME = [
 ];
 // Les nouveautés de chaque version (le carton « Quoi de neuf » ne s'affiche que si la version en a)
 const WHATS_NEW = {
+  "0.40.0": [
+    ["⇆", "Flashcards à glisser", "Retourne la carte, puis lance-la à droite si tu savais, à gauche sinon (ou ← / →)"],
+    ["?", "« Je ne sais pas »", "Pour les réponses à écrire : comptée fausse tout de suite, sans taper un mot au hasard"],
+    ["🦙", "Tuto IA locale", "Réglages → IA locale : installer Ollama pas à pas, en cartons"],
+  ],
   "0.39.0": [
     ["⌨", "Tout au clavier", "Quiz, révisions et partiels sans la souris ; touches réglables dans Réglages"],
     ["✦", "Cartons de bienvenue", "Pirouette se présente en 5 cartons (à revoir depuis Réglages)"],
@@ -3843,7 +3908,9 @@ function sessionKeys(e) {
     if (e.target.id === "typed-answer") return;
     const flip = isKey(e, "flip") || (isKey(e, "validate") && !s.revealed);
     if (flip && !e.target.closest?.("button")) { e.preventDefault(); return flipCard(); }
-    const rating = ["again", "hard", "good"].find((r) => isKey(e, r));
+    // Les flèches et 1 / 2 marchent toujours, en plus des touches réglées
+    const rating = ["again", "good"].find((r) => isKey(e, r))
+      || { ArrowLeft: "again", 1: "again", ArrowRight: "good", 2: "good" }[pressedKey(e)];
     if (s.revealed && rating) { e.preventDefault(); rateCard(rating); }
     return;
   }

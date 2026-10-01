@@ -204,9 +204,15 @@ ses partiels (rétroplanning, partiels blancs) ; le dernier mène à la créatio
 jour, un seul carton « **Quoi de neuf** » avec les nouveautés de la version. Réglages → Version → « Revoir la
 présentation ».
 
+**Flashcards à glisser** : une fois la carte retournée, attrape-la et lance-la **à droite** (« Je savais ») ou **à
+gauche** (« Je ne savais pas »), comme sur Tinder. Plus elle penche, plus la lumière de ce côté s'allume (vert à droite,
+rouge à gauche) et plus le bouton de ce côté grandit, jusqu'à devenir tout vert ou tout rouge. Relâchée trop tôt, elle
+revient au centre ; pas encore retournée, elle résiste (« Retourne d'abord la carte »). Les deux boutons ✕ / ✓ restent
+cliquables ; « À moitié » a disparu.
+
 **Tout au clavier** : quiz, révisions et partiels blancs se font sans la souris. Par défaut : **1 à 6** choisit une
 réponse (**V** / **F** pour vrai/faux), **Entrée** valide puis passe à la suite, **←** / **→** question précédente /
-suivante, **Espace** retourne une flashcard puis **1 / 2 / 3** (je ne savais pas / à moitié / je savais), **Échap**
+suivante, **Espace** retourne une flashcard puis **←** / **→** (ou 1 / 2) pour je ne savais pas / je savais, **Échap**
 quitte (avec confirmation). Les chiffres marchent aussi sans pavé numérique ni Maj : sur un clavier français, la
 rangée du haut (& é " ' ( …) compte pour 1, 2, 3, 4, 5… Les touches sont rappelées à l'écran (pastilles à côté des réponses et des boutons).
 **Réglages → Clavier** (dépliant, en bas de la page) : un clic sur une touche, puis la nouvelle ; Pirouette refuse une touche déjà utilisée au même

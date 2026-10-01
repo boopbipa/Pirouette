@@ -926,6 +926,7 @@
         </div>
       </div>
       <div id="card-stage">
+        <div class="swipe-light left" aria-hidden="true"></div><div class="swipe-light right" aria-hidden="true"></div>
         <div class="tcg-table">
           <div class="tcg-pile" id="tcg-pile" aria-hidden="true"><span></span><span></span><span></span></div>
           <div class="flashcard tcg" id="flashcard" role="button" tabindex="0" aria-live="polite">
@@ -959,9 +960,8 @@
         </div>
         <div class="typed-result" id="typed-result" hidden></div>
         <div class="ratings" id="ratings" hidden>
-          <button type="button" class="rating again" data-rating="again"><b>Je ne savais pas</b></button>
-          <button type="button" class="rating hard" data-rating="hard"><b>À moitié</b></button>
-          <button type="button" class="rating good" data-rating="good"><b>Je savais</b></button>
+          <button type="button" class="rating again" data-rating="again"><span class="rating-ic" aria-hidden="true">✕</span><b>Je ne savais pas</b></button>
+          <button type="button" class="rating good" data-rating="good"><span class="rating-ic" aria-hidden="true">✓</span><b>Je savais</b></button>
         </div>
         <p class="muted small-text center" id="card-keys"><span id="card-keys-text"></span> ·
           <button class="link-button inline" type="button" id="card-edit-current">Modifier cette carte</button> ·

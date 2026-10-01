@@ -301,11 +301,13 @@ button.small { padding: 6px 12px; font-size: 14px; }
 /* Flashcards : de vraies cartes à collectionner (cadre selon la rareté, relief, reflet, pile, tirage) */
 .tcg-table { position: relative; display: flex; justify-content: center; padding: 14px 0 6px; perspective: 1400px; }
 .flashcard.tcg {
-  --rx: 0deg; --ry: 0deg; --mx: 50%; --my: 30%;
+  --rx: 0deg; --ry: 0deg; --mx: 50%; --my: 30%; --dx: 0px; --dy: 0px; --dr: 0deg;
   --frame: linear-gradient(150deg, #eef0f3, #b9bfc9 42%, #f7f8fa 58%, #a4abb6);
   position: relative; z-index: 2; display: block; width: min(330px, 86vw); aspect-ratio: 63 / 88; cursor: pointer; outline: none;
-  transform-style: preserve-3d; transform: rotateX(var(--rx)) rotateY(var(--ry)); transition: transform .5s cubic-bezier(.2, .8, .2, 1);
+  transform-style: preserve-3d; transform: translate(var(--dx), var(--dy)) rotate(var(--dr)) rotateX(var(--rx)) rotateY(var(--ry));
+  transition: transform .5s cubic-bezier(.2, .8, .2, 1); touch-action: pan-y; user-select: none; -webkit-user-select: none;
 }
+.flashcard.tcg.dragging { transition: none; cursor: grabbing; }
 .flashcard.tcg.tilting { transition: transform .08s linear; }
 .flashcard.tcg.rare { --frame: linear-gradient(150deg, #f9e6a6, #d6a73c 40%, #fcefc1 57%, #bb8a26); }
 .flashcard.tcg.holo { --frame: linear-gradient(125deg, #ffc9e4, #bfe9ff 22%, #d4ffd0 44%, #fff0b8 66%, #e2ccff 88%); }
@@ -374,10 +376,8 @@ button.small { padding: 6px 12px; font-size: 14px; }
 .flashcard.dealing { animation: tcg-deal .45s cubic-bezier(.2, .9, .3, 1.15); }
 @keyframes tcg-deal { from { transform: translate(10px, 8px) rotate(3deg) scale(.96); opacity: .4; } to { transform: none; opacity: 1; } }
 .flashcard.fly-again { animation: tcg-fly-left .38s ease-in forwards; }
-.flashcard.fly-hard { animation: tcg-fly-down .38s ease-in forwards; }
 .flashcard.fly-good { animation: tcg-fly-right .38s ease-in forwards; }
 @keyframes tcg-fly-left { to { transform: translate(-120%, 30px) rotate(-18deg); opacity: 0; } }
-@keyframes tcg-fly-down { to { transform: translate(0, 60%) rotate(4deg) scale(.9); opacity: 0; } }
 @keyframes tcg-fly-right { to { transform: translate(120%, -30px) rotate(16deg); opacity: 0; } }
 .tcg-toast { position: absolute; top: 44%; left: 50%; z-index: 3; margin: 0; padding: 10px 18px; border-radius: 999px;
   transform: translate(-50%, -50%); font: 700 16px/1.2 var(--display); color: #3d2b57; pointer-events: none;
@@ -387,7 +387,7 @@ button.small { padding: 6px 12px; font-size: 14px; }
                        100% { opacity: 0; transform: translate(-50%, -70%) scale(1); } }
 @media (prefers-reduced-motion: reduce) {
   .flashcard.tcg, .flashcard-inner { transition: none; }
-  .flashcard.dealing, .flashcard.fly-again, .flashcard.fly-hard, .flashcard.fly-good { animation: none; }
+  .flashcard.dealing, .flashcard.fly-again, .flashcard.fly-good { animation: none; }
 }
 @media (max-width: 600px) { .tcg-art { font-size: 19px; } .tcg-art.long { font-size: 16px; } }
 .card-actions { justify-content: center; }
@@ -708,8 +708,7 @@ label.button:hover { border-color: var(--text); }
 .typed-result.close { background: var(--accent-soft); }
 .typed-result.wrong { background: var(--ko-soft); }
 .flashcard-back mark { background: var(--ok-soft); color: inherit; border-radius: 4px; padding: 0 2px; }
-.ratings { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 16px; }
-@media (max-width: 560px) { .ratings { grid-template-columns: 1fr; } }
+.ratings { display: flex; gap: 12px; margin: 16px auto 0; max-width: 560px; }
 .rating { display: flex; flex-direction: column; align-items: center; gap: 2px; border-radius: 12px; padding: 14px 8px; font-size: 15.5px;
           background: var(--surface); border: 1px solid var(--border); color: var(--text); }
 .rating small { color: var(--muted); font-size: 12.5px; }
@@ -1473,3 +1472,31 @@ dialog.prepare-dialog.prepare { margin: auto; border: 0; }
 .w-cmd { display: flex; align-items: center; gap: 8px; margin: 8px 0; padding: 6px 6px 6px 12px; border-radius: 10px;
   background: var(--sunken); }
 .w-cmd code { flex: 1; font: 13px ui-monospace, Menlo, monospace; overflow-wrap: anywhere; }
+
+/* Glisser la carte : lumières sur les côtés et boutons qui grandissent du côté où elle part */
+#card-stage { --lean-left: 0; --lean-right: 0; }
+.swipe-light { position: fixed; top: 0; bottom: 0; width: 34vw; pointer-events: none; z-index: 0; transition: opacity .25s; }
+.swipe-light.left { left: 0; opacity: var(--lean-left); background: radial-gradient(ellipse 70% 60% at 0% 50%, rgba(180, 35, 24, .36), transparent 70%); }
+.swipe-light.right { right: 0; opacity: var(--lean-right); background: radial-gradient(ellipse 70% 60% at 100% 50%, rgba(47, 125, 79, .36), transparent 70%); }
+#card-stage:has(.dragging) .swipe-light { transition: none; }
+.ratings .rating { --pull: 0; position: relative; flex: calc(1 + var(--pull) * .8) 1 auto; white-space: nowrap; overflow: hidden; isolation: isolate;
+  flex-direction: row; justify-content: center; gap: 10px; padding: 16px 12px; border-radius: 999px; font-size: 16px;
+  transform: scale(calc(1 + var(--pull) * .06)); transition: flex-grow .25s, transform .25s, color .2s, border-color .2s, opacity .2s; }
+.ratings .rating::before { content: ""; position: absolute; inset: 0; z-index: -1; opacity: var(--pull); transition: opacity .2s; }
+.ratings .rating.again { --pull: var(--lean-left); }
+.ratings .rating.good { --pull: var(--lean-right); }
+.ratings .rating.again::before { background: var(--ko-soft); }
+.ratings .rating.good::before { background: var(--ok-soft); }
+.ratings .rating.again.full::before { background: var(--ko); opacity: 1; }
+.ratings .rating.good.full::before { background: var(--ok); opacity: 1; }
+.ratings .rating.full, .ratings .rating.full b { color: #fff; border-color: transparent; }
+.ratings .rating.full kbd.key-hint { background: rgba(255, 255, 255, .2); color: #fff; border-color: rgba(255, 255, 255, .4); }
+.rating-ic { width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; font-size: 15px; font-weight: 800; flex: none; }
+.rating.again .rating-ic { background: var(--ko-soft); color: var(--ko); }
+.rating.good .rating-ic { background: var(--ok-soft); color: var(--ok); }
+.rating.full .rating-ic { background: rgba(255, 255, 255, .22); color: #fff; }
+.ratings .rating kbd.key-hint { margin: 0; }
+.ratings.locked .rating { opacity: .45; }
+.ratings.locked .rating:hover { border-color: var(--border); }
+#card-stage:has(.dragging) .rating { transition: none; }
+@media (max-width: 560px) { .ratings .rating b { font-size: 14px; } }
