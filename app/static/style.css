@@ -1507,7 +1507,11 @@ dialog.prepare-dialog.prepare { margin: auto; border: 0; }
   transform: translate(0);
 }
 
-.exam-countdown.exam-bottom { margin: 28px 0 0; font-size: 14px; }
+/* Réviser : la date des partiels collée au bas de la fenêtre (dans la marge du bas de la page), quelle que soit la
+   longueur du contenu */
+#view-review, #view-review-scope { position: relative; min-height: calc(100vh - 220px); }
+#view-review-scope { min-height: calc(100vh - 254px); }  /* le fil d'Ariane prend sa place au-dessus */
+.exam-countdown.exam-bottom { position: absolute; left: 0; right: 0; bottom: -100px; margin: 0; font-size: 14px; }
 
 /* Réviser : la révision du jour en bandeau, puis Flashcards / Quiz / Partiel blanc */
 .today-hero { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 16px 20px; margin: 4px 0 10px;
