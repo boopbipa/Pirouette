@@ -1104,7 +1104,8 @@ def _cards_job(course_id: str, provider: str, model: str, language: str, count: 
             raise NothingNew("Ces cartes existent déjà.")
         meta = _meta(course, provider, model, language, sources, chapters)
         for card in new:
-            card.update(scope=meta["scope"], created_at=datetime.now().isoformat(timespec="seconds"))
+            # `origin` : « fichier — chapitre », pour retrouver le cours (fichier) de la carte dans une matière à plusieurs cours
+            card.update(scope=meta["scope"], origin=meta["sources"], created_at=datetime.now().isoformat(timespec="seconds"))
         # Relu juste avant d'enregistrer : on a pu réviser des cartes pendant la création.
         deck = store.get_doc(course_id, "cards") or {"cards": []}
         deck.update(course_name=course["name"], course_id=course_id, cards=[*deck["cards"], *new])
@@ -1220,7 +1221,20 @@ SESSION_QUESTIONS = 10
 
 @app.get("/api/session")
 async def session(mode: str = "today", course: str = "", folder: str = "", filter: str = "review",
-                  questions: bool = True, minutes: int = 15, chapter: str = "") -> dict:
+                  questions: bool = True, minutes: int = 15, chapter: str = "", file: str = "") -> dict:
+    result = _session(mode, course, folder, filter, questions, minutes, chapter)
+    if not file or not course:
+        return result
+    # Un seul cours (fichier) de la matière : ses cartes et les questions de ses quiz
+    owner = store.get_course(course)
+    quizzes = {q["id"]: q for q in store.list_quizzes() if q.get("course_id") == course}
+    keep = [i for i in result["items"]
+            if _file_of(owner, i["card"] if i["kind"] == "card" else quizzes.get(i["quiz_id"], {})) == file]
+    return result | {"items": keep, "cards": sum(i["kind"] == "card" for i in keep),
+                     "questions": sum(i["kind"] == "question" for i in keep)}
+
+
+def _session(mode: str, course: str, folder: str, filter: str, questions: bool, minutes: int, chapter: str) -> dict:
     """Une séance de révision : `today` (cartes du jour + questions de quiz à reposer), `weak` (points faibles),
     `plan` (séance du plan : les cartes les plus difficiles d'abord, à la taille choisie), `chapter` (les cartes
     d'un chapitre, pour le rétroplanning) ou `cards` (les cartes d'un cours)."""
@@ -1262,6 +1276,18 @@ async def session(mode: str = "today", course: str = "", folder: str = "", filte
     elif mode == "weak":
         cards = [_card_item(e) for e in store.weak_cards(ids) if in_chapter(e)][:30]
         asked = [_question_item(e) for e in store.weak_questions(ids)[:20]] if questions else []
+    elif mode == "all":
+        # Tout réviser : toutes les cartes et toutes les questions des quiz, mélangées
+        cards = [_card_item({"course": c, "card": card}) for c, deck in store._decks(ids) for card in deck]
+        random.shuffle(cards)
+        asked = []
+        if questions:
+            for summary in store.list_quizzes():
+                if summary.get("course_id") in ids:
+                    quiz = store.get_quiz(summary["id"])
+                    asked += [_question_item({"quiz": quiz, "index": i, "stat": (quiz.get("stats") or {}).get(str(i))})
+                              for i in range(len(quiz["questions"]))]
+            random.shuffle(asked)
     elif mode == "cards":
         tests = {"review": lambda c: c["status"] != "known", "known": lambda c: c["status"] == "known"}
         test = tests.get(filter, lambda c: True)
@@ -1275,7 +1301,7 @@ async def session(mode: str = "today", course: str = "", folder: str = "", filte
 
 
 @app.get("/api/cards/decks")
-async def card_decks(course: str = "", folder: str = "") -> dict:
+async def card_decks(course: str = "", folder: str = "", file: str = "") -> dict:
     """Les paquets du mode Flashcards de Réviser : pour tout le périmètre et pour chaque chapitre, le nombre de
     cartes à revoir aujourd'hui, de cartes où l'on bloque et de cartes en tout."""
     ids = _scope(course, folder)
@@ -1285,6 +1311,8 @@ async def card_decks(course: str = "", folder: str = "") -> dict:
                            "total": len(cards)}
     every, chapters = [], []
     for c, deck in store._decks(ids):
+        if file:  # un seul cours (fichier) de la matière
+            deck = [card for card in deck if _file_of(c, card) == file]
         every += deck
         groups: dict[str, list] = {}
         for card in deck:
@@ -1374,6 +1402,27 @@ def _retro_units(ids: list[str], skip: set[str]) -> tuple[list[dict], list[dict]
                 units.append({"course_id": course["id"], "course": course["name"], "key": key,
                               "title": title or course["name"]})
     return units, [{"id": c["id"], "name": c["name"]} for c in courses if c["files"]]
+
+
+def _file_of(course: dict, item: dict) -> str | None:
+    """Le cours (fichier) d'où vient un quiz ou une carte, dans une matière à plusieurs fichiers : d'après le fichier
+    noté à la création (« fichier — chapitre »), sinon d'après ses chapitres (un titre présent dans plusieurs fichiers,
+    comme « Début du document », revient au premier fichier qui l'a)."""
+    files = course.get("files") or []
+    if not files:
+        return None
+    for source in item.get("sources") or item.get("origin") or []:
+        name = str(source).split(" — ")[0]
+        match = next((f["id"] for f in files if f["name"] == name), None)
+        if match:
+            return match
+    norm = lambda t: " ".join(re.findall(r"\w+", str(t).lower()))  # noqa: E731
+    wanted = {norm(t) for t in item.get("scope") or []}
+    for f in files:
+        titles = {norm(c["title"]) for c in f.get("chapters") or []} or {norm(f["name"])}
+        if titles & wanted:
+            return f["id"]
+    return files[0]["id"]
 
 
 def _same_title(title: str, scope: list[str]) -> bool:
@@ -1528,10 +1577,14 @@ async def mastery(folder: str = "", course: str = "") -> list[dict]:
         chapters = []
         own = [q for q in quizzes if q.get("course_id") == c["id"]]
         placed: set[str] = set()
+        several = len(c["files"]) > 1
         for key, title in units:
             single = len(units) == 1  # un seul chapitre : toutes les cartes et tous les quiz du cours
-            cards = deck if single else [card for card in deck if _same_title(title, card.get("scope") or [])]
-            mine = [q for q in own if single or _same_title(title, q.get("scope") or [])]
+            fid = next((f["id"] for f in c["files"] if key == f["id"] or key.startswith(f"{f['id']}-")), None)
+            # Plusieurs fichiers : un chapitre ne compte que ce qui vient de son fichier (même titre ailleurs = autre cours)
+            ours = (lambda item: not several or _file_of(c, item) == fid)  # noqa: E731
+            cards = deck if single else [card for card in deck if _same_title(title, card.get("scope") or []) and ours(card)]
+            mine = [q for q in own if single or (_same_title(title, q.get("scope") or []) and ours(q))]
             placed |= {q["id"] for q in mine}
             scores = [_quiz_score(q) for q in mine if q.get("best_score")]
             file_name = next((f["name"] for f in c["files"] if key == f["id"] or key.startswith(f"{f['id']}-")), "")

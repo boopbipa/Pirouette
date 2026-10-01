@@ -96,6 +96,8 @@
 
     <section id="view-review-scope" class="view" hidden>
       <h1 id="review-scope-title"></h1>
+      <!-- Une matière à plusieurs cours : réviser toute la matière ou un seul cours -->
+      <div class="chips chapter-chips review-files" id="review-files" role="radiogroup" aria-label="Cours à réviser" hidden></div>
       <nav class="filters scope-tabs" id="scope-tabs" role="tablist" aria-label="Réviser">
         <a role="tab" data-scope-tab="">Réviser</a>
         <a role="tab" data-scope-tab="planning">Rétroplanning</a>
@@ -106,7 +108,10 @@
         <!-- En haut, la révision du jour (le mélange conseillé) ; dessous, trois accès distincts : flashcards, quiz, partiel -->
         <div class="today-hero" id="today-hero" data-scope-mode="jour" role="tab" tabindex="0" aria-label="Révision du jour : détails et réglages">
           <div class="today-hero-text"><h2>Révision du jour</h2><p id="hero-summary"></p></div>
-          <button class="primary" type="button" id="hero-start">Commencer →</button>
+          <span class="hero-actions">
+            <button class="ghost" type="button" id="hero-all" title="Toutes les cartes et toutes les questions des quiz, mélangées">Tout réviser</button>
+            <button class="primary" type="button" id="hero-start">Commencer →</button>
+          </span>
         </div>
         <div class="mode-tiles" id="scope-modes" role="tablist" aria-label="Façon de réviser">
           <button type="button" role="tab" data-scope-mode="cartes"><strong>Flashcards</strong><small id="mode-cartes-note"></small></button>
@@ -681,6 +686,9 @@
       <!-- Le cours en arbre : le fichier importé, puis ce qui en découle (chapitres, quiz, flashcards), à déplier.
            Tout se règle et se modifie ici ; Réviser ne sert qu'à réviser. -->
       <div class="course-tree" id="course-tree">
+        <!-- Une matière, plusieurs cours : un onglet par cours (fichier), chacun avec ses chapitres, quiz et flashcards -->
+        <nav class="course-tabs" id="course-tabs" role="tablist" aria-label="Cours de la matière" hidden></nav>
+        <div class="tree-body">
         <details class="card tree-source" id="panel-fichiers">
           <summary class="source-summary">
             <span class="source-names" id="source-names"></span>
@@ -753,6 +761,7 @@
               <div class="panel-foot" id="cards-foot"><button class="link-button danger" id="cards-clear">Effacer toutes les cartes</button></div>
             </div>
           </details>
+        </div>
         </div>
       </div>
 

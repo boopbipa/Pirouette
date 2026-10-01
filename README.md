@@ -180,8 +180,8 @@ comme un arbre qui part du fichier importé :
   remplace l'ancienne (même un PDF à la place d'un Keynote), les chapitres sont redécoupés, tes quiz et tes cartes
   gardés ; « **Redécouper** » relance le repérage des chapitres ; on peut aussi y glisser un fichier.
 - **Une matière, plusieurs cours** : « **+ Ajouter un cours** » (en haut, à gauche de « Gérer le cours ») dépose un
-  autre cours de la matière (CM2, TD, glossaire…). Chaque fichier est un cours à part : ses noms s'affichent en
-  pastilles en haut de l'arbre, et un clic choisit le cours affiché. En dessous, seulement **ses** chapitres, **ses**
+  autre cours de la matière (CM2, TD, glossaire…). Chaque fichier est un cours à part, dans son **onglet** (au-dessus
+  de l'arbre ; « + » en ajoute un) : un clic sur l'onglet affiche ce cours dans sa propre case. En dessous, seulement **ses** chapitres, **ses**
   quiz et **ses** flashcards ; « Tout préparer » et « + Nouveau quiz » ne portent que sur lui (Pirouette retient le
   cours choisi). Rien n'est remplacé (seul un fichier du même nom remplace l'ancien, comme une nouvelle version).
 - « **Replier chapitres, quiz et flashcards** » (sous le fichier) range les trois dépliants d'un coup, avec un résumé
@@ -240,6 +240,9 @@ puis trois onglets : **Réviser**, **Rétroplanning** et **Suivi**. Dans l'ongle
 **Révision du jour** (le mélange conseillé, cartes et questions, avec « Commencer » ; un clic sur le bandeau montre son
 plan et ses réglages), puis trois accès distincts : **Flashcards**, **Quiz** et **Partiel blanc** (le dernier choisi est
 gardé).
+- **Une matière à plusieurs cours** : sous le titre, « **Toute la matière** » ou un cours. Tout Réviser suit ce choix
+  (révision du jour, flashcards, quiz). « **Tout réviser** » (dans le bandeau) lance toutes les cartes et toutes les
+  questions des quiz du cours choisi, de la matière ou du semestre, mélangées.
 - **Flashcards** (rien que des cartes ; aussi depuis la page du cours, bouton « Réviser → » du dépliant Flashcards) : trois paquets, **À revoir aujourd'hui**, **Là où je bloque** et **Tout le
   paquet** (tiré dans un ordre différent à chaque fois), pour tout le cours ou un chapitre (puces « Chapitre 1 », « Chapitre 2 »…), en mode Retourner ou Écrire.
 - **Quiz** : tous les quiz du cours ou du semestre, avec « Faire le quiz ».

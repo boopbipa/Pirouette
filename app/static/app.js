@@ -1415,8 +1415,7 @@ function setFocusFile(id, course = state.course) {
 }
 const fileTitles = (f) => new Set((f.chapters?.length ? f.chapters.map((c) => c.title) : [f.name]).map(titleKey));
 // Le cours (fichier) d'où vient un quiz ou une carte : d'après le nom du fichier noté à la création, sinon ses chapitres
-function ownerFile(scope, sources = []) {
-  const files = state.course.files;
+function ownerFile(scope, sources = [], files = state.course.files) {
   for (const s of sources || []) {
     const f = files.find((x) => String(s).split(" — ")[0] === x.name);
     if (f) return f;
@@ -1424,6 +1423,7 @@ function ownerFile(scope, sources = []) {
   return files.find((f) => (scope || []).some((t) => fileTitles(f).has(titleKey(t)))) || files[0];
 }
 const inFocus = (scope, sources) => { const f = focusFile(); return !f || ownerFile(scope, sources)?.id === f.id; };
+const baseName = (name) => name.replace(/\.[^.]+$/, "");
 // Les chapitres du cours affiché (tous s'il n'y a qu'un fichier)
 const focusUnits = (course = state.course) => {
   const f = focusFile(course);
@@ -1467,13 +1467,16 @@ function renderQuizPanel(course) {
 // Le(s) fichier(s) du cours, à la racine de l'arbre : nouvelle version, redécoupage des chapitres, retrait.
 function renderFiles(course) {
   const focus = focusFile(course);
-  $("#source-names").innerHTML = (focus
-    ? course.files.map((f) => `<button type="button" class="source-name source-pick${f === focus ? " active" : ""}" data-file-focus="${f.id}"
-        aria-pressed="${f === focus}" title="${f === focus ? "Cours affiché" : "Afficher ce cours"}">${ICON_FILE}<strong>${escapeHtml(f.name.replace(/\.[^.]+$/, ""))}</strong></button>`).join("")
-    : course.files.map((f) => `<span class="source-name">${ICON_FILE}<strong>${escapeHtml(f.name)}</strong></span>`).join(""))
+  // Plusieurs cours : un onglet chacun (+ un onglet pour en ajouter) ; en dessous, seulement le cours de l'onglet
+  $("#course-tabs").hidden = !focus;
+  $("#course-tree").classList.toggle("tabbed", Boolean(focus));
+  $("#course-tabs").innerHTML = focus ? course.files.map((f) => `<button type="button" role="tab" class="course-tab${f === focus ? " active" : ""}"
+      data-file-focus="${f.id}" aria-selected="${f === focus}" title="${escapeHtml(f.name)}">${ICON_FILE}<span>${escapeHtml(baseName(f.name))}</span></button>`).join("")
+    + `<label class="course-tab add" for="file-input" title="Ajouter un autre cours à la matière">+</label>` : "";
+  const shown = focus ? [focus] : course.files;
+  $("#source-names").innerHTML = shown.map((f) => `<span class="source-name">${ICON_FILE}<strong>${escapeHtml(f.name)}</strong></span>`).join("")
     || `<span class="muted">Aucun fichier</span>`;
-  $("#source-names").classList.toggle("picker", Boolean(focus));
-  $("#file-list").innerHTML = course.files.length ? course.files.map((f) => {
+  $("#file-list").innerHTML = course.files.length ? shown.map((f) => {
     const chapters = f.chapters || [];
     const found = chapters.length
       ? `${plural(chapters.length, "chapitre", "chapitres")} ${f.chapters_by === "ai" ? "repérés par l'IA" : "repérés automatiquement"}`
@@ -2274,7 +2277,7 @@ const cardIsKnown = (card) => card.status === "known";
 
 // Toutes les cartes du cours, à regarder librement : un clic retourne la carte. La révision se fait dans Réviser.
 function renderCardGrid() {
-  const cards = state.deck.cards.filter((c) => inFocus(c.scope));
+  const cards = state.deck.cards.filter((c) => inFocus(c.scope, c.origin));
   const none = !cards.length;
   $("#cards-help").hidden = $("#cards-foot").hidden = none;
   $("#fold-cards-count").textContent = none ? "· aucune pour l'instant" : `· ${cards.length}`;
@@ -3135,6 +3138,7 @@ async function openReviewScope(kind, id = "", sub = "") {
   state.course = null;
   const folders = await api("/api/folders");
   let params = {}, name = "Tous mes cours", owner = null, parent = null;
+  state.reviewFiles = [];
   if (kind === "dossier") {
     params = { folder: id };
     name = folders.find((f) => f.id === id)?.name || "Semestre";
@@ -3143,6 +3147,7 @@ async function openReviewScope(kind, id = "", sub = "") {
     params = { course: id };
     const course = await api(`/api/courses/${id}`);
     name = course.name;
+    state.reviewFiles = course.files;  // plusieurs cours (fichiers) : on peut en réviser un seul
     parent = folders.find((f) => f.id === course.folder_id) || null;
     owner = parent ? null : { course: id };  // un cours rangé dans un semestre suit le plan du semestre
   }
@@ -3151,6 +3156,7 @@ async function openReviewScope(kind, id = "", sub = "") {
   if (state.reviewScope?.base !== base) state.deckChapter = null;  // autre cours : tous les chapitres
   state.reviewScope = { params, name, hash: location.hash, base, single: kind === "cours", owner, parent };
   $("#review-scope-title").textContent = name;
+  renderReviewFiles();
   document.querySelectorAll("[data-scope-tab]").forEach((a) => {
     const t = a.dataset.scopeTab;
     a.href = base + (t ? `/${t}` : "");
@@ -3210,6 +3216,19 @@ async function renderScopeMain() {
     : (today.cards || today.questions ? `${$("#today-summary").innerHTML} à revoir · le mélange conseillé` : "Tout est à jour pour aujourd'hui");
   $("#hero-start").disabled = planned ? false : $("#start-today").disabled;
   $("#hero-start").textContent = planned && plan.status.done_today ? "Refaire une séance" : "Commencer →";
+  $("#hero-all").title = `Toutes les cartes et toutes les questions ${state.reviewFile ? `du cours « ${baseName(state.reviewFile.name)} »`
+    : scope.single ? "de la matière" : "de ce choix"}, mélangées`;
+  if (state.reviewFile) {
+    // Un seul cours de la matière : sa révision du jour (cartes à revoir et questions à reposer de ce cours)
+    const peek = await api(`/api/session?${new URLSearchParams({ mode: "today", ...reviewScope(), file: state.reviewFile.id,
+      questions: mixQuestions() ? "1" : "0" })}`).catch(() => ({ cards: 0, questions: 0 }));
+    const n = peek.cards + peek.questions;
+    $("#hero-summary").innerHTML = n ? `<b>${peek.cards}</b> carte${peek.cards > 1 ? "s" : ""}${peek.questions
+      ? ` · <b>${peek.questions}</b> question${peek.questions > 1 ? "s" : ""} de quiz` : ""} à revoir dans « ${escapeHtml(baseName(state.reviewFile.name))} »`
+      : `Tout est à jour dans « ${escapeHtml(baseName(state.reviewFile.name))} »`;
+    $("#hero-start").disabled = !n;
+    $("#hero-start").textContent = "Commencer →";
+  }
   $("#today-note").innerHTML = scope.parent
     ? `Le plan de révision se règle sur le semestre : <a href="#/reviser/dossier/${scope.parent.id}">${escapeHtml(scope.parent.name)} →</a>`
     : "Les cartes reviennent au bon moment, avec quelques questions de tes quiz.";
@@ -3223,7 +3242,9 @@ async function renderScopeMain() {
       scope.single ? "" : ` · ${escapeHtml(h.course)}`}</small></li>`).join("");
 
   // Par chapitre (quiz, cartes, tout mélangé) ; les quiz qui ne tiennent pas à un chapitre, à part.
-  const [byChapter, decks] = await Promise.all([renderMastery(), api(`/api/cards/decks?${new URLSearchParams(reviewScope())}`)]);
+  const fileParam = state.reviewFile ? { file: state.reviewFile.id } : {};
+  const [byChapter, decks] = await Promise.all([renderMastery(),
+    api(`/api/cards/decks?${new URLSearchParams({ ...reviewScope(), ...fileParam })}`)]);
   state.cardDecks = decks;
   const placed = new Set(byChapter.flatMap((c) => c.chapters.flatMap((ch) => ch.quizzes.map((q) => q.id))));
   const names = Object.fromEntries(scoped.map((c) => [c.id, c.name]));
@@ -3231,9 +3252,9 @@ async function renderScopeMain() {
   const all = quizzes.filter((q) => ids.has(q.course_id))
     .sort((a, b) => Number(!placed.has(a.id)) - Number(!placed.has(b.id)))
     .map((q) => ({ ...q, course_name: scope.single ? "" : names[q.course_id] }));
-  state.scopeQuizzes = all;
+  state.scopeQuizzes = state.reviewFile ? all.filter((q) => ownerFile(q.scope, q.sources, state.reviewFiles)?.id === state.reviewFile.id) : all;
   renderScopeQuizzes();
-  $("#mode-quiz-note").textContent = plural(all.length, "quiz", "quiz");
+  $("#mode-quiz-note").textContent = plural(state.scopeQuizzes.length, "quiz", "quiz");
   renderDecks();
 
   // Mode partiel : sur un cours. Depuis un semestre, on choisit le cours.
@@ -3287,7 +3308,7 @@ $("#card-decks").addEventListener("click", (e) => {
   if (!deck || deck.disabled) return;
   const ch = state.deckChapter === null ? null : state.cardDecks.chapters[state.deckChapter];
   const mode = { due: "today", weak: "weak", all: "cards" }[deck.dataset.deck];
-  const where = ch ? { course: ch.course_id, chapter: ch.title } : reviewScope();
+  const where = { ...(ch ? { course: ch.course_id, chapter: ch.title } : reviewScope()), ...(state.reviewFile ? { file: state.reviewFile.id } : {}) };
   const title = { due: "Flashcards du jour", weak: "Là où je bloque", all: "Tout le paquet" }[deck.dataset.deck];
   startSession({ ...where, mode, filter: "all", questions: "0" },
     { title: ch ? `${title} · ${shortChapter(ch.title)}` : title, back: state.reviewScope.hash });
@@ -3304,10 +3325,41 @@ function renderScopeQuizzes() {
 // Le bandeau « Révision du jour » : son bouton lance la séance (celle du plan s'il y en a un) ; ailleurs, il montre ses réglages
 $("#hero-start").addEventListener("click", (e) => {
   e.stopPropagation();
+  const f = state.reviewFile;
+  if (f) return startSession({ mode: "today", ...reviewScope(), file: f.id },
+    { title: `Révision du jour · ${baseName(f.name)}`, back: state.reviewScope.hash });
   if (state.scopePlan?.plan) $("#plan-start").click();
   else $("#start-today").click();
 });
 $("#today-hero").addEventListener("click", () => setScopeMode("jour"));
+// Tout réviser : toutes les cartes et toutes les questions (du cours choisi, de la matière ou du semestre), mélangées
+$("#hero-all").addEventListener("click", (e) => {
+  e.stopPropagation();
+  const f = state.reviewFile;
+  startSession({ mode: "all", ...reviewScope(), questions: "1", ...(f ? { file: f.id } : {}) },
+    { title: f ? `Tout le cours · ${baseName(f.name)}` : `Tout réviser · ${state.reviewScope.name}`, back: state.reviewScope.hash });
+});
+// Choix du cours (matière à plusieurs fichiers) : tout le Réviser suit (révision du jour, flashcards, quiz)
+$("#review-files").addEventListener("click", (e) => {
+  const chip = e.target.closest("[data-review-file]");
+  if (!chip) return;
+  const id = chip.dataset.reviewFile;
+  try { localStorage.setItem(`pirouette.reviewFile.${state.reviewScope.params.course}`, id); } catch {}
+  state.deckChapter = null;
+  renderReviewFiles();
+  renderScopeMain();
+});
+function renderReviewFiles() {
+  const files = state.reviewFiles || [];
+  const box = $("#review-files");
+  box.hidden = files.length < 2;
+  if (box.hidden) { state.reviewFile = null; return; }
+  let id = "";
+  try { id = localStorage.getItem(`pirouette.reviewFile.${state.reviewScope.params.course}`) || ""; } catch {}
+  state.reviewFile = files.find((f) => f.id === id) || null;
+  box.innerHTML = `<button type="button" class="${state.reviewFile ? "" : "active"}" data-review-file="">Toute la matière</button>`
+    + files.map((f) => `<button type="button" class="${state.reviewFile === f ? "active" : ""}" data-review-file="${f.id}">${escapeHtml(baseName(f.name))}</button>`).join("");
+}
 $("#today-hero").addEventListener("keydown", (e) => {
   if ((e.key === "Enter" || e.key === " ") && e.target.id === "today-hero") { e.preventDefault(); setScopeMode("jour"); }
 });
@@ -3947,6 +3999,10 @@ const WELCOME = [
 ];
 // Les nouveautés de chaque version (le carton « Quoi de neuf » ne s'affiche que si la version en a)
 const WHATS_NEW = {
+  "0.43.0": [
+    ["📚", "Un onglet par cours", "Dans une matière, chaque cours (fichier) a son onglet : ses chapitres, quiz et flashcards à part"],
+    ["🎯", "Réviser un seul cours", "Dans Réviser, choisis « Toute la matière » ou un cours ; « Tout réviser » mélange cartes et quiz"],
+  ],
   "0.42.0": [
     ["📚", "Une matière, plusieurs cours", "« + Ajouter un cours » : chaque fichier a ses chapitres, quiz et flashcards, sans mélange"],
     ["⇆", "Flashcards : Mélanger", "Rebats les cartes qui restent, à tout moment de la séance"],

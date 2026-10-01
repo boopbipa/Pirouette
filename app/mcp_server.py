@@ -295,9 +295,11 @@ class Pirouette:
                  for c in cartes[:MAX_CARDS] if isinstance(c, dict)]
         rejected: list[str] = []
         new = normalize_cards([{"cards": items}], MAX_CARDS, deck["cards"], grounding, rejected)
-        scope = self._meta(course, sources, chapitres)["scope"]
+        meta = self._meta(course, sources, chapitres)
+        scope = meta["scope"]
         for card in new:
-            card.update(scope=scope, created_at=datetime.now().isoformat(timespec="seconds"))
+            # `origin` : « fichier — chapitre », pour retrouver le cours (fichier) de la carte dans la matière
+            card.update(scope=scope, origin=meta["sources"], created_at=datetime.now().isoformat(timespec="seconds"))
         if new:
             deck = self.store.get_doc(course["id"], "cards") or {"cards": []}
             deck.update(course_name=course["name"], course_id=course["id"], cards=[*deck["cards"], *new])

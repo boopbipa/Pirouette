@@ -1583,11 +1583,21 @@ dialog.prepare-dialog.prepare { margin: auto; border: 0; }
 .course-tree.folded .tree-chev { transform: rotate(-45deg); }
 .course-tree.folded .tree-branches { display: none; }
 
-/* Une matière, plusieurs cours : on choisit le cours affiché (ses chapitres, quiz et flashcards) */
-.source-names.picker { flex-direction: row; flex-wrap: wrap; gap: 8px; }
-.source-pick { display: inline-flex; align-items: center; gap: 8px; padding: 7px 14px 7px 10px; border-radius: 999px;
-  border: 1px solid var(--border); background: var(--surface); color: var(--muted); cursor: pointer; max-width: 100%; }
-.source-pick strong { font-size: 15px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: inherit; }
-.source-pick .ico { width: 18px; height: 18px; color: inherit; }
-.source-pick:hover { border-color: var(--text); color: var(--text); }
-.source-pick.active { background: var(--accent-soft); border-color: var(--accent); color: var(--accent-ink); box-shadow: 0 0 0 1px var(--accent) inset; }
+/* Une matière, plusieurs cours : de vrais onglets, et le cours de l'onglet dans sa propre case */
+.course-tabs { display: flex; align-items: flex-end; gap: 4px; padding: 0 0 0 10px; overflow-x: auto; scrollbar-width: none; }
+.course-tab { display: inline-flex; align-items: center; gap: 8px; flex: none; max-width: 280px; margin: 0; padding: 10px 16px 9px;
+  border: 1px solid var(--border); border-bottom: 0; border-radius: 14px 14px 0 0; background: var(--sunken); color: var(--muted);
+  font: 500 15px/1.2 var(--sans); cursor: pointer; }
+.course-tab span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.course-tab .ico { width: 17px; height: 17px; flex: none; }
+.course-tab:hover { color: var(--text); }
+.course-tab.active { position: relative; z-index: 1; background: var(--accent-soft); color: var(--accent-ink); font-weight: 650;
+  border-color: var(--accent); padding-bottom: 10px; margin-bottom: -1px; }
+.course-tab.add { padding: 10px 14px 9px; font-size: 17px; font-weight: 600; }
+.course-tree.tabbed .tree-body { border: 1px solid var(--accent); border-radius: 0 18px 18px 18px; padding: 14px 14px 10px;
+  background: var(--accent-soft); }
+.course-tree.tabbed .tree-body .tree-source { box-shadow: none; }
+
+.review-files { margin: -4px 0 14px; }
+.hero-actions { display: flex; gap: 8px; flex: none; }
+@media (max-width: 640px) { .hero-actions { flex-direction: column; } }
