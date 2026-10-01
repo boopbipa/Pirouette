@@ -178,7 +178,12 @@ La page d'un cours est l'**atelier** : tout s'y règle et s'y modifie, **Révise
 comme un arbre qui part du fichier importé :
 - **Ton cours** (en haut, replié : juste le nom du fichier ; « Modifier » le déplie) : le ou les fichiers du cours. « **Nouvelle version** » dépose la version à jour : elle
   remplace l'ancienne (même un PDF à la place d'un Keynote), les chapitres sont redécoupés, tes quiz et tes cartes
-  gardés ; « **Redécouper** » relance le repérage des chapitres ; « + Ajouter un fichier » ou glisser un fichier.
+  gardés ; « **Redécouper** » relance le repérage des chapitres ; on peut aussi y glisser un fichier.
+- **+ Ajouter un cours** (en haut, à gauche de « Gérer le cours ») : un autre cours de la même matière (CM2, TD…). Ses
+  chapitres, quiz et flashcards s'ajoutent à ceux du cours, rien n'est remplacé (seul un fichier du même nom remplace
+  l'ancien, comme une nouvelle version).
+- « **Replier chapitres, quiz et flashcards** » (sous le fichier) range les trois dépliants d'un coup, avec un résumé
+  (« 4 chapitres · 2 quiz · 9 flashcards ») ; Pirouette s'en souvient pour chaque cours.
 - En dessous, reliés au fichier par un trait, trois **dépliants** :
   - **Chapitres** : pour chacun ce qu'il contient (« 12 questions · 20 cartes »), **Créer** (un quiz ou des flashcards
     sur ce seul chapitre) et « ••• » (voir ses questions, voir ses cartes, exporter son quiz) ;

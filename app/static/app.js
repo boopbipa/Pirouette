@@ -5430,6 +5430,29 @@ $("#cards-revise").addEventListener("click", (e) => {
   setScopeMode("cartes");
   go(`#/reviser/cours/${state.course.id}`);
 });
+// Replier / déplier chapitres, quiz et flashcards (gardé pour chaque cours)
+function treeFolded(id) { try { return localStorage.getItem(`pirouette.treeFolded.${id}`) === "1"; } catch { return false; } }
+function renderTreeToggle() {
+  const course = state.course;
+  if (!course) return;
+  const folded = treeFolded(course.id);
+  $("#course-tree").classList.toggle("folded", folded);
+  $("#tree-toggle").setAttribute("aria-expanded", String(!folded));
+  const n = (id) => Number(($(id).textContent.match(/\d+/) || [0])[0]);
+  const counts = [plural(n("#fold-chapitres-count"), "chapitre", "chapitres"), plural(n("#fold-quiz-count"), "quiz", "quiz"),
+    plural(n("#fold-cards-count"), "flashcard", "flashcards")].join(" · ");
+  $("#tree-toggle-text").textContent = folded ? `Afficher : ${counts}` : "Replier chapitres, quiz et flashcards";
+}
+// Les compteurs des dépliants changent (chargement, création…) : le texte du bouton suit
+const treeCounts = new MutationObserver(() => renderTreeToggle());
+["#fold-chapitres-count", "#fold-quiz-count", "#fold-cards-count"].forEach((id) =>
+  treeCounts.observe($(id), { childList: true, characterData: true, subtree: true }));
+$("#tree-toggle").addEventListener("click", () => {
+  const id = state.course?.id;
+  if (!id) return;
+  try { localStorage.setItem(`pirouette.treeFolded.${id}`, treeFolded(id) ? "0" : "1"); } catch {}
+  renderTreeToggle();
+});
 $("#prepare-open").addEventListener("click", (e) => {
   e.preventDefault();  // un bouton dans le titre du dépliant ne le replie pas
   e.stopPropagation();

@@ -634,6 +634,8 @@
           </div>
         </div>
         <div class="more">
+          <label class="ghost small button-like add-course-file" for="file-input" id="add-course-file"
+                 title="Un autre cours de cette matière (CM2, TD…) : ses chapitres, quiz et flashcards s'ajoutent à ceux-ci, rien n'est remplacé">+ Ajouter un cours</label>
           <button class="ghost small manage-btn" type="button" id="course-more" aria-haspopup="menu">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
             Gérer le cours <span class="caret" aria-hidden="true">▾</span></button>
@@ -688,7 +690,6 @@
             <div class="fold-tools">
               <p class="muted small-text tree-hint">Tout part de ce fichier : Pirouette le découpe en chapitres, puis en tire tes quiz et tes flashcards.
                 Ton cours a avancé ? « Nouvelle version » : seuls les passages nouveaux ont besoin de nouvelles questions.</p>
-              <span class="head-actions"><label class="ghost small button-like" for="file-input">+ Ajouter un fichier</label></span>
             </div>
             <ul id="file-list" class="file-list source-list"></ul>
             <label id="dropzone" class="dropzone dropzone-slim" for="file-input">
@@ -701,7 +702,10 @@
           <p id="chapters-status" class="status" hidden></p>
         </details>
 
-        <div class="tree-branches">
+        <!-- Chapitres, quiz et flashcards se replient d'un coup (beaucoup de cours = une longue page) -->
+        <button type="button" class="tree-toggle" id="tree-toggle" aria-expanded="true" aria-controls="tree-branches">
+          <span class="tree-chev" aria-hidden="true"></span><span id="tree-toggle-text">Replier</span></button>
+        <div class="tree-branches" id="tree-branches">
           <details class="card tree-fold" id="panel-chapitres">
             <summary><span class="fold-title">Chapitres</span><small class="muted" id="fold-chapitres-count"></small>
               <button class="primary small fold-action" type="button" id="prepare-open">Tout préparer</button></summary>
