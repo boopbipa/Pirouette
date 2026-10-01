@@ -208,7 +208,8 @@ présentation ».
 gauche** (« Je ne savais pas »), comme sur Tinder. Plus elle penche, plus la lumière de ce côté s'allume (vert à droite,
 rouge à gauche) et plus le bouton de ce côté grandit, jusqu'à devenir tout vert ou tout rouge. Relâchée trop tôt, elle
 revient au centre ; pas encore retournée, elle résiste (« Retourne d'abord la carte »). Les deux boutons ✕ / ✓ restent
-cliquables ; « À moitié » a disparu.
+cliquables ; « À moitié » a disparu. Sur chaque carte : le chapitre en court en haut (« Chapitre 1 ») et le nom du
+cours en bas (« Psychanalyse »), comme l'extension d'une carte à collectionner.
 
 **Tout au clavier** : quiz, révisions et partiels blancs se font sans la souris. Par défaut : **1 à 6** choisit une
 réponse (**V** / **F** pour vrai/faux), **Entrée** valide puis passe à la suite, **←** / **→** question précédente /

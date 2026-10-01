@@ -2487,6 +2487,13 @@ function cardRarity(card) {
   return { cls: "", label: "◇ Nouvelle" };
 }
 
+// « Chapitre 1 — Comment débuter » → « Chapitre 1 » (aussi Partie II, Section 3…) ; sinon le titre tel quel
+function shortChapter(title) {
+  if (!title) return "";
+  const m = /^\s*((?:chapitre|chap\.?|partie|section|le[çc]on|s[ée]ance|module|th[èe]me|unit[ée]|cours|cm|td)\s*n?°?\s*[0-9IVXLC]+[a-z]?)(?=$|[\s:.,—–-])/i.exec(title);
+  return m ? m[1] : title;
+}
+
 function dressCard(card, s) {
   const el = $("#flashcard");
   const rarity = cardRarity(card);
@@ -2495,7 +2502,9 @@ function dressCard(card, s) {
   leanCard(0);
   if (rarity.cls) el.classList.add(rarity.cls);
   const item = s.items[s.index];
-  const set = card.scope?.[0] || item.course_name || "Flashcard";
+  // En haut : le chapitre en court (« Chapitre 1 ») ; en bas : le nom du cours (comme l'extension d'une carte)
+  const set = shortChapter(card.scope?.[0]) || item.course_name || "Flashcard";
+  document.querySelectorAll("[data-card-course]").forEach((e) => { e.textContent = item.course_name || "Pirouette"; });
   const pad = (n) => String(n).padStart(3, "0");
   document.querySelectorAll("[data-card-set]").forEach((e) => { e.textContent = set; });
   document.querySelectorAll("[data-card-rarity]").forEach((e) => { e.textContent = rarity.label; });
