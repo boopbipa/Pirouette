@@ -103,6 +103,8 @@ def test_thinking_is_off_by_default_and_only_sent_to_thinking_models(client, mon
     sent = []
 
     def handler(request):
+        if request.url.path == "/api/tags":
+            return httpx.Response(200, json={"models": [{"name": "qwen3:14b"}, {"name": "qwen2.5:7b"}]})
         if request.url.path == "/api/show":
             name = json.loads(request.content)["model"]
             return httpx.Response(200, json={"capabilities": ["completion"] + (["thinking"] if "qwen3" in name else [])})

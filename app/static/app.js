@@ -1856,14 +1856,18 @@ document.addEventListener("click", (e) => {
 // L'IA choisie (moteur par défaut, ou le dernier utilisé) repère les chapitres, fichier par fichier.
 async function detectChapters(fileIds, { quiet = false } = {}) {
   if (!fileIds.length || state.detecting) return;
-  if (!state.config) await loadConfig();
-  const provider = selectedProvider();
+  // Le repérage des chapitres se fait toujours sur ce Mac (IA locale), même si l'app Claude est le moteur choisi
+  // pour les quiz : elle ne peut pas le faire toute seule. L'état d'Ollama est relu à chaque fois (il a pu être
+  // lancé depuis).
+  const config = await api("/api/config").catch(() => null);
+  if (config) state.config = config;
+  const provider = selectedProvider() === "claude" && config?.claude?.available ? "claude" : "local";
   const status = $("#chapters-status");
-  if (!state.config[provider]?.available) {
+  if (!config?.[provider]?.available) {
     if (quiet) return;  // pas d'IA prête : on garde le repérage automatique
     status.hidden = false;
     status.className = "status ko";
-    status.innerHTML = `L'IA « ${provider === "claude" ? "Claude" : "locale"} » n'est pas prête : <a href="#/reglages">configure-la dans Réglages</a>.`;
+    status.innerHTML = localProblem(config) + " Le découpage automatique est gardé.";
     return;
   }
   const courseId = state.course.id;
@@ -1877,7 +1881,10 @@ async function detectChapters(fileIds, { quiet = false } = {}) {
       if (!f) continue;
       status.className = "status";
       status.textContent = `L'IA repère les chapitres de « ${f.name} »…`;
-      const result = await api(`/api/courses/${courseId}/files/${id}/chapters`, { method: "POST", body: engineForm() });
+      const form = engineForm();
+      form.set("provider", provider);
+      if (provider === "local") form.set("model", $("#local-model")?.value || "");
+      const result = await api(`/api/courses/${courseId}/files/${id}/chapters`, { method: "POST", body: form });
       found.push(`${f.name} : ${result.found ? `${result.found} chapitres` : "pas de chapitres"}`);
       if (state.course?.id !== courseId) return;  // on a changé de cours entre-temps
       state.course.files = result.course.files;
@@ -1893,6 +1900,15 @@ async function detectChapters(fileIds, { quiet = false } = {}) {
     state.detecting = false;
     if (state.course?.id === courseId) renderFiles(state.course);
   }
+}
+
+// Ce qui manque à l'IA locale, dit simplement (Ollama fermé, ou ouvert mais sans modèle)
+function localProblem(config) {
+  if (!config?.local?.running) {
+    return "Pirouette ne trouve pas Ollama sur ce Mac : ouvre l'app <b>Ollama</b> (l'icône en forme de lama dans la barre "
+      + "des menus doit apparaître), puis réessaie (<a href=\"#/reglages\">Réglages → IA locale</a>).";
+  }
+  return "Ollama est ouvert, mais aucun modèle n'y est installé : <a href=\"#/reglages\">télécharge-en un dans Réglages → IA locale</a>.";
 }
 
 // ---------- Moteurs ----------

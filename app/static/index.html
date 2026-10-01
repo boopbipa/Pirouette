@@ -377,6 +377,7 @@
         <div class="inline-row version-row">
           <span>Pirouette <b id="app-version"></b></span>
           <button class="ghost small" type="button" id="update-check">Vérifier les mises à jour</button>
+          <button class="ghost small" type="button" id="welcome-replay">Revoir la présentation</button>
         </div>
         <p class="status" id="update-status" hidden></p>
       </div>
@@ -402,21 +403,6 @@
           <input type="number" id="quiz-size" min="0" max="50" value="10">
         </div>
         <p class="status" id="revision-status" hidden></p>
-      </div>
-
-      <div class="card" id="keys-card">
-        <h2>Clavier</h2>
-        <p class="muted small-text">Fais tes quiz, tes révisions et tes partiels blancs sans la souris. Clique sur une touche pour la changer,
-          puis appuie sur la nouvelle (Échap pour annuler). Les touches sont aussi rappelées à l'écran.</p>
-        <label class="toggle-row first">
-          <input type="checkbox" id="keys-instant">
-          <span><strong>Valider dès que je choisis une réponse</strong>
-            <small class="muted">Sinon : la touche de la réponse, puis Entrée.</small></span>
-        </label>
-        <div class="keys-list" id="keys-list"></div>
-        <div class="actions"><button class="ghost small" type="button" id="keys-reset">Rétablir les touches par défaut</button>
-          <button class="ghost small" type="button" id="welcome-replay">Revoir la présentation de Pirouette</button></div>
-        <p class="status" id="keys-status" hidden></p>
       </div>
 
       <div class="card" id="appearance-card">
@@ -598,6 +584,21 @@
           <p class="status" id="settings-import-status" hidden></p>
         </div>
       </div>
+
+      <details class="card fold-card" id="keys-card">
+        <summary><span>Clavier <span class="muted">· les touches des quiz, révisions et partiels</span></span></summary>
+        <p class="muted small-text">Fais tes quiz, tes révisions et tes partiels blancs sans la souris. Clique sur une touche pour la changer,
+          puis appuie sur la nouvelle (Échap pour annuler). Les touches sont aussi rappelées à l'écran.</p>
+        <label class="toggle-row first">
+          <input type="checkbox" id="keys-instant">
+          <span><strong>Valider dès que je choisis une réponse</strong>
+            <small class="muted">Sinon : la touche de la réponse, puis Entrée.</small></span>
+        </label>
+        <div class="keys-list" id="keys-list"></div>
+        <div class="actions"><button class="ghost small" type="button" id="keys-reset">Rétablir les touches par défaut</button></div>
+        <p class="status" id="keys-status" hidden></p>
+      </details>
+
     </section>
 
     <!-- Un cours : trois entrées (quiz, flashcards, fichiers) -->

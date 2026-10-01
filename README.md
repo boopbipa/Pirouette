@@ -195,14 +195,14 @@ sont aux couleurs de l'app.
 « Passer ») : ce que fait Pirouette, déposer son cours (découpé en chapitres), créer ses quiz avec l'app Claude (la
 demande à copier, et comment ménager son forfait), réviser un peu chaque jour (cartes argent, or, holo), préparer
 ses partiels (rétroplanning, partiels blancs) ; le dernier mène à la création du premier cours. Après une mise à
-jour, un seul carton « **Quoi de neuf** » avec les nouveautés de la version. Réglages → Clavier → « Revoir la
-présentation de Pirouette ».
+jour, un seul carton « **Quoi de neuf** » avec les nouveautés de la version. Réglages → Version → « Revoir la
+présentation ».
 
 **Tout au clavier** : quiz, révisions et partiels blancs se font sans la souris. Par défaut : **1 à 6** choisit une
 réponse (**V** / **F** pour vrai/faux), **Entrée** valide puis passe à la suite, **←** / **→** question précédente /
 suivante, **Espace** retourne une flashcard puis **1 / 2 / 3** (je ne savais pas / à moitié / je savais), **Échap**
 quitte (avec confirmation). Les touches sont rappelées à l'écran (pastilles à côté des réponses et des boutons).
-**Réglages → Clavier** : un clic sur une touche, puis la nouvelle ; Pirouette refuse une touche déjà utilisée au même
+**Réglages → Clavier** (dépliant, en bas de la page) : un clic sur une touche, puis la nouvelle ; Pirouette refuse une touche déjà utilisée au même
 moment ; « Valider dès que je choisis une réponse » ; « Rétablir les touches par défaut ».
 
 **Mes cours et Réviser : la même grille, pas le même contenu.** Les deux pages montrent les semestres (dépliables,
@@ -303,6 +303,11 @@ besoin de la figure (schéma à légender) l'affiche au-dessus des réponses, da
 **Réinitialiser les statistiques d'un cours** : « Gérer le cours ». Scores des quiz, réussites par question,
 progression des flashcards (elles redeviennent nouvelles), historique des révisions et notes des partiels repartent
 de zéro ; les quiz, les cartes et les fichiers sont gardés.
+
+**Repérer les chapitres avec l'IA** (« Redécouper ») se fait toujours sur ce Mac, avec l'IA locale, même quand
+l'app Claude est le moteur choisi pour les quiz. Si Ollama est fermé, ou ouvert sans modèle, Pirouette le dit
+précisément. Si le modèle conseillé n'est pas installé, Pirouette prend un modèle installé (d'abord ceux qui
+tournent sur le Mac, puis les modèles « cloud » d'Ollama).
 
 **Organisation du cours ignorée** : l'IA a pour consigne de laisser de côté les infos pratiques (modalités
 d'évaluation, « 30 % de la note », partiels, calendrier, salles, contacts, bibliographie), et un filtre écarte celles

@@ -363,7 +363,7 @@ async def config() -> dict:
             "running": ollama_models is not None,
             "available": bool(ollama_models),
             "models": ollama_models or [],
-            "default_model": ollama_provider.default_model(),
+            "default_model": ollama_provider.choose_model(None, ollama_models or []),
         },
         "claude": {
             "enabled": CLAUDE_ENABLED,

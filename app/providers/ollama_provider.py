@@ -51,15 +51,37 @@ def default_model() -> str:
     return (recommended_model(ram_gb()) or MODELS[0])["name"]
 
 
+def _base(name: str) -> str:
+    return name.removesuffix(":latest")
+
+
+def choose_model(wanted: str | None, installed: list[str]) -> str:
+    """Le modèle à utiliser : celui demandé s'il est installé, sinon le modèle conseillé, sinon un modèle installé
+    (d'abord ceux qui tournent sur le Mac, puis les modèles « cloud » d'Ollama). Sans modèle installé : la demande."""
+    wanted = wanted or default_model()
+    if not installed:
+        return wanted
+    by_base = {_base(m): m for m in installed}
+    for name in (wanted, default_model()):
+        if _base(name) in by_base:
+            return by_base[_base(name)]
+    on_mac = [m for m in installed if "cloud" not in m]
+    return (on_mac or installed)[0]
+
+
+async def pick_model(model: str | None) -> str:
+    return choose_model(model, await list_models() or [])
+
+
 async def list_models() -> list[str] | None:
     """Modèles installés, ou None si Ollama ne répond pas."""
     try:
         async with httpx.AsyncClient(timeout=5) as client:
             response = await client.get(f"{ollama_url()}/api/tags")
             response.raise_for_status()
-    except httpx.HTTPError:
+            return sorted(m["name"] for m in response.json().get("models", []))
+    except (httpx.HTTPError, ValueError):
         return None
-    return sorted(m["name"] for m in response.json().get("models", []))
 
 
 async def generate(course_text: str, options: QuizOptions, model: str | None = None, on_progress=None) -> list[dict]:
@@ -77,7 +99,7 @@ async def run(course_text: str, system: str, schema: dict, build_prompt, total_i
     `build_prompt(morceau, nb_éléments, partie)` construit la demande pour chaque morceau. Avec `total_items`,
     les éléments (questions, cartes…) sont répartis entre les morceaux ; sinon chaque morceau est traité en entier.
     """
-    model = model or default_model()
+    model = await pick_model(model)
     chunks = chunk_text(course_text, chunk_chars())
     plan = plan_chunks(chunks, total_items) if total_items else [(c, 0) for c in chunks]
     plan = [piece for chunk, n in plan for piece in _split_big(chunk, n)]
@@ -116,7 +138,7 @@ async def generate_cards(course_text: str, n_cards: int, language: str, model: s
 async def ask(system: str, schema: dict, prompt: str, model: str | None = None) -> dict:
     """Une petite demande structurée, en un seul appel (ex. : repérer les chapitres)."""
     async with httpx.AsyncClient(timeout=httpx.Timeout(600, connect=5)) as client:
-        return await _chat(client, model or default_model(), schema, [
+        return await _chat(client, await pick_model(model), schema, [
             {"role": "system", "content": system},
             {"role": "user", "content": prompt},
         ])

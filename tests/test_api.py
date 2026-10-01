@@ -434,3 +434,13 @@ def test_general_feedback(client):
     assert result["mailto"].startswith("mailto:gonnetpierrelouis@gmail.com?subject=")
     saved = json.loads((main.store.root / "feedback.json").read_text())
     assert saved[-1]["kind"] == "Bug" and saved[-1]["message"] == "Le glisser ne marche pas"
+
+
+def test_local_model_falls_back_to_an_installed_one(monkeypatch):
+    from app.providers import ollama_provider as op
+    monkeypatch.setattr(op, "default_model", lambda: "qwen3:8b")
+    assert op.choose_model(None, []) == "qwen3:8b"                                   # rien d'installé : on garde la demande
+    assert op.choose_model(None, ["gemma4:31b-cloud"]) == "gemma4:31b-cloud"         # seul modèle : le cloud d'Ollama
+    assert op.choose_model(None, ["gemma4:31b-cloud", "mistral:latest"]) == "mistral:latest"  # d'abord ceux du Mac
+    assert op.choose_model("mistral", ["mistral:latest", "qwen3:8b"]) == "mistral:latest"
+    assert op.choose_model("absent:1b", ["llama3:8b", "qwen3:8b"]) == "qwen3:8b"      # le conseillé s'il est là
