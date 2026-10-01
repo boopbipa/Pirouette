@@ -3464,6 +3464,7 @@ function chooseQuiz(quizzes) {
       const b = e.target.closest("[data-i]");
       if (b || e.target.closest("#choose-quiz-cancel")) { dialog.close(); resolve(b ? quizzes[b.dataset.i] : null); }
     };
+    dialog.addEventListener("close", () => resolve(null), { once: true });  // fermée autrement (croix, clic à côté)
     dialog.showModal();
   });
 }
@@ -5650,3 +5651,29 @@ $("#prepare-go").addEventListener("click", async () => {
   }
 });
 $("#prepare-local-off").addEventListener("click", (e) => { if (e.target.closest("a")) $("#prepare-panel").close(); });
+
+// Toutes les fenêtres : une croix en haut à droite, et un clic à côté (sur le fond assombri) les ferme, comme Échap.
+function dismissDialog(dialog) {
+  const cancel = new Event("cancel", { cancelable: true });
+  dialog.dispatchEvent(cancel);
+  if (!cancel.defaultPrevented && dialog.open) dialog.close("");
+}
+document.querySelectorAll("dialog").forEach((dialog) => {
+  if (!dialog.classList.contains("welcome")) {
+    const x = Object.assign(document.createElement("button"), { type: "button", className: "dialog-x", innerHTML: "&times;" });
+    x.setAttribute("aria-label", "Fermer");
+    x.addEventListener("click", () => dismissDialog(dialog));
+    dialog.prepend(x);
+  }
+  // Un appui commencé dans la fenêtre puis relâché dehors (sélection de texte) ne la ferme pas
+  let downOutside = false;
+  const outside = (e) => {
+    const r = dialog.getBoundingClientRect();
+    return e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom;
+  };
+  dialog.addEventListener("pointerdown", (e) => { downOutside = e.target === dialog && outside(e); });
+  dialog.addEventListener("click", (e) => {
+    if (e.target === dialog && downOutside && outside(e)) dismissDialog(dialog);
+    downOutside = false;
+  });
+});

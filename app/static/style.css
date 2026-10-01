@@ -1628,3 +1628,9 @@ dialog.prepare-dialog.prepare { margin: auto; border: 0; }
 .split-offer p { margin: 0 0 10px; display: flex; flex-direction: column; gap: 2px; }
 .split-offer .muted { font-size: 14px; }
 .split-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+
+/* Croix de fermeture des fenêtres */
+.dialog-x { position: absolute; top: 12px; right: 12px; z-index: 2; width: 32px; height: 32px; padding: 0; display: grid; place-items: center;
+  border: 0; border-radius: 50%; background: transparent; color: var(--muted); font-size: 24px; line-height: 1; cursor: pointer; }
+.dialog-x:hover { background: var(--sunken); color: var(--text); }
+dialog > h2:first-of-type, dialog > h3:first-of-type { padding-right: 36px; }
