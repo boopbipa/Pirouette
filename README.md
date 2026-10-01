@@ -208,7 +208,8 @@ présentation ».
 gauche** (« Je ne savais pas »), comme sur Tinder. Plus elle penche, plus le bouton de ce côté (vert à droite, rouge
 à gauche) grandit, jusqu'à devenir tout vert ou tout rouge. Lancée, elle garde son élan et file hors
 de l'écran sans marquer d'arrêt. Relâchée trop tôt, elle revient au centre ; pas encore retournée, elle résiste (« Retourne d'abord la carte »). Les deux boutons ✕ / ✓ restent
-cliquables ; « À moitié » a disparu. Dans une séance mélangée, une question de quiz arrive en glissant doucement
+cliquables ; « À moitié » a disparu. Le bouton **Mélanger** (en haut de la séance) rebat les cartes qui restent ; la
+carte en main y retourne si sa réponse n'a pas encore été vue. Dans une séance mélangée, une question de quiz arrive en glissant doucement
 depuis la droite (fondu court) et repart vers la gauche une fois finie ; la carte qui suit une question arrive de même. Sur chaque carte : le chapitre en court en haut (« Chapitre 1 ») et le nom du
 cours en bas (« Psychanalyse »), comme l'extension d'une carte à collectionner, avec la tête de Pirouette au milieu
 (dans la couleur choisie dans Réglages → Couleur de l'app).
@@ -233,7 +234,7 @@ puis trois onglets : **Réviser**, **Rétroplanning** et **Suivi**. Dans l'ongle
 plan et ses réglages), puis trois accès distincts : **Flashcards**, **Quiz** et **Partiel blanc** (le dernier choisi est
 gardé).
 - **Flashcards** (rien que des cartes ; aussi depuis la page du cours, bouton « Réviser → » du dépliant Flashcards) : trois paquets, **À revoir aujourd'hui**, **Là où je bloque** et **Tout le
-  paquet**, pour tout le cours ou un chapitre (puces « Chapitre 1 », « Chapitre 2 »…), en mode Retourner ou Écrire.
+  paquet** (tiré dans un ordre différent à chaque fois), pour tout le cours ou un chapitre (puces « Chapitre 1 », « Chapitre 2 »…), en mode Retourner ou Écrire.
 - **Quiz** : tous les quiz, ou ceux d'un chapitre (mêmes puces), avec « Faire le quiz ».
 - **Plan de révision** (sur un semestre, ou un cours sans semestre) : « une séance tous les 1 / 2 / 3 / 7 jours, de
   15 / 30 / 45 minutes ». Pirouette affiche la séance à faire ou la prochaine date, les séances tenues (« 4 sur 5 ») et

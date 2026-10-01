@@ -939,9 +939,13 @@
       <div class="progress"><div id="cards-bar"></div></div>
       <div class="session-top">
         <p class="muted small-text session-origin" id="session-origin"></p>
-        <div class="filters mini" id="session-mode" role="radiogroup" aria-label="Façon de réviser les cartes">
-          <button type="button" role="radio" data-card-mode="flip">Retourner</button>
-          <button type="button" role="radio" data-card-mode="type">Écrire</button>
+        <div class="session-tools">
+          <button class="ghost small shuffle-btn" type="button" id="session-shuffle" title="Rebattre les cartes qui restent">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 4h4v4M4 20 20 4M20 16v4h-4M15 15l5 5M4 4l5 5"/></svg>Mélanger</button>
+          <div class="filters mini" id="session-mode" role="radiogroup" aria-label="Façon de réviser les cartes">
+            <button type="button" role="radio" data-card-mode="flip">Retourner</button>
+            <button type="button" role="radio" data-card-mode="type">Écrire</button>
+          </div>
         </div>
       </div>
       <div id="card-stage">

@@ -1560,3 +1560,13 @@ dialog.prepare-dialog.prepare { margin: auto; border: 0; }
 @keyframes stage-in { from { opacity: 0; transform: translateX(28px); } }
 @keyframes stage-out { to { opacity: 0; transform: translateX(-28px); } }
 @media (prefers-reduced-motion: reduce) { .stage-in, .stage-out { animation: none; } }
+
+/* Mélanger le paquet (séance de cartes) */
+.session-tools { display: flex; align-items: center; gap: 8px; }
+.shuffle-btn { display: inline-flex; align-items: center; gap: 6px; }
+.shuffle-btn svg { width: 15px; height: 15px; }
+.tcg-pile.shuffling span:nth-child(1) { animation: pile-riffle .5s ease; }
+.tcg-pile.shuffling span:nth-child(2) { animation: pile-riffle .5s ease .06s reverse; }
+.tcg-pile.shuffling span:nth-child(3) { animation: pile-riffle .5s ease .12s; }
+@keyframes pile-riffle { 40% { translate: 26px -6px; rotate: 7deg; } 70% { translate: -18px 4px; rotate: -5deg; } }
+@media (prefers-reduced-motion: reduce) { .tcg-pile.shuffling span { animation: none !important; } }

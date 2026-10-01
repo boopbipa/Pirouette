@@ -2457,6 +2457,8 @@ function showItem() {
   $("#card-stage").hidden = item.kind !== "card";
   $("#question-stage").hidden = item.kind !== "question";
   $("#session-mode").hidden = item.kind !== "card";
+  // Mélanger : utile s'il reste au moins deux cartes à tirer
+  $("#session-shuffle").hidden = item.kind !== "card" || s.items.length - s.index < 3;
   if (item.kind === "card") showCard();
   else showSessionQuestion(item);
   if (item.kind === "question") slideIn($("#question-stage"));
@@ -2734,6 +2736,25 @@ function endSwipe() {
 $("#flashcard").addEventListener("pointerup", endSwipe);
 $("#flashcard").addEventListener("pointercancel", endSwipe);
 
+// Mélanger le paquet : les cartes qui restent sont rebattues ; la carte en main y retourne si sa réponse n'a pas été vue
+$("#session-shuffle").addEventListener("click", () => {
+  const s = state.session;
+  if (!s || s.leaving || s.items[s.index]?.kind !== "card") return;
+  const keep = s.revealed ? s.index + 1 : s.index;
+  const rest = s.items.slice(keep);
+  for (let i = rest.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [rest[i], rest[j]] = [rest[j], rest[i]];
+  }
+  s.items = [...s.items.slice(0, keep), ...rest];
+  if (!s.revealed) showItem();  // nouvelle carte tirée (avec l'animation de tirage)
+  const pile = $("#tcg-pile");
+  pile.classList.remove("shuffling");
+  void pile.offsetWidth;
+  pile.classList.add("shuffling");
+  showCardToast("Paquet mélangé");
+});
+
 function nextItem() {
   const s = state.session;
   // Une question finie glisse doucement vers la gauche avant la suite (les cartes, elles, sont lancées)
@@ -2888,7 +2909,7 @@ function finishSession() {
   $("#cards-bar").style.width = "100%";
   $("#cards-summary").innerHTML = parts.join("<br>");
   $("#session-correction-btn").hidden = !s.results.length;
-  $("#card-stage").hidden = $("#question-stage").hidden = $("#session-mode").hidden = true;
+  $("#card-stage").hidden = $("#question-stage").hidden = $("#session-mode").hidden = $("#session-shuffle").hidden = true;
   $("#session-correction").hidden = true;
   $("#session-origin").textContent = "";
   $("#cards-done").hidden = false;
