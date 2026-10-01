@@ -1585,7 +1585,9 @@ dialog.prepare-dialog.prepare { margin: auto; border: 0; }
 
 /* Une matière, plusieurs cours : des onglets qui font corps avec la case du cours (même fond, sans contour,
    coins arrondis vers l'intérieur au pied de l'onglet actif, comme les onglets d'un navigateur) */
-.course-tabs { --tab-bg: var(--accent-soft); --tab-r: 14px; display: flex; align-items: flex-end; gap: 6px; padding: 0 var(--tab-r);
+.course-tabs { --tab-bg: var(--accent-soft); --tab-r: 14px; display: flex; align-items: flex-end; gap: 6px;
+  /* les coins creusés du premier onglet tombent sur le bord droit de la case, après son arrondi (20px) */
+  padding: 0 var(--tab-r) 0 calc(20px + var(--tab-r));
   overflow-x: auto; overflow-y: hidden; scrollbar-width: none; }
 .course-tabs::-webkit-scrollbar { display: none; }
 .course-tab { position: relative; display: inline-flex; align-items: center; gap: 8px; flex: none; max-width: 280px; margin: 0;
