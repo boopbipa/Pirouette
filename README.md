@@ -304,7 +304,9 @@ besoin de la figure (schéma à légender) l'affiche au-dessus des réponses, da
 progression des flashcards (elles redeviennent nouvelles), historique des révisions et notes des partiels repartent
 de zéro ; les quiz, les cartes et les fichiers sont gardés.
 
-**Repérer les chapitres avec l'IA** (« Redécouper ») se fait toujours sur ce Mac, avec l'IA locale, même quand
+**Repérer les chapitres avec l'IA** (« Redécouper », ou juste après le dépôt d'un fichier) se fait **en arrière-plan** :
+il apparaît dans le suivi en bas à gauche (visible partout, repliable), comme les créations de quiz, avec ce que
+fait l'IA, une barre qui avance, « Annuler », puis « 7 chapitres repérés » et « Voir ». Il se fait toujours sur ce Mac, avec l'IA locale, même quand
 l'app Claude est le moteur choisi pour les quiz. Si Ollama est fermé, ou ouvert sans modèle, Pirouette le dit
 précisément. Si le modèle conseillé n'est pas installé, Pirouette prend un modèle installé (d'abord ceux qui
 tournent sur le Mac, puis les modèles « cloud » d'Ollama).

@@ -52,7 +52,11 @@ class Jobs:
             self.current = (job, asyncio.create_task(factory(on_progress)))
             try:
                 made = await self.current[1]
-                if job.get("kind") == "cards":
+                if job.get("kind") == "chapters":
+                    job.update(status="done", message=f"{made['count']} chapitres repérés" if made["count"]
+                               else "Pas de chapitres trouvés : le document reste en un seul bloc",
+                               result={"title": made["title"], "count": made["count"]})
+                elif job.get("kind") == "cards":
                     job.update(status="done", message=f"{made['count']} cartes ajoutées",
                                result={"title": made["title"], "count": made["count"]})
                 else:

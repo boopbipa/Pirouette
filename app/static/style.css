@@ -1432,3 +1432,10 @@ dialog.welcome::backdrop { background: rgba(23, 21, 18, .35); backdrop-filter: b
 .w-whatsnew li small { display: block; color: var(--muted); font-size: 12.5px; }
 .w-ic { flex: none; width: 30px; height: 30px; border-radius: 9px; background: var(--accent-soft); display: grid; place-items: center;
   font-size: 15px; color: var(--accent); font-weight: 800; }
+
+/* Suivi en bas à gauche : une barre animée sous chaque travail en cours (quiz, cartes, découpage) */
+.job.running .job-main::after { content: ""; display: block; height: 3px; margin-top: 6px; border-radius: 2px;
+  background: linear-gradient(90deg, transparent, var(--accent), transparent) no-repeat, var(--sunken);
+  background-size: 40% 100%, 100% 100%; animation: job-bar 1.4s ease-in-out infinite; }
+@keyframes job-bar { from { background-position: -60% 0, 0 0; } to { background-position: 160% 0, 0 0; } }
+@media (prefers-reduced-motion: reduce) { .job.running .job-main::after { animation: none; background: var(--accent); opacity: .5; } }

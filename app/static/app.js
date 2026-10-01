@@ -1444,7 +1444,7 @@ function renderFiles(course) {
       </div>
       <div class="file-actions">
         <button class="ghost small" type="button" data-replace-file="${f.id}" title="Dépose la version à jour : les chapitres sont redécoupés, tes quiz et cartes gardés">Nouvelle version</button>
-        <button class="ghost small" type="button" data-detect-file="${f.id}" ${state.detecting ? "disabled" : ""} title="${
+        <button class="ghost small" type="button" data-detect-file="${f.id}" ${chaptersRunning(f.id) ? "disabled" : ""} title="${
           f.chapters_by === "ai" ? "Relancer l'IA pour repérer les chapitres" : "Repérer les chapitres avec l'IA"}">Redécouper</button>
         <button class="icon" data-remove-file="${f.id}" aria-label="Retirer ${escapeHtml(f.name)}" title="Retirer du cours">✕</button>
       </div>
@@ -1854,8 +1854,13 @@ document.addEventListener("click", (e) => {
 });
 
 // L'IA choisie (moteur par défaut, ou le dernier utilisé) repère les chapitres, fichier par fichier.
+// Un repérage de chapitres en cours (ou en attente) pour ce fichier
+const chaptersRunning = (fileId) => jobsState.list.some((j) => j.kind === "chapters" && j.file_id === fileId
+  && (j.status === "queued" || j.status === "running"));
+
 async function detectChapters(fileIds, { quiet = false } = {}) {
-  if (!fileIds.length || state.detecting) return;
+  fileIds = fileIds.filter((id) => !chaptersRunning(id));
+  if (!fileIds.length) return;
   // Le repérage des chapitres se fait toujours sur ce Mac (IA locale), même si l'app Claude est le moteur choisi
   // pour les quiz : elle ne peut pas le faire toute seule. L'état d'Ollama est relu à chaque fois (il a pu être
   // lancé depuis).
@@ -1870,35 +1875,23 @@ async function detectChapters(fileIds, { quiet = false } = {}) {
     status.innerHTML = localProblem(config) + " Le découpage automatique est gardé.";
     return;
   }
+  // Le repérage se fait en arrière-plan : il apparaît dans le suivi en bas à gauche (visible partout, repliable)
   const courseId = state.course.id;
-  state.detecting = true;
-  renderFiles(state.course);
-  status.hidden = false;
-  const found = [];
   try {
     for (const id of fileIds) {
-      const f = state.course.files.find((x) => x.id === id);
-      if (!f) continue;
-      status.className = "status";
-      status.textContent = `L'IA repère les chapitres de « ${f.name} »…`;
-      const form = engineForm();
-      form.set("provider", provider);
-      if (provider === "local") form.set("model", $("#local-model")?.value || "");
-      const result = await api(`/api/courses/${courseId}/files/${id}/chapters`, { method: "POST", body: form });
-      found.push(`${f.name} : ${result.found ? `${result.found} chapitres` : "pas de chapitres"}`);
-      if (state.course?.id !== courseId) return;  // on a changé de cours entre-temps
-      state.course.files = result.course.files;
-      renderFiles(state.course);
-      renderTiles(state.course);
+      const form = new FormData();
+      form.append("provider", provider);
+      form.append("model", provider === "local" ? ($("#local-model")?.value || "") : "");
+      await api(`/api/courses/${courseId}/files/${id}/chapters/job`, { method: "POST", body: form });
     }
-    status.className = "status ok";
-    status.textContent = `Chapitres repérés · ${found.join(" · ")}`;
+    status.hidden = true;
+    jobsState.open = true;
+    await refreshJobs();
+    if (state.course?.id === courseId) renderFiles(state.course);
   } catch (err) {
+    status.hidden = false;
     status.className = "status ko";
     status.textContent = `Repérage par l'IA impossible (${err.message}). Le découpage automatique est gardé.`;
-  } finally {
-    state.detecting = false;
-    if (state.course?.id === courseId) renderFiles(state.course);
   }
 }
 
@@ -4922,8 +4915,10 @@ async function refreshJobs() {
   try { list = await api("/api/jobs"); } catch { return; }
   const finishedNow = list.filter((j) => j.status === "done" && !jobsState.seen.has(j.id) && jobsState.list.some((o) => o.id === j.id && o.status !== "done"));
   list.filter((j) => j.status === "done").forEach((j) => jobsState.seen.add(j.id));
+  const wasRunning = jobsState.list.some((j) => j.kind === "chapters" && (j.status === "queued" || j.status === "running"));
   jobsState.list = list;
   renderJobs();
+  if (wasRunning && state.course && !$("#view-course").hidden) renderFiles(state.course);
   // Un quiz vient d'être prêt : la liste du cours affiché se met à jour.
   if (finishedNow.length && state.course && !$("#view-course").hidden && finishedNow.some((j) => j.course_id === state.course.id)) {
     state.deck = null;
@@ -4942,8 +4937,9 @@ function renderJobs() {
   const done = list.filter((j) => j.status === "done").length;
   const paused = list.filter((j) => j.status === "paused").length;
   const waiting = paused ? ` · ${paused} à décider` : "";
+  const what = list.every((j) => j.kind === "chapters") ? "Découpage" : "Création";
   $("#jobs-title").textContent = busy
-    ? `Création en cours · ${busy} restant${busy > 1 ? "s" : ""}${done ? ` · ${done} prêt${done > 1 ? "s" : ""}` : ""}${waiting}`
+    ? `${what} en cours · ${busy} restant${busy > 1 ? "s" : ""}${done ? ` · ${done} prêt${done > 1 ? "s" : ""}` : ""}${waiting}`
     : `${done || !paused ? `${done} prêt${done > 1 ? "s" : ""}` : ""}${done ? waiting : waiting.slice(3)}${list.some((j) => j.status === "error") ? " · erreur" : ""}${
       list.some((j) => j.status === "cancelled") ? " · annulé" : ""}`;
   $("#jobs-heat").hidden = !busy || !jobsState.open;
@@ -4954,10 +4950,11 @@ function renderJobs() {
     <li class="job ${j.status}">
       <span class="job-state" aria-hidden="true"></span>
       <span class="job-main">
-        <strong>${j.kind === "cards" ? "Flashcards · " : "Quiz · "}${escapeHtml(j.status === "done" ? j.result.title : j.label)}</strong>
+        <strong>${j.kind === "cards" ? "Flashcards · " : j.kind === "chapters" ? "Chapitres · " : "Quiz · "}${escapeHtml(j.status === "done" ? j.result.title : j.label)}</strong>
         <small class="muted" title="${escapeHtml(j.message)}">${j.status === "paused" ? "" : `${escapeHtml(j.course_name)} · `}${escapeHtml(j.status === "queued" ? "en attente" : j.message)}</small>
       </span>
-      ${j.status === "done" && j.kind !== "cards" ? `<button class="primary small" type="button" data-job-start="${j.result.quiz_id}" data-job="${j.id}">Commencer</button>` : ""}
+      ${j.status === "done" && j.kind === "quiz" ? `<button class="primary small" type="button" data-job-start="${j.result.quiz_id}" data-job="${j.id}">Commencer</button>` : ""}
+      ${j.status === "done" && j.kind === "chapters" ? `<button class="ghost small" type="button" data-job-chapters="${j.course_id}" data-job="${j.id}">Voir</button>` : ""}
       ${j.status === "done" && j.kind === "cards" ? `<button class="ghost small" type="button" data-job-cards="${j.course_id}" data-job="${j.id}">Voir</button>` : ""}
       ${j.status === "queued" || j.status === "running" ? `<button class="ghost small" type="button" data-job-cancel="${j.id}">Annuler</button>` : ""}
       ${j.status === "paused" ? `<button class="primary small" type="button" data-job-retry="${j.id}" data-variant="${j.kind === "cards" ? "" : "facile"}"
@@ -4968,6 +4965,12 @@ function renderJobs() {
 
 $("#jobs-head").addEventListener("click", () => { jobsState.open = !jobsState.open; renderJobs(); });
 $("#jobs-list").addEventListener("click", async (e) => {
+  const chapters = e.target.closest("[data-job-chapters]");
+  if (chapters) {
+    await api(`/api/jobs/${chapters.dataset.job}`, { method: "DELETE" }).catch(() => {});
+    go(`#/cours/${chapters.dataset.jobChapters}/chapitres`);
+    return refreshJobs();
+  }
   const cards = e.target.closest("[data-job-cards]");
   if (cards) {
     await api(`/api/jobs/${cards.dataset.job}`, { method: "DELETE" }).catch(() => {});

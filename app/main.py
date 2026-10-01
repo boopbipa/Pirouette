@@ -524,11 +524,9 @@ async def upload_files(course_id: str, files: list[UploadFile] = File(...)) -> d
     return {"results": results, "course": store.get_course(course_id)}
 
 
-@app.post("/api/courses/{course_id}/files/{file_id}/chapters")
-async def find_chapters(course_id: str, file_id: str, provider: str = Form("local"), model: str = Form("")) -> dict:
-    """L'IA repère les chapitres du fichier. Si elle n'en trouve pas, le repérage automatique est conservé."""
-    if provider not in PROVIDERS:
-        raise HTTPException(400, f"Moteur inconnu : {provider}")
+async def _find_chapters(course_id: str, file_id: str, provider: str, model: str, on_progress=None) -> int:
+    """L'IA repère les chapitres du fichier (si elle n'en trouve pas, le repérage automatique est conservé).
+    Renvoie le nombre de chapitres."""
     entry = next((f for f in store.get_course(course_id)["files"] if f["id"] == file_id), None)
     if entry is None:
         raise NotFound(file_id)
@@ -536,16 +534,46 @@ async def find_chapters(course_id: str, file_id: str, provider: str = Form("loca
     candidates = ai_candidates(text)
     chapters = []
     if len(candidates) >= 2:
-        try:
-            answer = await PROVIDERS[provider].ask(CHAPTERS_SYSTEM, CHAPTERS_SCHEMA,
-                                                   build_chapters_prompt(candidates, entry["name"]), model or None)
-        except ProviderError as exc:
-            raise HTTPException(502, str(exc)) from exc
+        if on_progress:
+            await on_progress(f"L'IA lit les {len(candidates)} titres possibles du document…")
+        answer = await PROVIDERS[provider].ask(CHAPTERS_SYSTEM, CHAPTERS_SCHEMA,
+                                               build_chapters_prompt(candidates, entry["name"]), model or None)
         chapters = chapters_from_ai(text, answer, candidates)
     if not chapters:
         chapters = detect_chapters(text)
-    course = store.set_chapters(course_id, file_id, chapters, "ai", revision=entry["revisions"])
-    return {"course": course, "found": len(chapters)}
+    store.set_chapters(course_id, file_id, chapters, "ai", revision=entry["revisions"])
+    return len(chapters)
+
+
+@app.post("/api/courses/{course_id}/files/{file_id}/chapters")
+async def find_chapters(course_id: str, file_id: str, provider: str = Form("local"), model: str = Form("")) -> dict:
+    """Repérage immédiat (la réponse attend la fin)."""
+    if provider not in PROVIDERS:
+        raise HTTPException(400, f"Moteur inconnu : {provider}")
+    try:
+        found = await _find_chapters(course_id, file_id, provider, model)
+    except ProviderError as exc:
+        raise HTTPException(502, str(exc)) from exc
+    return {"course": store.get_course(course_id), "found": found}
+
+
+@app.post("/api/courses/{course_id}/files/{file_id}/chapters/job")
+async def find_chapters_in_background(course_id: str, file_id: str, provider: str = Form("local"),
+                                      model: str = Form("")) -> dict:
+    """Repérage en arrière-plan : il apparaît dans le suivi (en bas à gauche), avec les créations de quiz."""
+    if provider not in PROVIDERS:
+        raise HTTPException(400, f"Moteur inconnu : {provider}")
+    course = store.get_course(course_id)
+    entry = next((f for f in course["files"] if f["id"] == file_id), None)
+    if entry is None:
+        raise NotFound(file_id)
+
+    async def job(on_progress) -> dict:
+        found = await _find_chapters(course_id, file_id, provider, model, on_progress)
+        return {"title": entry["name"], "count": found}
+
+    return jobs.submit({"kind": "chapters", "course_id": course_id, "course_name": course["name"], "file_id": file_id,
+                        "provider": provider, "label": entry["name"]}, job)
 
 
 @app.get("/api/courses/{course_id}/outdated")
