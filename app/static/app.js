@@ -71,7 +71,7 @@ async function route() {
     else if (hash.startsWith("#/cours")) await loadCourses();
     else await openHome();
   } catch (err) {
-    alert(err.message);
+    notify(err.message);
     location.hash = "#/cours";
   }
 }
@@ -337,12 +337,12 @@ $("#view-courses").addEventListener("click", async (e) => {
       await api(`/api/folders/${folder.id}`, jsonBody("PATCH", { archived: !folder.archived }));
     }
     if (folderDelete) {
-      if (!confirm(`Supprimer le semestre « ${folder.name} » ? Ses cours ne sont pas supprimés : ils reviennent dans « Mes cours ».`)) return;
+      if (!await askConfirm(`Supprimer le semestre « ${folder.name} » ? Ses cours ne sont pas supprimés : ils reviennent dans « Mes cours ».`)) return;
       await api(`/api/folders/${folder.id}`, { method: "DELETE" });
     }
     loadCourses();
   } catch (err) {
-    alert(err.message);
+    notify(err.message);
   }
 });
 
@@ -399,7 +399,7 @@ async function endDrag() {
     await api(`/api/courses/${course}/folder`, jsonBody("PUT", { folder_id: folderId }));
     if (folderId) rememberFolder(folderId, true);
   } catch (err) {
-    alert(err.message);
+    notify(err.message);
   }
   loadCourses();
 }
@@ -428,6 +428,34 @@ function askText(title, value = "", placeholder = "") {
   });
 }
 $("#ask-cancel").addEventListener("click", () => $("#ask-dialog").close(""));
+
+// Confirmation et petit message aux couleurs de l'app (remplacent confirm() et alert() du système).
+// La première phrase sert de titre, la suite d'explication ; le bouton reprend le verbe de la question.
+const CONFIRM_VERBS = ["Supprimer", "Effacer", "Retirer", "Réinitialiser", "Remplacer", "Recalculer", "Rendre", "Quitter"];
+const DANGER_VERBS = ["Supprimer", "Effacer", "Retirer", "Réinitialiser"];
+function showConfirm(message, { ok, danger, notice } = {}) {
+  const dialog = $("#confirm-dialog");
+  const text = String(message);
+  const cut = text.search(/[?:!.](\s|$)/);
+  const title = cut >= 0 && cut < text.length - 1 ? text.slice(0, cut + 1) : text;
+  const rest = text.slice(title.length).trim();
+  $("#confirm-title").textContent = title;
+  $("#confirm-text").textContent = rest;
+  $("#confirm-text").hidden = !rest;
+  const leaving = /quitter/i.test(title) ? "Quitter" : null;
+  const verb = CONFIRM_VERBS.find((v) => title.startsWith(v)) || leaving;
+  $("#confirm-ok").textContent = ok || (notice ? "OK" : verb || "Confirmer");
+  dialog.classList.toggle("danger", danger ?? DANGER_VERBS.includes(verb));
+  dialog.classList.toggle("notice", Boolean(notice));
+  dialog.returnValue = "";
+  dialog.showModal();
+  $("#confirm-ok").focus();
+  return new Promise((resolve) => {
+    dialog.addEventListener("close", () => resolve(dialog.returnValue === "ok"), { once: true });
+  });
+}
+const askConfirm = (message, options) => showConfirm(message, options);
+const notify = (message) => showConfirm(message, { notice: true });
 
 async function saveName(name) {
   state.profile = await api("/api/profile", jsonBody("PUT", { name }));
@@ -1087,7 +1115,7 @@ async function testKey() {
 $("#settings-key-test").addEventListener("click", testKey);
 
 $("#settings-key-remove").addEventListener("click", async () => {
-  if (!confirm("Supprimer la clé API enregistrée dans Pirouette ?")) return;
+  if (!await askConfirm("Supprimer la clé API enregistrée dans Pirouette ?")) return;
   await api("/api/settings", jsonBody("PUT", { api_key: "" }));
   await openSettings();
   setStatus("#settings-key-status", "Clé supprimée.", true);
@@ -1349,7 +1377,7 @@ $("#replace-input").addEventListener("change", async () => {
     return uploadFiles([new File([picked], old.name, { type: picked.type })]);
   }
   // Autre format (PDF au lieu de Keynote…) : on ajoute le nouveau fichier puis on retire l'ancien
-  if (!confirm(`Remplacer « ${old.name} » par « ${picked.name} » ? Tes quiz et tes cartes sont gardés.`)) return;
+  if (!await askConfirm(`Remplacer « ${old.name} » par « ${picked.name} » ? Tes quiz et tes cartes sont gardés.`)) return;
   await uploadFiles([picked]);
   await api(`/api/courses/${state.course.id}/files/${old.id}`, { method: "DELETE" }).catch(() => {});
   refreshCourse();
@@ -1463,7 +1491,7 @@ $("#split-keep").addEventListener("click", async () => {
 document.addEventListener("click", async (e) => {
   const clear = e.target.closest("[data-clear-chapters]");
   if (!clear) return;
-  if (!confirm("Effacer les chapitres de ce fichier ? Il redevient un seul bloc. Tes quiz et tes flashcards sont gardés.")) return;
+  if (!await askConfirm("Effacer les chapitres de ce fichier ? Il redevient un seul bloc. Tes quiz et tes flashcards sont gardés.")) return;
   await api(`/api/courses/${state.course.id}/files/${clear.dataset.clearChapters}/chapters`, { method: "DELETE" });
   refreshCourse();
 });
@@ -1705,11 +1733,11 @@ document.addEventListener("click", async (e) => {
         state.course && !$("#view-course").hidden ? refreshCourse() : loadCourses();
       }
     }
-    if (deleteQuiz && confirm("Supprimer ce quiz ?")) {
+    if (deleteQuiz && await askConfirm("Supprimer ce quiz ?")) {
       await api(`/api/quizzes/${deleteQuiz}`, { method: "DELETE" });
       state.course && !$("#view-course").hidden ? refreshCourse() : loadCourses();
     }
-    if (removeFile && confirm("Retirer ce fichier du cours ?")) {
+    if (removeFile && await askConfirm("Retirer ce fichier du cours ?")) {
       await api(`/api/courses/${state.course.id}/files/${removeFile}`, { method: "DELETE" });
       refreshCourse();
     }
@@ -1734,7 +1762,7 @@ document.addEventListener("click", async (e) => {
       go(courseHash(`nouveau/${fileCreate}`));
     }
   } catch (err) {
-    alert(err.message);
+    notify(err.message);
   }
 });
 
@@ -1749,18 +1777,18 @@ $("#rename-course").addEventListener("click", async () => {
 // Repartir de zéro (après avoir beaucoup créé, modifié, supprimé des quiz) : le contenu reste, le suivi repart à zéro.
 $("#reset-stats").addEventListener("click", async () => {
   $("#course-more-menu").hidden = true;
-  if (!confirm(`Réinitialiser les statistiques de « ${state.course.name} » ?\n\nLes scores des quiz, les réussites et erreurs par question, `
+  if (!await askConfirm(`Réinitialiser les statistiques de « ${state.course.name} » ?\n\nLes scores des quiz, les réussites et erreurs par question, `
     + "la progression des flashcards (elles redeviennent nouvelles), l'historique des révisions et les notes des partiels "
     + "de ce cours sont remis à zéro. Les quiz, les cartes et les fichiers sont gardés.")) return;
   const { quizzes, cards } = await api(`/api/courses/${state.course.id}/reset-stats`, { method: "POST" });
   state.deck = null;
   await refreshCourse();
-  alert(`C'est fait : ${plural(quizzes, "quiz", "quiz")} et ${plural(cards, "carte", "cartes")} repartent de zéro.`);
+  notify(`C'est fait : ${plural(quizzes, "quiz", "quiz")} et ${plural(cards, "carte", "cartes")} repartent de zéro.`);
 });
 
 $("#delete-course").addEventListener("click", async () => {
   $("#course-more-menu").hidden = true;
-  if (!confirm(`Supprimer le cours « ${state.course.name} », ses fichiers, ses quiz et ses flashcards ?`)) return;
+  if (!await askConfirm(`Supprimer le cours « ${state.course.name} », ses fichiers, ses quiz et ses flashcards ?`)) return;
   await api(`/api/courses/${state.course.id}`, { method: "DELETE" });
   location.hash = "#/cours";
 });
@@ -2384,7 +2412,7 @@ $("#card-grid").addEventListener("click", async (e) => {
   if (edit) return openCardDialog(state.deck.cards.find((c) => c.id === edit.dataset.editCard));
   const del = e.target.closest("[data-delete-card]");
   if (del) {
-    if (!confirm("Supprimer cette carte ?")) return;
+    if (!await askConfirm("Supprimer cette carte ?")) return;
     state.deck = await api(`/api/courses/${state.course.id}/cards/${del.dataset.deleteCard}`, { method: "DELETE" });
     state.deck.course_id = state.course.id;
     return refreshCourse();
@@ -2406,7 +2434,7 @@ $("#card-grid").addEventListener("keydown", (e) => {
 });
 
 $("#cards-clear").addEventListener("click", async () => {
-  if (!confirm("Effacer toutes les flashcards de ce cours (et leur suivi) ?")) return;
+  if (!await askConfirm("Effacer toutes les flashcards de ce cours (et leur suivi) ?")) return;
   await api(`/api/courses/${state.course.id}/cards`, { method: "DELETE" });
   state.deck = null;
   refreshCourse();
@@ -2473,7 +2501,7 @@ async function saveCardDialog(keepOpen) {
           ? `Carte ajoutée. Elle ressemble à « ${result.similar.front} » : supprime l'une des deux si c'est la même.`
           : "Carte ajoutée. À la suivante !", !result.similar);
       } else if (result.similar) {
-        alert(`Carte ajoutée. Elle ressemble à une carte existante : « ${result.similar.front} ».`);
+        notify(`Carte ajoutée. Elle ressemble à une carte existante : « ${result.similar.front} ».`);
       }
     }
   } catch (err) {
@@ -2525,7 +2553,7 @@ async function startSession(params, { title, back }) {
   if (params.mode === "cards") query.set("questions", "0");
   const data = await api(`/api/session?${query}`);
   if (!data.items.length) {
-    alert(params.mode === "weak" ? "Aucune carte difficile pour l'instant : continue comme ça !"
+    notify(params.mode === "weak" ? "Aucune carte difficile pour l'instant : continue comme ça !"
       : params.mode === "today" ? "Rien à réviser aujourd'hui : tout est à jour." : "Aucune carte à réviser ici.");
     return;
   }
@@ -3097,11 +3125,11 @@ $("#card-edit-current").addEventListener("click", () => {
 $("#card-delete-current").addEventListener("click", async () => {
   const s = state.session;
   const item = s.items[s.index];
-  if (!confirm("Supprimer cette carte ? Elle disparaît du cours et de tes révisions.")) return;
+  if (!await askConfirm("Supprimer cette carte ? Elle disparaît du cours et de tes révisions.")) return;
   try {
     await api(`/api/courses/${item.course_id}/cards/${item.card.id}`, { method: "DELETE" });
   } catch (err) {
-    return alert(err.message);
+    return notify(err.message);
   }
   state.deck = null;
   s.items.splice(s.index, 1);
@@ -3574,8 +3602,8 @@ function retroItem(s) {
 }
 
 $("#retro-build").addEventListener("click", () => buildRetro(true));
-$("#retro-rebuild").addEventListener("click", () => {
-  if (confirm("Recalculer le rétroplanning à partir d'aujourd'hui ? Les séances faites sont gardées.")) buildRetro(false);
+$("#retro-rebuild").addEventListener("click", async () => {
+  if (await askConfirm("Recalculer le rétroplanning à partir d'aujourd'hui ? Les séances faites sont gardées.")) buildRetro(false);
 });
 async function buildRetro(withDate) {
   try {
@@ -3587,7 +3615,7 @@ async function buildRetro(withDate) {
   renderRetro();
 }
 $("#retro-delete").addEventListener("click", async () => {
-  if (!confirm("Supprimer le rétroplanning ?")) return;
+  if (!await askConfirm("Supprimer le rétroplanning ?")) return;
   await api(`/api/retro?${ownerQuery()}`, { method: "DELETE" });
   renderRetro();
 });
@@ -3623,7 +3651,7 @@ $("#retro-list").addEventListener("click", async (e) => {
       refreshJobs();
     } catch (err) {
       make.disabled = false;
-      alert(err.message);
+      notify(err.message);
     }
   }
 });
@@ -3943,9 +3971,9 @@ function chooseByKey(selector, index, submit) {
 }
 
 // Quitter au clavier : même question que depuis le menu
-function quitByKey() {
+async function quitByKey() {
   const question = leaveQuestion();
-  if (question && !confirm(question)) return;
+  if (question && !await askConfirm(question)) return;
   if (!$("#view-quiz").hidden) return backToCourse();
   if (!$("#view-cards").hidden) { state.sessionBack = state.session?.back; return leaveSession(); }
   if (!$("#view-exam").hidden) {
@@ -4046,6 +4074,10 @@ const WELCOME = [
 ];
 // Les nouveautés de chaque version (le carton « Quoi de neuf » ne s'affiche que si la version en a)
 const WHATS_NEW = {
+  "0.45.0": [
+    ["●", "Réponse choisie en couleur", "Dans un quiz, la réponse sélectionnée se colore de ta couleur d'accent au lieu d'un contour noir"],
+    ["🐱", "Fenêtres de confirmation Pirouette", "« Tu es sûr de vouloir quitter ? », « Supprimer ? »… s'affichent dans un panneau aux couleurs de l'app"],
+  ],
   "0.44.0": [
     ["✂", "Découper quand tu veux", "Un cours importé reste d'un bloc : Pirouette propose de le découper (IA, rapide ou pas du tout)"],
     ["⌫", "Effacer les chapitres", "Dans « Modifier », un fichier peut redevenir un seul bloc (quiz et cartes gardés)"],
@@ -4460,7 +4492,7 @@ document.querySelectorAll("[data-results]").forEach((b) => b.addEventListener("c
 
 // Supprimer une question jugée hors sujet (dans le quiz, la correction ou une séance de révision).
 async function deleteQuestion(quizId, index) {
-  if (!confirm("Supprimer cette question du quiz ? Elle ne sera plus jamais posée.")) return false;
+  if (!await askConfirm("Supprimer cette question du quiz ? Elle ne sera plus jamais posée.")) return false;
   await api(`/api/quizzes/${quizId}/questions/${index}`, { method: "DELETE" });
   return true;
 }
@@ -4919,11 +4951,19 @@ function leaveQuestion() {
   if (!$("#view-cards").hidden && $("#cards-done").hidden) return "Tu es sûr de vouloir quitter la révision ?";
   return null;
 }
-document.addEventListener("click", (e) => {
+let leaveConfirmed = false;
+document.addEventListener("click", async (e) => {
   const link = e.target.closest("a[href^='#/']");
   if (!link || e.defaultPrevented) return;
-  const question = leaveQuestion();
-  if (question && !confirm(question)) return e.preventDefault();
+  const question = !leaveConfirmed && leaveQuestion();
+  leaveConfirmed = false;
+  if (question) {
+    // On retient le clic le temps de demander, puis on le rejoue si c'est oui
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    if (await askConfirm(question)) { leaveConfirmed = true; link.click(); }
+    return;
+  }
   // Quiz ou révision lancés depuis une page : son lien a la même adresse, le navigateur ne ferait rien.
   if (link.getAttribute("href") === location.hash) {
     e.preventDefault();
@@ -4932,7 +4972,7 @@ document.addEventListener("click", (e) => {
 }, true);
 
 // ---- Rendre la copie : correction automatique, puis réponses écrites ----
-function submitExam(timeUp) {
+async function submitExam(timeUp) {
   const exam = state.exam;
   if (!exam.running) return;
   if (!timeUp) {
@@ -4940,7 +4980,7 @@ function submitExam(timeUp) {
     const doubts = exam.doubts.filter(Boolean).length;
     const warn = [empty ? plural(empty, "question sans réponse", "questions sans réponse") : "",
       doubts ? plural(doubts, "question marquée « Je doute »", "questions marquées « Je doute »") : ""].filter(Boolean).join(" et ");
-    if (!confirm(`Rendre ta copie ?${warn ? ` Il reste ${warn}.` : ""}`)) return;
+    if (!await askConfirm(`Rendre ta copie ?${warn ? ` Il reste ${warn}.` : ""}`, { ok: "Rendre ma copie" })) return;
   }
   exam.running = false;
   exam.duration = examElapsed();
@@ -5156,7 +5196,7 @@ document.addEventListener("click", async (e) => {
     box.classList.remove("loading");
     button.disabled = false;
     box.remove();
-    alert(err.message);
+    notify(err.message);
   }
 });
 
@@ -5474,7 +5514,7 @@ $("#jobs-list").addEventListener("click", async (e) => {
   const retry = e.target.closest("[data-job-retry]");
   if (retry) {
     retry.disabled = true;
-    await api(`/api/jobs/${retry.dataset.jobRetry}/retry`, jsonBody("POST", { variant: retry.dataset.variant })).catch((err) => alert(err.message));
+    await api(`/api/jobs/${retry.dataset.jobRetry}/retry`, jsonBody("POST", { variant: retry.dataset.variant })).catch((err) => notify(err.message));
     return refreshJobs();
   }
   const cancel = e.target.closest("[data-job-cancel]")?.dataset.jobCancel;
@@ -5485,7 +5525,7 @@ $("#jobs-list").addEventListener("click", async (e) => {
   const start = e.target.closest("[data-job-start]");
   const dismiss = e.target.closest("[data-job-dismiss]")?.dataset.jobDismiss;
   if (start) {
-    const quiz = await api(`/api/quizzes/${start.dataset.jobStart}`).catch((err) => alert(err.message));
+    const quiz = await api(`/api/quizzes/${start.dataset.jobStart}`).catch((err) => notify(err.message));
     if (!quiz) return;
     await api(`/api/jobs/${start.dataset.job}`, { method: "DELETE" }).catch(() => {});
     if (quiz.course_id && state.course?.id !== quiz.course_id) state.course = await api(`/api/courses/${quiz.course_id}`);
@@ -5498,7 +5538,7 @@ $("#jobs-list").addEventListener("click", async (e) => {
   }
 });
 $("#jobs-cancel-all").addEventListener("click", async () => {
-  if (!confirm("Annuler toutes les créations en cours et en attente ? Rien de ce qui n'est pas terminé ne sera gardé.")) return;
+  if (!await askConfirm("Annuler toutes les créations en cours et en attente ? Rien de ce qui n'est pas terminé ne sera gardé.", { ok: "Tout annuler", danger: true })) return;
   await api("/api/jobs/cancel", { method: "POST" }).catch(() => {});
   refreshJobs();
 });

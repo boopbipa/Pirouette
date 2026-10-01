@@ -1189,6 +1189,23 @@
     </form>
   </dialog>
 
+  <!-- Confirmation et petit message (remplacent confirm() et alert() du système) -->
+  <dialog id="confirm-dialog" class="report-dialog confirm-dialog">
+    <form method="dialog">
+      <div class="confirm-head">
+        <svg class="confirm-cat" aria-hidden="true"><use href="#logo"/></svg>
+        <div>
+          <h2 id="confirm-title"></h2>
+          <p class="muted" id="confirm-text" hidden></p>
+        </div>
+      </div>
+      <div class="actions">
+        <button class="ghost" type="submit" value="" id="confirm-cancel">Annuler</button>
+        <button class="primary" type="submit" value="ok" id="confirm-ok">OK</button>
+      </div>
+    </form>
+  </dialog>
+
   <!-- Tout préparer : un quiz et des flashcards par chapitre, en arrière-plan -->
   <dialog class="report-dialog prepare-dialog prepare" id="prepare-panel" aria-label="Tout préparer">
     <h2>Tout préparer pour ce cours ?</h2>
