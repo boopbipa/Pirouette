@@ -30,6 +30,8 @@
     </nav>
   </header>
 
+  <!-- La page défile dans ce cadre, sous la barre du haut (fixe) : le rebond de fin de page ne la fait pas bouger -->
+  <div class="page-scroll" id="page-scroll" tabindex="-1">
   <main>
     <nav class="crumbs" id="crumbs" aria-label="Où je suis" hidden></nav>
 
@@ -1099,6 +1101,7 @@
       <ol id="review" class="review"></ol>
     </section>
   </main>
+  </div>
 
   <!-- Définitions repérées dans un fichier -->
   <dialog id="defs-dialog" class="report-dialog">

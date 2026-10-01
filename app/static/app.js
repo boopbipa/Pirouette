@@ -35,10 +35,14 @@ const state = {
 const jobsState = { list: [], timer: null, open: false, keepOpen: false, seen: new Set() };
 
 // ---------- Navigation ----------
+// La page défile dans #page-scroll (la barre du haut reste fixe, même quand la page rebondit en fin de défilement)
+const pageScroll = () => document.getElementById("page-scroll");
 function show(view) {
   document.querySelectorAll(".view").forEach((v) => (v.hidden = v.id !== `view-${view}`));
   document.body.classList.toggle("on-home", view === "home");  // l'accueil a déjà son grand logo au centre
-  window.scrollTo(0, 0);
+  pageScroll().scrollTo(0, 0);
+  // Flèches, Page bas, Espace : c'est ce cadre qui défile (sauf si on écrit dans un champ)
+  if (document.activeElement === document.body) pageScroll().focus({ preventScroll: true });
 }
 
 // #/ accueil · #/cours mes cours · #/cours/<id> un cours · #/cours/<id>/quiz|cartes|fichiers une partie du cours
@@ -1213,11 +1217,11 @@ async function openCourse(id, tab, { keepScroll = false } = {}) {
   renderSplitOffer(course);
   await loadDeck();
 
-  const scroll = window.scrollY;
+  const scroll = pageScroll().scrollTop;
   show("course");
   $("#course-overview").hidden = false;
   if (tab) $(`#panel-${tab}`).open = true;
-  if (keepScroll) window.scrollTo(0, scroll);
+  if (keepScroll) pageScroll().scrollTo(0, scroll);
   else if (tab) $(`#panel-${tab}`).scrollIntoView({ block: "start" });
   renderPrepare(course, tab);
   renderNews(course);
@@ -1369,8 +1373,8 @@ function openChapterMenu(anchor, html) {
   menu.innerHTML = html;
   menu.hidden = false;
   const box = anchor.getBoundingClientRect();
-  menu.style.top = `${box.bottom + window.scrollY + 6}px`;
-  menu.style.left = `${Math.max(12, box.right + window.scrollX - 220)}px`;
+  menu.style.top = `${box.bottom + 6}px`;
+  menu.style.left = `${Math.max(12, box.right - 220)}px`;
 }
 document.addEventListener("click", (e) => {
   if (!e.target.closest("#chapter-menu, [data-chapter-create], [data-chapter-more]")) $("#chapter-menu").hidden = true;
@@ -2416,8 +2420,8 @@ function openCardsMenu(button) {
   menu.hidden = false;
   const rect = button.getBoundingClientRect();
   const left = Math.min(window.innerWidth - menu.offsetWidth - 12, Math.max(12, rect.right - menu.offsetWidth));
-  menu.style.left = `${left + window.scrollX}px`;
-  menu.style.top = `${rect.bottom + window.scrollY + 6}px`;
+  menu.style.left = `${left}px`;
+  menu.style.top = `${rect.bottom + 6}px`;
   menu.querySelector("button").focus();
 }
 function closeCardsMenu() { $("#cards-menu").hidden = true; }
@@ -3044,7 +3048,7 @@ function showSessionCorrection(filter = "all") {
   $("#session-redo").hidden = !s.results.some(isMistake);
   $("#cards-done").hidden = true;
   $("#session-correction").hidden = false;
-  window.scrollTo(0, 0);
+  pageScroll().scrollTo(0, 0);
 }
 
 $("#session-correction-btn").addEventListener("click", () => showSessionCorrection("all"));
@@ -4959,7 +4963,7 @@ function submitExam(timeUp) {
   $("#exam-grading-choice").hidden = false;
   $("#exam-grading-status").hidden = $("#exam-manual").hidden = $("#exam-manual-done").hidden = true;
   $("#exam-grading").hidden = false;
-  window.scrollTo(0, 0);
+  pageScroll().scrollTo(0, 0);
 }
 
 const examPrompt = (item) => (item.kind === "card" ? item.card.front : item.question.question);
@@ -5037,7 +5041,7 @@ async function showExamResult() {
   $("#exam-result").hidden = false;
   exam.filter = "all";
   renderExamResult();
-  window.scrollTo(0, 0);
+  pageScroll().scrollTo(0, 0);
   if (exam.recorded) return;
   exam.recorded = true;
   // Le suivi : réponses aux questions de quiz, et les flashcards (juste = sue, à moitié, faux = à revoir).
@@ -5691,3 +5695,14 @@ document.querySelectorAll("dialog").forEach((dialog) => {
     downOutside = false;
   });
 });
+
+// Hauteur de la barre du haut : la page commence juste dessous (elle passe dessous en défilant, effet verre)
+function measureTopbar() {
+  document.documentElement.style.setProperty("--topbar-h", `${document.querySelector(".topbar").offsetHeight}px`);
+}
+measureTopbar();
+addEventListener("resize", measureTopbar);
+// Les petits menus flottants se ferment quand la page défile (ils restent sinon à leur place à l'écran)
+pageScroll().addEventListener("scroll", () => {
+  ["#chapter-menu", "#cards-menu"].forEach((id) => { const m = $(id); if (m && !m.hidden) m.hidden = true; });
+}, { passive: true });
