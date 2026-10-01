@@ -235,7 +235,7 @@ plan et ses réglages), puis trois accès distincts : **Flashcards**, **Quiz** e
 gardé).
 - **Flashcards** (rien que des cartes ; aussi depuis la page du cours, bouton « Réviser → » du dépliant Flashcards) : trois paquets, **À revoir aujourd'hui**, **Là où je bloque** et **Tout le
   paquet** (tiré dans un ordre différent à chaque fois), pour tout le cours ou un chapitre (puces « Chapitre 1 », « Chapitre 2 »…), en mode Retourner ou Écrire.
-- **Quiz** : tous les quiz, ou ceux d'un chapitre (mêmes puces), avec « Faire le quiz ».
+- **Quiz** : tous les quiz du cours ou du semestre, avec « Faire le quiz ».
 - **Plan de révision** (sur un semestre, ou un cours sans semestre) : « une séance tous les 1 / 2 / 3 / 7 jours, de
   15 / 30 / 45 minutes ». Pirouette affiche la séance à faire ou la prochaine date, les séances tenues (« 4 sur 5 ») et
   un mot d'encouragement ; chaque séance commence par les cartes où tu bloques, puis les cartes du jour, avec

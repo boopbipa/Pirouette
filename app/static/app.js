@@ -3092,7 +3092,7 @@ async function openReviewScope(kind, id = "", sub = "") {
   }
   const base = `#/reviser/${kind}${id ? `/${id}` : ""}`;
   const tab = sub in SCOPE_TABS ? sub : "";
-  if (state.reviewScope?.base !== base) state.deckChapter = state.quizChapter = null;  // autre cours : tous les chapitres
+  if (state.reviewScope?.base !== base) state.deckChapter = null;  // autre cours : tous les chapitres
   state.reviewScope = { params, name, hash: location.hash, base, single: kind === "cours", owner, parent };
   $("#review-scope-title").textContent = name;
   document.querySelectorAll("[data-scope-tab]").forEach((a) => {
@@ -3169,7 +3169,6 @@ async function renderScopeMain() {
   // Par chapitre (quiz, cartes, tout mélangé) ; les quiz qui ne tiennent pas à un chapitre, à part.
   const [byChapter, decks] = await Promise.all([renderMastery(), api(`/api/cards/decks?${new URLSearchParams(reviewScope())}`)]);
   state.cardDecks = decks;
-  state.quizChapters = byChapter;
   const placed = new Set(byChapter.flatMap((c) => c.chapters.flatMap((ch) => ch.quizzes.map((q) => q.id))));
   const names = Object.fromEntries(scoped.map((c) => [c.id, c.name]));
   // Mode « Quiz » : tous les quiz du cours ou du semestre (ceux d'un chapitre d'abord)
@@ -3238,25 +3237,13 @@ $("#card-decks").addEventListener("click", (e) => {
     { title: ch ? `${title} · ${shortChapter(ch.title)}` : title, back: state.reviewScope.hash });
 });
 state.deckChapter = null;
-state.quizChapter = null;
 
-// Mode Quiz : tous les quiz, ou ceux d'un chapitre
+// Mode Quiz : tous les quiz du cours ou du semestre
 function renderScopeQuizzes() {
-  const chapters = (state.quizChapters || []).flatMap((c) => c.chapters.filter((ch) => ch.quizzes.length)
-    .map((ch) => ({ course_id: c.course_id, course: c.course, title: ch.single ? c.course : ch.title, ids: ch.quizzes.map((q) => q.id) })));
-  if (state.quizChapter !== null && !chapters[state.quizChapter]) state.quizChapter = null;
-  $("#quiz-chapters").innerHTML = chapterChips(chapters, state.quizChapter, "data-quiz-chapter");
-  const keep = state.quizChapter === null ? null : new Set(chapters[state.quizChapter].ids);
-  const shown = (state.scopeQuizzes || []).filter((q) => !keep || keep.has(q.id));
-  $("#scope-quizzes").innerHTML = shown.length ? shown.map((q) => quizItem(q, null, null, { play: true })).join("")
+  const all = state.scopeQuizzes || [];
+  $("#scope-quizzes").innerHTML = all.length ? all.map((q) => quizItem(q, null, null, { play: true })).join("")
     : `<li class="empty muted">Pas encore de quiz : crée-les depuis la page du cours (Mes cours).</li>`;
 }
-$("#quiz-chapters").addEventListener("click", (e) => {
-  const chip = e.target.closest("[data-quiz-chapter]");
-  if (!chip) return;
-  state.quizChapter = chip.dataset.quizChapter === "" ? null : Number(chip.dataset.quizChapter);
-  renderScopeQuizzes();
-});
 
 // Le bandeau « Révision du jour » : son bouton lance la séance (celle du plan s'il y en a un) ; ailleurs, il montre ses réglages
 $("#hero-start").addEventListener("click", (e) => {
