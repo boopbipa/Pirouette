@@ -180,7 +180,7 @@ comme un arbre qui part du fichier importé :
   remplace l'ancienne (même un PDF à la place d'un Keynote), les chapitres sont redécoupés, tes quiz et tes cartes
   gardés ; « **Redécouper** » relance le repérage des chapitres ; on peut aussi y glisser un fichier.
 - **Une matière, plusieurs cours** : « **+ Ajouter un cours** » (en haut, à gauche de « Gérer le cours ») dépose un
-  autre cours de la matière (CM2, TD, glossaire…). Chaque fichier est un cours à part, dans son **onglet** (au-dessus
+  autre cours de la matière (CM2, TD, glossaire…). Chaque fichier est un cours à part, dans son **onglet** (même s'il n'y en a qu'un ; au-dessus
   de l'arbre ; « + » en ajoute un) : un clic sur l'onglet affiche ce cours dans sa propre case. En dessous, seulement **ses** chapitres, **ses**
   quiz et **ses** flashcards ; « Tout préparer » et « + Nouveau quiz » ne portent que sur lui (Pirouette retient le
   cours choisi). Rien n'est remplacé (seul un fichier du même nom remplace l'ancien, comme une nouvelle version).

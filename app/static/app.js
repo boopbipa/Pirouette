@@ -1466,8 +1466,9 @@ function renderQuizPanel(course) {
 
 // Le(s) fichier(s) du cours, à la racine de l'arbre : nouvelle version, redécoupage des chapitres, retrait.
 function renderFiles(course) {
-  const focus = focusFile(course);
-  // Plusieurs cours : un onglet chacun (+ un onglet pour en ajouter) ; en dessous, seulement le cours de l'onglet
+  // Un onglet par cours (même s'il n'y en a qu'un, pour garder le même visuel) + un onglet pour en ajouter ;
+  // en dessous, seulement le cours de l'onglet
+  const focus = focusFile(course) || course.files[0] || null;
   $("#course-tabs").hidden = !focus;
   $("#course-tree").classList.toggle("tabbed", Boolean(focus));
   $("#course-tabs").innerHTML = focus ? course.files.map((f) => `<button type="button" role="tab" class="course-tab${f === focus ? " active" : ""}"
