@@ -4074,6 +4074,9 @@ const WELCOME = [
 ];
 // Les nouveautés de chaque version (le carton « Quoi de neuf » ne s'affiche que si la version en a)
 const WHATS_NEW = {
+  "0.45.1": [
+    ["🔀", "Révision du jour mélangée", "Cartes et questions arrivent dans le désordre, plus dans l'ordre des chapitres"],
+  ],
   "0.45.0": [
     ["●", "Réponse choisie en couleur", "Dans un quiz, la réponse sélectionnée se colore de ta couleur d'accent au lieu d'un contour noir"],
     ["🐱", "Fenêtres de confirmation Pirouette", "« Tu es sûr de vouloir quitter ? », « Supprimer ? »… s'affichent dans un panneau aux couleurs de l'app"],

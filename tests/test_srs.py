@@ -68,8 +68,8 @@ def test_daily_session_mixes_due_cards_and_quiz_questions(client):
 
     today = client.get("/api/session?mode=today").json()
     kinds = [i["kind"] for i in today["items"]]
-    # Le retard d'abord, puis 20 nouvelles cartes au plus ; pas l'ancien semestre archivé.
-    assert today["cards"] == 21 and today["items"][0]["card"]["id"] == "late"
+    # La carte en retard et 20 nouvelles cartes au plus, mélangées ; pas l'ancien semestre archivé.
+    assert today["cards"] == 21 and "late" in {i["card"]["id"] for i in today["items"] if i["kind"] == "card"}
     assert all(i["course_id"] == bio for i in today["items"])
     # Questions : la ratée, puis celles jamais répondues (pas la réussie à l'instant)
     assert today["questions"] == 3 and kinds.count("question") == 3 and kinds[-1] == "card"

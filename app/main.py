@@ -1263,7 +1263,7 @@ async def session(mode: str = "today", course: str = "", folder: str = "", filte
 
 def _session(mode: str, course: str, folder: str, filter: str, questions: bool, minutes: int, chapter: str) -> dict:
     """Une séance de révision : `today` (cartes du jour + questions de quiz à reposer), `weak` (points faibles),
-    `plan` (séance du plan : les cartes les plus difficiles d'abord, à la taille choisie), `chapter` (les cartes
+    `plan` (séance du plan : les cartes les plus difficiles choisies en priorité, à la taille choisie), `chapter` (les cartes
     d'un chapitre, pour le rétroplanning) ou `cards` (les cartes d'un cours)."""
     ids = _scope(course, folder)
     if mode == "plan":
@@ -1271,6 +1271,7 @@ def _session(mode: str, course: str, folder: str, filter: str, questions: bool, 
         hard = store.weak_cards(ids)[:max_cards // 3]
         seen = {e["card"]["id"] for e in hard}
         cards = [_card_item(e) for e in hard + [e for e in store.today_cards(ids) if e["card"]["id"] not in seen]][:max_cards]
+        random.shuffle(cards)  # la priorité choisit les cartes de la séance, pas leur ordre
         chosen = store.weak_questions(ids)[:max_questions]
         chosen += store.review_questions(ids)[:max_questions - len(chosen)]
         asked = [_question_item(e) for e in chosen] if questions else []
@@ -1296,6 +1297,7 @@ def _session(mode: str, course: str, folder: str, filter: str, questions: bool, 
     in_chapter = (lambda e: _same_title(chapter, e["card"].get("scope") or [])) if chapter else (lambda e: True)
     if mode == "today":
         cards = [_card_item(e) for e in store.today_cards(ids) if in_chapter(e)]
+        random.shuffle(cards)  # toutes les cartes du jour seront vues : autant les mélanger
         chosen = store.weak_questions(ids)[:SESSION_QUESTIONS]
         chosen += store.review_questions(ids)[:SESSION_QUESTIONS - len(chosen)]
         asked = [_question_item(e) for e in chosen] if questions else []
@@ -1303,6 +1305,8 @@ def _session(mode: str, course: str, folder: str, filter: str, questions: bool, 
     elif mode == "weak":
         cards = [_card_item(e) for e in store.weak_cards(ids) if in_chapter(e)][:30]
         asked = [_question_item(e) for e in store.weak_questions(ids)[:20]] if questions else []
+        random.shuffle(cards)
+        random.shuffle(asked)
     elif mode == "all":
         # Tout réviser : toutes les cartes et toutes les questions des quiz, mélangées
         cards = [_card_item({"course": c, "card": card}) for c, deck in store._decks(ids) for card in deck]

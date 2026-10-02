@@ -62,7 +62,7 @@ def test_plan_api_and_session(tmp_path, monkeypatch):
     data = client.put("/api/plan", json={"folder": folder, "every": 2, "minutes": 15}).json()
     assert data["status"]["total"] == 0 and data["status"]["next"] == date.today().isoformat()
     items = client.get(f"/api/session?mode=plan&folder={folder}&minutes=15&questions=false").json()["items"]
-    assert len(items) == 21 and items[0]["card"]["id"] == "c3"  # la plus difficile d'abord, puis 20 nouvelles
+    assert len(items) == 21 and "c3" in {i["card"]["id"] for i in items}  # la plus difficile, puis 20 nouvelles (mélangées)
     chapter = client.get(f"/api/session?mode=chapter&course={cid}&chapter=Chapitre 1 : Le neurone").json()
     assert chapter["cards"] == 40
     assert reminder.daily_text(store) and "Semestre 1" in reminder.daily_text(store)

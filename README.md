@@ -269,6 +269,7 @@ gardé).
   jour-là) ; « Recalculer » repart d'aujourd'hui sans reprogrammer les chapitres déjà vus.
 - **Révision du jour** (sans plan) : les cartes dont le rappel est arrivé, plus 20 nouvelles cartes au plus par jour, avec des
   questions de tes quiz glissées entre les cartes (celles ratées, jamais faites ou réussies il y a plus d'une semaine).
+  Tout arrive dans un ordre mélangé (de même pour les séances du plan et « Là où tu bloques »).
   Après chaque carte : **Je ne savais pas / Je savais** (glisser la carte, ou ← / →). Pirouette en déduit quand la
   reposer (plus tôt si on ne savait pas, de plus en plus tard si on savait), sans l'afficher. Un clic sur la carte la
   retourne, un autre revient à la question. À la fin : « Voir la correction » (tout, ou mes erreurs seulement) et
