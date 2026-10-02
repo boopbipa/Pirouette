@@ -1822,8 +1822,12 @@ async function uploadFiles(fileList) {
   try {
     const { results, course } = await api(`/api/courses/${state.course.id}/files`, { method: "POST", body: form });
     await refreshCourse();
-    status.textContent = Object.entries(results)
-      .map(([name, r]) => `${r === "updated" ? "Nouvelle version enregistrée" : "Ajouté"} : ${name}`).join(" · ");
+    const kinds = Object.values(results);
+    const updatedCount = kinds.filter((r) => r === "updated").length, addedCount = kinds.length - updatedCount;
+    status.textContent = [
+      updatedCount ? (updatedCount > 1 ? `${updatedCount} nouvelles versions enregistrées` : "Nouvelle version enregistrée") : "",
+      addedCount ? (addedCount > 1 ? `${addedCount} fichiers ajoutés` : "Fichier ajouté") : "",
+    ].filter(Boolean).join(" · ");
     status.className = "status ok";
     const names = Object.keys(results).map((n) => n.toLowerCase());
     const ids = course.files.filter((f) => names.includes(f.name.toLowerCase())).map((f) => f.id);
