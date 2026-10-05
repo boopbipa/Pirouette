@@ -24,6 +24,7 @@
       <a href="#/" data-nav="accueil">Accueil</a>
       <a href="#/cours" data-nav="cours">Mes cours</a>
       <a href="#/reviser" data-nav="reviser">Réviser</a>
+      <a href="#/defis" data-nav="defis">Défis</a>
       <a href="#/reglages" data-nav="reglages">Réglages</a>
       <button type="button" class="nav-feedback" id="feedback-btn" title="Une idée, un bug ? Écris-moi">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="M4 5h16v11H9l-5 4z"/></svg>Feedback</button>
@@ -84,6 +85,55 @@
       <div id="orphans" hidden>
         <div class="section-title"><h2>Anciens quiz (sans cours)</h2></div>
         <ul id="orphan-list" class="quiz-list"></ul>
+      </div>
+    </section>
+
+    <!-- Défis entre amis (en ligne) : un compte, des amis, 10 questions à faire chacun -->
+    <section id="view-online" class="view" hidden>
+      <h1>Défis entre amis</h1>
+      <p class="muted" id="online-intro">Lance un défi de 10 questions tirées de tes quiz : tes amis le font aussi, et vous comparez vos scores.
+        Seuls ton pseudo, les questions du défi et les scores sont en ligne : tes cours restent sur ton ordinateur.</p>
+      <div class="card" id="online-off" hidden>
+        <h2>Bientôt disponible</h2>
+        <p class="muted">Les défis en ligne ne sont pas encore ouverts dans cette version de Pirouette.</p>
+      </div>
+      <form class="card" id="online-pseudo" hidden>
+        <h2>Choisis ton pseudo pour commencer</h2>
+        <p class="muted small-text">C'est ce que verront tes amis à côté de tes scores. Pas d'e-mail ni de mot de passe :
+          ton compte est gardé sur cet ordinateur.</p>
+        <div class="inline-row">
+          <input type="text" id="online-pseudo-input" maxlength="24" placeholder="ex. Pilou" required>
+          <button class="primary" type="submit">Valider</button>
+        </div>
+        <p class="status" id="online-pseudo-status" hidden></p>
+      </form>
+      <div id="online-main" hidden>
+        <div class="card online-me">
+          <div>
+            <strong id="online-hello"></strong>
+            <small class="muted">Ton code ami : <b class="friend-code" id="online-code-me"></b>
+              <button class="link-button" type="button" id="online-copy">Copier</button></small>
+          </div>
+          <button class="link-button" type="button" id="online-rename">Changer de pseudo</button>
+        </div>
+        <div class="card">
+          <h2>Défis de la semaine</h2>
+          <ul class="challenge-list" id="online-challenges"></ul>
+          <div class="online-new">
+            <select class="chip" id="online-quiz" aria-label="Quiz du défi"></select>
+            <button class="primary small" type="button" id="online-launch">Défier mes amis</button>
+          </div>
+          <p class="status" id="online-challenge-status" hidden></p>
+        </div>
+        <div class="card">
+          <h2>Amis</h2>
+          <div class="inline-row">
+            <input type="text" id="online-friend-code" maxlength="8" placeholder="Code ami (ex. 4F2A9C)">
+            <button class="ghost small" type="button" id="online-add">Ajouter</button>
+          </div>
+          <p class="status" id="online-friend-status" hidden></p>
+          <ul class="friend-list" id="online-friends"></ul>
+        </div>
       </div>
     </section>
 

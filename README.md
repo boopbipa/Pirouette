@@ -423,6 +423,19 @@ un dépôt GitHub public (`PIROUETTE_UPDATE_REPO` pour en changer).
 Toutes les données restent sur ton Mac, dans le dossier `data/` (cours, fichiers originaux, quiz, cartes,
 prénom). Les compteurs (cartes à revoir, suivi des révisions) sont calculés sur place : rien n'est envoyé ailleurs.
 
+## Défis entre amis (en ligne)
+
+Onglet **Défis** : on choisit un **pseudo** (pas d'e-mail ni de mot de passe : un compte anonyme, gardé dans les réglages
+de cet ordinateur), on s'ajoute entre amis avec un **code ami** de 6 caractères (amis dès que l'autre accepte ou ajoute
+notre code), puis « **Défier mes amis** » tire 10 questions d'un de ses quiz. Chacun le fait une fois ; le classement
+(score, temps) n'apparaît qu'après avoir joué. En ligne : pseudo, code ami, questions des défis, scores — jamais les cours.
+
+Service : Supabase (`app/online.py`, base et règles d'accès dans `docs/supabase.sql`). L'adresse du projet et sa clé
+**publique** (publishable) ne sont pas dans le code : ce sont deux secrets du dépôt GitHub (`SUPABASE_URL`,
+`SUPABASE_PUBLISHABLE_KEY`), écrits dans `app/online_config.json` au moment de la fabrication. Sans eux, l'onglet Défis
+reste caché. Une tâche GitHub quotidienne (`supabase-keepalive.yml`) évite la mise en pause du projet gratuit.
+Pour développer : `PIROUETTE_SUPABASE_URL` et `PIROUETTE_SUPABASE_KEY`.
+
 ## Configuration (`.env`)
 
 | Variable | Défaut | Rôle |

@@ -95,6 +95,7 @@ async function route() {
     if (match && match[2]) await openCreate(match[1], match[3] === "quiz" ? "quiz" : "cartes");
     else if (match) await openCourse(match[1], match[3]);
     else if (hash.startsWith("#/reglages")) await openSettings();
+    else if (hash.startsWith("#/defis")) await openOnline();
     else if (hash.match(/^#\/reviser\/(tout|dossier|cours)/)) await openReviewScope(...hash.slice(10).split("/"));
     else if (hash.startsWith("#/reviser")) await openReview();
     else if (hash.startsWith("#/nouveau-cours")) {
@@ -3313,6 +3314,7 @@ function sessionCrumbs(back, title) {
   if (back.startsWith("#/reviser/") && state.reviewScope) {
     return [{ label: "Réviser", href: "#/reviser" }, { label: state.reviewScope.name, href: back }, { label: title }];
   }
+  if (back === "#/defis") return [{ label: "Défis", href: "#/defis" }, { label: title }];
   return [back === "#/" ? { label: "Accueil", href: "#/" } : { label: "Réviser", href: "#/reviser" }, { label: title }];
 }
 $("#session-done-back").addEventListener("click", (e) => { state.sessionBack = state.session?.back; leaveSession(e); });
@@ -4022,7 +4024,8 @@ function startQuiz(quiz, questions, { back = state.quizBack } = {}) {
   else setCrumbs(inCourse ? courseCrumbs(state.course, "quiz", quiz.title)
     : quiz.course_id ? [COURSES_CRUMB, { label: quiz.course_name || "Cours", href: `#/cours/${quiz.course_id}/quiz` }, { label: quiz.title }]
     : [COURSES_CRUMB, { label: quiz.title }]);
-  $("#back-course-btn").textContent = state.quizBack ? "Retour à Réviser" : quiz.course_id ? "Retour au cours" : "Mes cours";
+  $("#back-course-btn").textContent = state.quizBack === "#/defis" ? "Retour aux défis"
+    : state.quizBack ? "Retour à Réviser" : quiz.course_id ? "Retour au cours" : "Mes cours";
   show("quiz");
   renderQuestion();
 }
@@ -4309,6 +4312,9 @@ const WELCOME = [
 ];
 // Les nouveautés de chaque version (le carton « Quoi de neuf » ne s'affiche que si la version en a)
 const WHATS_NEW = {
+  "0.51.0": [
+    ["🏆", "Défis entre amis", "Onglet Défis : un pseudo, tes amis par leur code, et 10 questions de tes quiz à faire chacun, avec classement"],
+  ],
   "0.50.0": [
     ["🪟", "Pirouette pour Windows", "Une version Windows (bêta) est disponible : à partager avec tes amis sur PC"],
   ],
@@ -4647,6 +4653,7 @@ function validateShort(q) {
 
 // Chaque réponse compte pour le suivi et les points faibles (même si on ne va pas au bout du quiz).
 function saveAnswer(q, correct) {
+  if (state.quiz.online) return;  // défi entre amis : pas de statistiques sur un quiz de l'ordinateur
   const index = state.quiz.questions.indexOf(q);
   const replaces = q.replaces;
   delete q.replaces;
@@ -4716,6 +4723,16 @@ function showResults() {
   show("results");
   // Seules les sessions complètes comptent dans les scores du quiz.
   const good = state.results.filter((r) => r.correct).length;
+  $("#review").classList.toggle("online-review", Boolean(state.quiz.online));
+  if (state.quiz.online) {
+    // Défi entre amis : le score part en ligne (un seul essai compte), pas dans les quiz de l'ordinateur
+    const seconds = Math.round((Date.now() - state.quiz.started) / 1000);
+    api(`/api/online/challenges/${state.quiz.online}/score`, jsonBody("POST", { score: good, total: state.results.length, seconds }))
+      .catch(() => {});
+    $("#retry-btn").hidden = $("#retry-wrong-btn").hidden = true;  // un défi ne se fait qu'une fois
+    return;
+  }
+  $("#retry-btn").hidden = false;
   if (state.fullRun && state.results.length) {
     api(`/api/quizzes/${state.quiz.id}/attempts`, jsonBody("POST", { score: good, total: state.results.length })).catch(() => {});
   }
@@ -4806,7 +4823,7 @@ $("#defs-close").addEventListener("click", () => $("#defs-dialog").close());
 // Le signalement est gardé dans l'app, puis Pirouette ouvre l'app Mail avec le message prêt à partir.
 function showReportButton(q, given) {
   state.reporting = { question: q, given };
-  $("#question-tools").hidden = false;
+  $("#question-tools").hidden = Boolean(state.quiz?.online);  // défi entre amis : rien à signaler ni supprimer ici
   $("#question-tools .qtools-menu").hidden = true;
 }
 
@@ -6039,3 +6056,143 @@ addEventListener("resize", measureTopbar);
 pageScroll().addEventListener("scroll", () => {
   ["#chapter-menu", "#cards-menu"].forEach((id) => { const m = $(id); if (m && !m.hidden) m.hidden = true; });
 }, { passive: true });
+
+// ---------- Défis entre amis (en ligne, voir app/online.py) ----------
+// Onglet Défis : visible seulement quand le service en ligne est branché dans cette version
+api("/api/online").then((me) => { document.querySelector("[data-nav=defis]").hidden = !me.configured; })
+  .catch(() => { document.querySelector("[data-nav=defis]").hidden = true; });
+async function openOnline() {
+  state.course = null;
+  setCrumbs();
+  show("online");
+  let me;
+  try {
+    me = await api("/api/online");
+  } catch (err) {
+    me = { configured: true, connected: false };
+    setStatus("#online-pseudo-status", err.message, false);
+  }
+  $("#online-off").hidden = me.configured;
+  $("#online-pseudo").hidden = !me.configured || Boolean(me.profile);
+  $("#online-main").hidden = !me.connected || !me.profile;
+  if (!me.connected || !me.profile) return;
+  state.online = me;
+  $("#online-hello").textContent = `Salut ${me.profile.pseudo} !`;
+  $("#online-code-me").textContent = me.profile.friend_code;
+  renderOnlineQuizzes();
+  await Promise.all([renderChallenges(), renderFriends()]);
+}
+
+$("#online-pseudo").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  try {
+    await api("/api/online/start", jsonBody("POST", { text: $("#online-pseudo-input").value }));
+    openOnline();
+  } catch (err) {
+    setStatus("#online-pseudo-status", err.message, false);
+  }
+});
+$("#online-rename").addEventListener("click", async () => {
+  const pseudo = await askText("Ton nouveau pseudo", state.online?.profile?.pseudo || "");
+  if (!pseudo) return;
+  try {
+    await api("/api/online/pseudo", jsonBody("PUT", { text: pseudo }));
+    openOnline();
+  } catch (err) {
+    setStatus("#online-challenge-status", err.message, false);
+  }
+});
+$("#online-copy").addEventListener("click", async () => {
+  try { await navigator.clipboard.writeText($("#online-code-me").textContent); } catch {}
+  $("#online-copy").textContent = "Copié ✓";
+  setTimeout(() => ($("#online-copy").textContent = "Copier"), 1500);
+});
+
+// Mes quiz, pour lancer un défi
+async function renderOnlineQuizzes() {
+  const quizzes = (await api("/api/quizzes").catch(() => [])).filter((q) => q.count >= 3);
+  $("#online-quiz").innerHTML = quizzes.length
+    ? quizzes.map((q) => `<option value="${q.id}">${escapeHtml(q.course_name ? `${q.course_name} · ${q.title}` : q.title)}</option>`).join("")
+    : `<option value="">Pas encore de quiz</option>`;
+  $("#online-launch").disabled = !quizzes.length;
+}
+$("#online-launch").addEventListener("click", async () => {
+  const quizId = $("#online-quiz").value;
+  if (!quizId) return;
+  try {
+    await api("/api/online/challenges", jsonBody("POST", { quiz_id: quizId }));
+    setStatus("#online-challenge-status", "Défi lancé : tes amis le voient dans leur onglet Défis.", true);
+    renderChallenges();
+  } catch (err) {
+    setStatus("#online-challenge-status", err.message, false);
+  }
+});
+
+async function renderChallenges() {
+  let list = [];
+  try {
+    list = await api("/api/online/challenges");
+  } catch (err) {
+    return setStatus("#online-challenge-status", err.message, false);
+  }
+  const time = (s) => (s == null ? "" : ` · ${Math.floor(s / 60)} min ${String(s % 60).padStart(2, "0")}`);
+  $("#online-challenges").innerHTML = list.length ? list.map((c) => `
+    <li class="challenge">
+      <div class="challenge-head">
+        <span><strong>${escapeHtml(c.title)}</strong>
+          <small class="muted">${c.mine ? "Ton défi" : `Défi de ${escapeHtml(c.author)}`}${c.subject ? ` · ${escapeHtml(c.subject)}` : ""} · ${c.count} questions · ${formatDate(c.created_at)}</small></span>
+        ${c.done ? `<span class="badge">Fait</span>` : `<button class="primary small" type="button" data-play-challenge="${c.id}">Jouer</button>`}
+      </div>
+      ${c.done ? `<ol class="leaderboard">${c.scores.map((s) => `<li class="${s.me ? "me" : ""}">
+        <span>${escapeHtml(s.pseudo)}</span><b>${s.score} / ${s.total}</b><small class="muted">${time(s.seconds)}</small></li>`).join("")}</ol>` : ""}
+    </li>`).join("") : `<li class="empty muted">Pas encore de défi cette semaine : lance le premier !</li>`;
+}
+$("#online-challenges").addEventListener("click", async (e) => {
+  const play = e.target.closest("[data-play-challenge]");
+  if (!play) return;
+  try {
+    const c = await api(`/api/online/challenges/${play.dataset.playChallenge}`);
+    const quiz = { id: null, online: c.id, started: Date.now(), title: `Défi · ${c.title}`, questions: c.questions,
+                   course_name: c.subject || "" };
+    startQuiz(quiz, shuffle(c.questions), { back: "#/defis" });
+  } catch (err) {
+    setStatus("#online-challenge-status", err.message, false);
+  }
+});
+
+async function renderFriends() {
+  let data;
+  try {
+    data = await api("/api/online/friends");
+  } catch (err) {
+    return setStatus("#online-friend-status", err.message, false);
+  }
+  const row = (f, actions) => `<li><span>${escapeHtml(f.pseudo)}</span><span class="friend-actions">${actions}</span></li>`;
+  $("#online-friends").innerHTML = [
+    ...data.received.map((f) => row(f, `<small class="muted">t'invite</small>
+      <button class="primary small" type="button" data-accept-friend="${f.id}">Accepter</button>`)),
+    ...data.friends.map((f) => row(f, `<button class="link-button" type="button" data-remove-friend="${f.id}">Retirer</button>`)),
+    ...data.sent.map((f) => row(f, `<small class="muted">invitation envoyée</small>`)),
+  ].join("") || `<li class="empty muted">Pas encore d'amis : envoie-leur ton code ami.</li>`;
+}
+$("#online-add").addEventListener("click", async () => {
+  try {
+    const r = await api("/api/online/friends", jsonBody("POST", { text: $("#online-friend-code").value }));
+    $("#online-friend-code").value = "";
+    setStatus("#online-friend-status", r.status === "accepted" ? `Tu es maintenant ami avec ${r.pseudo}.`
+      : `Invitation envoyée à ${r.pseudo} : elle compte dès qu'il ou elle t'ajoute aussi (ou accepte).`, true);
+    renderFriends();
+  } catch (err) {
+    setStatus("#online-friend-status", err.message, false);
+  }
+});
+$("#online-friends").addEventListener("click", async (e) => {
+  const accept = e.target.closest("[data-accept-friend]");
+  const remove = e.target.closest("[data-remove-friend]");
+  if (accept) await api(`/api/online/friends/${accept.dataset.acceptFriend}/accept`, { method: "POST" }).catch(() => {});
+  if (remove) {
+    if (!await askConfirm("Retirer cet ami ? Vous ne verrez plus vos défis.", { ok: "Retirer" })) return;
+    await api(`/api/online/friends/${remove.dataset.removeFriend}`, { method: "DELETE" }).catch(() => {});
+  }
+  if (accept || remove) { renderFriends(); renderChallenges(); }
+});

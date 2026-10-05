@@ -25,7 +25,7 @@ from pydantic import BaseModel
 
 load_dotenv()
 
-from . import backup, claude_desktop, exchange, figures, local_ai, news, plan as plans, reminder, srs, updater  # noqa: E402
+from . import backup, claude_desktop, exchange, figures, local_ai, news, online, plan as plans, reminder, srs, updater  # noqa: E402
 from .grounding import Grounding  # noqa: E402
 from .jobs import Jobs  # noqa: E402
 from .chapters import (CHAPTERS_SCHEMA, CHAPTERS_SYSTEM, ai_candidates, build_chapters_prompt,  # noqa: E402
@@ -2072,6 +2072,98 @@ async def pack_import(body: PackImportIn) -> dict:
                 done["cards"] += result["added"]
     _PACKS.pop(body.token, None)
     return done
+
+
+# ---------- En ligne : compte, amis, défis (voir app/online.py et docs/supabase.sql) ----------
+
+def _online() -> online.Online:
+    return online.Online(store)
+
+
+async def _online_call(coro):
+    try:
+        return await coro
+    except online.OnlineError as exc:
+        raise HTTPException(400, str(exc)) from exc
+
+
+class OnlineTextIn(BaseModel):
+    text: str
+
+
+class ChallengeIn(BaseModel):
+    quiz_id: str
+
+
+class ChallengeScoreIn(BaseModel):
+    score: int
+    total: int
+    seconds: int | None = None
+
+
+@app.get("/api/online")
+async def online_me() -> dict:
+    return await _online_call(_online().me())
+
+
+@app.post("/api/online/start")
+async def online_start(body: OnlineTextIn) -> dict:
+    """Premier pas : un pseudo, et le compte (anonyme) est créé sur cet ordinateur."""
+    return await _online_call(_online().start(body.text))
+
+
+@app.post("/api/online/logout")
+async def online_logout() -> dict:
+    _online().logout()
+    return {"connected": False, "configured": online.configured()}
+
+
+@app.put("/api/online/pseudo")
+async def online_pseudo(body: OnlineTextIn) -> dict:
+    return await _online_call(_online().set_pseudo(body.text))
+
+
+@app.get("/api/online/friends")
+async def online_friends() -> dict:
+    return await _online_call(_online().friends())
+
+
+@app.post("/api/online/friends")
+async def online_add_friend(body: OnlineTextIn) -> dict:
+    return await _online_call(_online().add_friend(body.text))
+
+
+@app.post("/api/online/friends/{friend_id}/accept")
+async def online_accept(friend_id: str) -> dict:
+    await _online_call(_online().accept(friend_id))
+    return {"ok": True}
+
+
+@app.delete("/api/online/friends/{friend_id}")
+async def online_remove_friend(friend_id: str) -> dict:
+    await _online_call(_online().remove_friend(friend_id))
+    return {"ok": True}
+
+
+@app.get("/api/online/challenges")
+async def online_challenges() -> list[dict]:
+    return await _online_call(_online().challenges())
+
+
+@app.post("/api/online/challenges")
+async def online_new_challenge(body: ChallengeIn) -> dict:
+    return await _online_call(_online().create_challenge(store.get_quiz(body.quiz_id)))
+
+
+@app.get("/api/online/challenges/{challenge_id}")
+async def online_challenge(challenge_id: str) -> dict:
+    return await _online_call(_online().challenge(challenge_id))
+
+
+@app.post("/api/online/challenges/{challenge_id}/score")
+async def online_score(challenge_id: str, body: ChallengeScoreIn) -> dict:
+    await _online_call(_online().submit(challenge_id, body.score, body.total, body.seconds))
+    return {"ok": True}
 
 
 @app.post("/api/quit")

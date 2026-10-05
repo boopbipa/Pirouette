@@ -12,7 +12,9 @@ VERSION = re.search(r'__version__ = "(.+)"', (ROOT / "app" / "__init__.py").read
 a = Analysis(
     [str(ROOT / "desktop.py")],
     pathex=[str(ROOT)],
+    # online_config.json : adresse et clé publique du service en ligne (défis), ajoutées par GitHub à la fabrication
     datas=[(str(ROOT / "app" / "static"), "app/static"),
+           *([(str(ROOT / "app" / "online_config.json"), "app")] if (ROOT / "app" / "online_config.json").exists() else []),
            *collect_data_files("docx"), *collect_data_files("pptx"),
            *collect_data_files("pypdfium2"), *collect_data_files("pypdfium2_raw")],
     # pdfium (rendu des pages de PDF en image, pour montrer les figures à Claude) : bibliothèque native.
