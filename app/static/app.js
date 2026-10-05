@@ -1333,6 +1333,17 @@ $("#course-folder").addEventListener("change", async (e) => {
 
 // Recharge le cours affiché sans changer d'onglet ni de position.
 const refreshCourse = () => openCourse(state.course.id, state.tab, { keepScroll: true });
+// De retour dans Pirouette (après l'app Claude) : la page du cours montre les chapitres, quiz et cartes ajoutés
+// (seulement si quelque chose a changé : un formulaire en cours n'est pas effacé pour rien)
+const courseSignature = (c) => JSON.stringify([c.files.map((f) => [f.id, f.chapters_by, f.chapters?.length]),
+  c.quizzes.map((q) => [q.id, q.count]), c.cards?.total]);
+window.addEventListener("focus", async () => {
+  const course = state.course;
+  if (!course || $("#view-course").hidden || document.querySelector("dialog[open]")) return;
+  const fresh = await api(`/api/courses/${course.id}`).catch(() => null);
+  if (fresh && state.course?.id === course.id && !$("#view-course").hidden
+      && courseSignature(fresh) !== courseSignature(state.course)) refreshCourse().catch(() => {});
+});
 
 // Page du cours : ses chapitres, avec ce qu'ils contiennent, « Créer » et « … » (voir, exporter).
 async function renderTiles(course) {
@@ -1473,6 +1484,11 @@ const splitTarget = () => focusFile() || state.course.files[0];
 $("#split-ai").addEventListener("click", async () => {
   await detectChapters([splitTarget().id]);
   renderSplitOffer();
+});
+// L'app Claude découpe elle-même le cours, puis crée quiz et flashcards : la fenêtre « Tout préparer », côté app Claude
+$("#split-app").addEventListener("click", () => {
+  openPrepare();
+  setPrepareEngine("app");
 });
 $("#split-auto").addEventListener("click", async () => {
   const { course } = await api(`/api/courses/${state.course.id}/files/${splitTarget().id}/chapters/auto`, { method: "POST" });
@@ -4097,6 +4113,10 @@ const WELCOME = [
 ];
 // Les nouveautés de chaque version (le carton « Quoi de neuf » ne s'affiche que si la version en a)
 const WHATS_NEW = {
+  "0.47.0": [
+    ["✂", "Claude découpe ton cours", "Un cours pas encore découpé ? « Avec l'app Claude » : il trouve les chapitres, puis crée quiz et flashcards"],
+    ["↻", "Toujours à jour", "En revenant dans Pirouette, la page du cours montre ce que Claude vient d'ajouter"],
+  ],
   "0.46.0": [
     ["🎲", "10 questions au hasard", "Dans Réviser → Quiz, un tirage dans tous les quiz du cours, tous chapitres confondus"],
     ["⇄", "Quiz entier ou 10 questions", "Un grand quiz se fait en entier ou sur 10 questions, au choix"],
@@ -5634,11 +5654,21 @@ function setPrepareEngine(engine) {
     b.setAttribute("aria-checked", String(b.dataset.prepareEngine === engine));
   });
   const app = engine === "app";
+  const unsplit = unsplitFiles();
+  if (unsplit.length && app) $("#prepare-text").textContent = `« ${baseName(unsplit[0].name)} » n'est pas encore découpé : `
+    + "Claude le découpe d'abord en chapitres, puis crée tout chapitre par chapitre :";
+  else if (unsplit.length) $("#prepare-text").textContent = "Pirouette peut tout créer maintenant pour ce cours, d'un seul bloc "
+    + "(découpe-le d'abord pour avoir un quiz par chapitre) :";
   $("#prepare-local-note").hidden = app;
   $("#prepare-app").hidden = !app;
   $("#prepare-go").textContent = app ? "Copier la demande" : "Tout préparer";
   if (app) $("#prepare-request").textContent = prepareRequest();
 }
+// Les fichiers (du cours affiché) pas encore découpés : avec l'app Claude, c'est Claude qui les découpe
+const unsplitFiles = (course = state.course) => {
+  const ids = new Set(focusUnits(course).map((u) => u.file));
+  return course.files.filter((f) => ids.has(f.id) && f.chapters_by === "none");
+};
 function prepareRequest() {
   const course = state.course;
   const units = focusUnits(course);
@@ -5647,6 +5677,18 @@ function prepareRequest() {
   const quizText = nq ? `un quiz de ${nq} questions` : "un quiz qui couvre tout le chapitre (chaque définition et chaque notion importante a sa question)";
   const cardsText = nc ? `${nc} flashcards` : "des flashcards qui couvrent tout le chapitre (une par définition et par notion importante)";
   const todo = [quizzes ? `${quizText} (pirouette_creer_quiz)` : "", cards ? `${cardsText} (pirouette_ajouter_cartes)` : ""].filter(Boolean).join(", puis ");
+  const unsplit = unsplitFiles(course);
+  if (unsplit.length) {
+    const ready = units.filter((u) => !unsplit.some((f) => f.id === u.file));
+    return `Pirouette : découpe le cours « ${course.name} » en chapitres, puis prépare-le chapitre par chapitre.\n`
+      + `Cours : ${course.id} · à découper : ${unsplit.map((f) => `${f.id} (${f.name})`).join(", ")}`
+      + (ready.length ? ` · déjà découpés : ${ready.map((u) => `${u.key} (${u.title})`).join(", ")}` : "") + "\n"
+      + `Va droit au but : ne liste pas les cours. D'abord, pour chaque fichier à découper : lis-le en entier (pirouette_lire `
+      + `avec sa clé, toutes les parties), repère ses grandes parties (chapitres, parties, CM : pas chaque sous-titre) et `
+      + `enregistre-les avec pirouette_decouper (titre + ligne de début recopiée mot pour mot) ; Pirouette te donne la clé de `
+      + `chaque chapitre. Ensuite, pour chaque chapitre, l'un après l'autre (inutile de relire un texte que tu as déjà) : `
+      + `crée ${todo}, avec la clé du chapitre dans « chapitres ». Réponds ensuite par un résumé court.`;
+  }
   return `Pirouette : prépare le cours « ${course.name} » chapitre par chapitre.\n`
     + `Cours : ${course.id} · chapitres : ${units.map((u) => `${u.key} (${u.title})`).join(", ")}\n`
     + `Va droit au but : ne liste pas les cours. Pour chaque chapitre, l'un après l'autre : lis-le (pirouette_lire avec sa clé), `

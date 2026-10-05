@@ -18,7 +18,7 @@ from datetime import datetime
 
 from . import __version__
 from . import figures as figures_module
-from .chapters import chapter_text
+from .chapters import MAX_CHAPTERS, build_chapters, chapter_text
 from .grounding import Grounding, is_logistics
 from .quiz import QUESTION_TYPES, SYSTEM_PROMPT, giveaway, normalize_question
 from .revision import is_duplicate, normalize_cards
@@ -32,7 +32,7 @@ MAX_FIGURES = 4
 INSTRUCTIONS = """Pirouette est l'app de révision de l'étudiant : ses cours (PDF, Word, Pages…) découpés en chapitres,
 ses quiz et ses flashcards. Pour créer un quiz ou des flashcards : 1) pirouette_cours pour trouver le cours et les
 chapitres, 2) pirouette_lire pour lire le texte des chapitres voulus, 3) pirouette_creer_quiz ou
-pirouette_ajouter_cartes. Si la demande donne déjà l'identifiant du cours et les clés des chapitres (demande copiée
+pirouette_ajouter_cartes. Un fichier « pas encore découpé » se découpe d'abord avec pirouette_decouper. Si la demande donne déjà l'identifiant du cours et les clés des chapitres (demande copiée
 depuis Pirouette), saute l'étape 1 et ne lis que ces chapitres : c'est plus rapide et bien moins coûteux. Tout doit
 venir du texte du cours, avec une citation exacte (« source »). Le texte signale les schémas et images par
 « [Figure …] » : ne les regarde (pirouette_figure) que si le texte ne suffit pas ; une question qui a besoin de la
@@ -63,6 +63,27 @@ TOOLS = [
             "chapitres": _chapters_prop("à lire"),
             "partie": {"type": "integer", "minimum": 1, "description": "Partie à lire (1 par défaut)."},
         }, "required": ["cours"], "additionalProperties": False},
+    },
+    {
+        "name": "pirouette_decouper",
+        "description": "Découpe en chapitres un fichier du cours qui ne l'est pas encore (pirouette_cours l'indique « pas "
+                       "encore découpé »). Lis d'abord le fichier (pirouette_lire avec sa clé), repère ses grandes parties "
+                       "(chapitres, parties, CM : pas chaque sous-titre), puis donne pour chacune son titre et sa ligne de "
+                       "début recopiée mot pour mot depuis le texte. Pirouette renvoie la clé de chaque chapitre, à "
+                       "utiliser ensuite dans « chapitres ». Un fichier déjà découpé garde ses chapitres.",
+        "inputSchema": {"type": "object", "properties": {
+            "cours": {"type": "string", "description": "Identifiant du cours."},
+            "fichier": {"type": "string", "description": "Clé du fichier à découper (donnée par pirouette_cours)."},
+            "chapitres": {"type": "array", "minItems": 2, "maxItems": MAX_CHAPTERS, "items": {
+                "type": "object",
+                "properties": {
+                    "titre": {"type": "string", "description": "Titre court du chapitre."},
+                    "debut": {"type": "string", "description": "La ligne du texte où il commence (son titre dans le "
+                                                               "cours), recopiée mot pour mot."},
+                },
+                "required": ["titre", "debut"],
+            }, "description": "Les chapitres, dans l'ordre du cours."},
+        }, "required": ["cours", "fichier", "chapitres"], "additionalProperties": False},
     },
     {
         "name": "pirouette_creer_quiz",
@@ -200,7 +221,10 @@ class Pirouette:
             for c in members:
                 lines.append(f"- {c['name']} — identifiant {c['id']} — {c['quiz_count']} quiz, {c['card_count']} flashcards")
                 for f in c["files"]:
-                    if f.get("chapters"):
+                    if f.get("chapters_by") == "none":
+                        lines.append(f"    - fichier « {f['name']} » (pas encore découpé en chapitres : pirouette_decouper) "
+                                     f"— clé {f['id']}")
+                    elif f.get("chapters"):
                         for position, chapter in enumerate(f["chapters"]):
                             lines.append(f"    - chapitre « {chapter['title']} » — clé {f['id']}-{position}")
                     else:
@@ -218,6 +242,39 @@ class Pirouette:
         more = f"\n\n[Partie {partie}/{parts} — la suite avec partie={partie + 1}]" if partie < parts else ""
         head = f"Cours « {course['name']} »" + (f", partie {partie}/{parts}" if parts > 1 else "") + " :\n\n"
         return head + chunk + more
+
+    def pirouette_decouper(self, cours: str, fichier: str, chapitres: list) -> str:
+        course = self._course(cours)
+        entry = next((f for f in course["files"] if f["id"] == str(fichier).strip()), None)
+        if entry is None:
+            raise ToolError(f"Fichier introuvable : « {fichier} ». Utilise la clé du fichier donnée par pirouette_cours.")
+        if entry.get("chapters_by") != "none":
+            keys = ", ".join(f"{entry['id']}-{i} ({c['title']})" for i, c in enumerate(entry.get("chapters") or []))
+            raise ToolError(f"« {entry['name']} » est déjà découpé : garde ses chapitres"
+                            + (f" — {keys}." if keys else " (gardé d'un seul bloc par l'étudiant : utilise la clé du fichier)."))
+        lines = self.store.file_text(course["id"], entry["id"]).split("\n")
+        flat = [_flat(line) for line in lines]
+        starts, missing, after = [], [], -1
+        for item in chapitres[:MAX_CHAPTERS]:
+            if not isinstance(item, dict):
+                continue
+            title, start = str(item.get("titre", "")).strip()[:120], _flat(str(item.get("debut", "")))
+            index = _find_line(flat, start, after) if start else None
+            if index is None:
+                missing.append(title or str(item.get("debut", ""))[:80])
+                continue
+            starts.append((index, title or lines[index].strip()[:120]))
+            after = index
+        if missing:
+            raise ToolError("Lignes de début introuvables dans le texte (recopie-les mot pour mot, dans l'ordre du cours) : "
+                            + " ; ".join(f"« {m} »" for m in missing) + ". Rien n'a été enregistré.")
+        found = build_chapters(lines, starts)
+        if not found:
+            raise ToolError("Il faut au moins deux chapitres distincts. Rien n'a été enregistré.")
+        self.store.set_chapters(course["id"], entry["id"], found, "ai", revision=entry["revisions"])
+        keys = "\n".join(f"- {entry['id']}-{i} : {c['title']}" for i, c in enumerate(found))
+        return (f"« {entry['name']} » découpé en {len(found)} chapitres (l'étudiant les voit dans Pirouette). "
+                f"Clés à utiliser dans « chapitres » :\n{keys}")
 
     def pirouette_creer_quiz(self, cours: str, titre: str, questions: list, chapitres: list[str] | None = None,
                              quiz: str = "") -> str:
@@ -358,6 +415,23 @@ class Pirouette:
                 lines.append(f"- [{e['quiz'].get('course_name', '')}] {q['question']} → {q['answer']} "
                              f"(ratée {e['stat']['wrong']} fois, réussie {e['stat']['right']} fois)")
         return "\n".join(lines)
+
+
+def _flat(text: str) -> str:
+    """Une ligne réduite à ses lettres et chiffres, en minuscules (espaces, puces, # ou ponctuation ne comptent pas)."""
+    return "".join(ch for ch in text.lower() if ch.isalnum())
+
+
+def _find_line(flat: list[str], start: str, after: int) -> int | None:
+    """La première ligne après `after` qui est ce début (ou qui commence par lui, s'il est assez long)."""
+    for index in range(after + 1, len(flat)):
+        if flat[index] == start:
+            return index
+    if len(start) >= 8:
+        for index in range(after + 1, len(flat)):
+            if flat[index].startswith(start) or (len(flat[index]) >= 8 and start.startswith(flat[index])):
+                return index
+    return None
 
 
 # ---------- Protocole (JSON-RPC 2.0 sur l'entrée / la sortie standard, un message par ligne) ----------

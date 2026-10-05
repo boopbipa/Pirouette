@@ -183,7 +183,10 @@ comme un arbre qui part du fichier importé :
   gardés ; « **Redécouper** » relance le repérage des chapitres ; « **Effacer les chapitres** » remet le fichier en un
   seul bloc (quiz et cartes gardés) ; on peut aussi y glisser un fichier.
 - **Découpage en chapitres à la demande** : un cours importé reste d'**un seul bloc**. Un encart propose de le découper :
-  « **Découper avec l'IA** » (IA locale, en arrière-plan), « **Découpage rapide** » (sans IA : les titres évidents,
+  « **Découper avec l'IA** » (IA locale, en arrière-plan), « **Avec l'app Claude (+ quiz et cartes)** » (la demande à
+  copier dans l'app Claude lui fait découper le cours — outil `pirouette_decouper`, titre et ligne de début recopiée mot
+  pour mot — puis créer quiz et flashcards chapitre par chapitre ; « Tout préparer » côté app Claude fait de même pour un
+  cours pas encore découpé ; de retour dans Pirouette, la page du cours se met à jour), « **Découpage rapide** » (sans IA : les titres évidents,
   « Chapitre 2 », « II. »…) ou « **Garder en un seul bloc** » (l'encart ne revient plus). Une nouvelle version d'un
   fichier déjà découpé est redécoupée comme avant.
 - **Une matière, plusieurs cours** : « **+ Ajouter un cours** » (en haut, à gauche de « Gérer le cours ») dépose un

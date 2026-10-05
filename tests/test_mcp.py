@@ -46,7 +46,7 @@ def test_handshake_and_tool_list(tmp_path):
     assert replies[0]["result"]["protocolVersion"] == "2025-06-18"
     assert replies[0]["result"]["serverInfo"]["name"] == "pirouette"
     names = [t["name"] for t in replies[1]["result"]["tools"]]
-    assert names == ["pirouette_cours", "pirouette_lire", "pirouette_creer_quiz", "pirouette_ajouter_cartes", "pirouette_figure", "pirouette_difficultes"]
+    assert names == ["pirouette_cours", "pirouette_lire", "pirouette_decouper", "pirouette_creer_quiz", "pirouette_ajouter_cartes", "pirouette_figure", "pirouette_difficultes"]
     assert replies[3]["error"]["code"] == -32601
 
 
@@ -144,3 +144,29 @@ def test_complete_an_existing_quiz(tmp_path):
     assert len(store.list_quizzes(cid)) == 1
     missing, error = _call(store, "pirouette_creer_quiz", cours=cid, titre="x", questions=[second], quiz="000000000000")
     assert error and "introuvable" in missing
+
+
+def test_claude_splits_an_unsplit_file(tmp_path):
+    store = Store(tmp_path / "data")
+    cid = store.create_course("Neuro")["id"]
+    store.add_file(cid, "neuro.txt", TEXT.encode(), TEXT, [], 1, chapters_by="none")
+    fid = store.get_course(cid)["files"][0]["id"]
+    listing, _ = _call(store, "pirouette_cours")
+    assert f"pas encore découpé en chapitres : pirouette_decouper) — clé {fid}" in listing
+    # Une ligne de début qui n'existe pas : rien n'est enregistré
+    _, error = _call(store, "pirouette_decouper", cours=cid, fichier=fid,
+                     chapitres=[{"titre": "Le neurone", "debut": "Chapitre 1 : Le neurone"}, {"titre": "X", "debut": "Chapitre 9"}])
+    assert error and store.get_course(cid)["files"][0]["chapters_by"] == "none"
+    # Lignes recopiées (ponctuation et casse près) : les chapitres sont enregistrés, avec leurs clés
+    text, error = _call(store, "pirouette_decouper", cours=cid, fichier=fid,
+                        chapitres=[{"titre": "Le neurone", "debut": "Chapitre 1 : Le neurone"},
+                                   {"titre": "La myéline", "debut": "chapitre 2 - la myéline"}])
+    entry = store.get_course(cid)["files"][0]
+    assert not error and f"{fid}-1 : La myéline" in text
+    assert entry["chapters_by"] == "ai" and [c["title"] for c in entry["chapters"]] == ["Le neurone", "La myéline"]
+    read, _ = _call(store, "pirouette_lire", cours=cid, chapitres=[f"{fid}-1"])
+    assert "myéline" in read and "synapse" not in read
+    # Déjà découpé : on garde ses chapitres
+    again, error = _call(store, "pirouette_decouper", cours=cid, fichier=fid,
+                         chapitres=[{"titre": "A", "debut": "Chapitre 1 : Le neurone"}, {"titre": "B", "debut": "Chapitre 2 : La myéline"}])
+    assert error and "déjà découpé" in again
