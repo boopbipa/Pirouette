@@ -1,4 +1,8 @@
-"""Mises à jour automatiques de l'app Mac.
+"""Mises à jour automatiques de l'app (Mac et Windows).
+
+Windows : Pirouette télécharge l'installateur (Pirouette-Windows-Setup.exe) ; un petit script attend que la fenêtre
+soit fermée, puis le lance sans rien demander (installation pour l'utilisateur, sans droits d'administrateur).
+
 
 Au lancement, Pirouette regarde la dernière version publiée sur GitHub (page « Releases »). S'il y en a une plus
 récente, un clic suffit : Pirouette télécharge le .dmg de ce Mac (puce Apple ou Intel) et en sort la nouvelle app, rangée
@@ -31,8 +35,18 @@ def parse_version(text: str) -> tuple[int, ...]:
     return tuple(int(n) for n in re.findall(r"\d+", text)[:3]) or (0,)
 
 
+WINDOWS = sys.platform == "win32"
+
+
 def asset_name() -> str:
+    if WINDOWS:
+        return "Pirouette-Windows-Setup.exe"
     return "Pirouette-Apple-Silicon.dmg" if platform.machine() == "arm64" else "Pirouette-Intel.dmg"
+
+
+def windows_setup() -> Path:
+    """Où attend l'installateur de la prochaine version (Windows)."""
+    return Path(os.getenv("LOCALAPPDATA", Path.home())) / "Pirouette-maj" / "Pirouette-Setup.exe"
 
 
 def app_bundle() -> Path | None:
@@ -44,6 +58,8 @@ def app_bundle() -> Path | None:
 
 
 def can_install() -> bool:
+    if WINDOWS:
+        return bool(getattr(sys, "frozen", False))
     bundle = app_bundle()
     return bundle is not None and os.access(bundle.parent, os.W_OK)
 
@@ -60,7 +76,8 @@ def pending_app(bundle: Path | None = None) -> Path | None:
 async def check() -> dict:
     """Dernière version publiée : {current, latest, available, url, page, can_install, ready} ou {error}.
     `ready` : la nouvelle version est déjà téléchargée, il ne reste qu'à quitter et rouvrir Pirouette."""
-    result = {"current": __version__, "can_install": can_install(), "ready": pending_app() is not None}
+    ready = windows_setup().exists() if WINDOWS else pending_app() is not None
+    result = {"current": __version__, "can_install": can_install(), "ready": ready}
     try:
         async with httpx.AsyncClient(timeout=8, follow_redirects=True) as client:
             response = await client.get(API, headers={"Accept": "application/vnd.github+json"})
@@ -129,9 +146,39 @@ def start_swap(bundle: Path, new_app: Path) -> None:
                      stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 
+def windows_script(setup: Path, pid: int) -> str:
+    """PowerShell : attend que la fenêtre de Pirouette soit fermée (cette Pirouette, puis toute autre ouverte entre-temps),
+    arrête les Pirouette sans fenêtre (outils de l'app Claude, rappel), installe sans rien demander, puis s'efface."""
+    q = lambda p: "'" + str(p).replace("'", "''") + "'"  # noqa: E731
+    return f"""$ErrorActionPreference = 'SilentlyContinue'
+Wait-Process -Id {pid}
+function Fenetres {{ Get-CimInstance Win32_Process -Filter "Name='Pirouette.exe'" | Where-Object {{ $_.CommandLine -notmatch '--mcp|--remind|--server-only' }} }}
+while (Fenetres) {{ Start-Sleep -Seconds 1 }}
+if (-not (Test-Path {q(setup)})) {{ exit }}
+Get-CimInstance Win32_Process -Filter "Name='Pirouette.exe'" | ForEach-Object {{ Stop-Process -Id $_.ProcessId -Force }}
+Start-Process -FilePath {q(setup)} -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART' -Wait
+Remove-Item {q(setup)} -Force
+"""
+
+
+def start_windows_install(setup: Path) -> None:
+    """Lance à part (il survit à la fermeture de Pirouette) le script qui installera la nouvelle version."""
+    script = setup.with_name("installer.ps1")
+    script.write_text(windows_script(setup, os.getpid()), encoding="utf-8")
+    flags = getattr(subprocess, "DETACHED_PROCESS", 0) | getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0) \
+        | getattr(subprocess, "CREATE_NO_WINDOW", 0)
+    subprocess.Popen(["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-WindowStyle", "Hidden",
+                      "-File", str(script)], creationflags=flags, close_fds=True,
+                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+
 def resume_pending() -> None:
     """Au lancement : une nouvelle version attend encore (Mac redémarré entre-temps…) ? On relance l'attente,
     le remplacement se fera quand cette Pirouette sera quittée."""
+    if WINDOWS:
+        if getattr(sys, "frozen", False) and windows_setup().exists():
+            start_windows_install(windows_setup())
+        return
     bundle = app_bundle()
     new_app = pending_app(bundle)
     if bundle is not None and new_app is not None:
@@ -139,23 +186,23 @@ def resume_pending() -> None:
 
 
 async def install(url: str, on_progress) -> None:
-    """Télécharge le .dmg, prépare la nouvelle app et lance le remplacement (qui attend que Pirouette soit quittée)."""
+    """Télécharge le .dmg, prépare la nouvelle app et lance le remplacement (qui attend que Pirouette soit quittée).
+    Windows : télécharge l'installateur, qui se lancera tout seul à la fermeture de Pirouette."""
+    if WINDOWS:
+        if not can_install():
+            raise RuntimeError("La mise à jour automatique ne marche que dans l'app installée.")
+        setup = windows_setup()
+        setup.parent.mkdir(parents=True, exist_ok=True)
+        await download(url, setup.with_suffix(".part"), on_progress)
+        setup.with_suffix(".part").replace(setup)
+        start_windows_install(setup)
+        return
     bundle = app_bundle()
     if bundle is None:
         raise RuntimeError("La mise à jour automatique ne marche que dans l'app Mac.")
     work = Path(tempfile.mkdtemp(prefix="pirouette-maj-"))
     dmg = work / "Pirouette.dmg"
-    async with httpx.AsyncClient(timeout=httpx.Timeout(600, connect=10), follow_redirects=True) as client:
-        async with client.stream("GET", url) as response:
-            response.raise_for_status()
-            total = int(response.headers.get("content-length") or 0)
-            done = 0
-            with dmg.open("wb") as out:
-                async for chunk in response.aiter_bytes(1 << 16):
-                    out.write(chunk)
-                    done += len(chunk)
-                    if total:
-                        await on_progress({"type": "progress", "percent": round(100 * done / total)})
+    await download(url, dmg, on_progress)
     await on_progress({"type": "status", "message": "Préparation de la nouvelle version…"})
     mount = work / "volume"
     mount.mkdir()
@@ -169,3 +216,17 @@ async def install(url: str, on_progress) -> None:
         subprocess.run(["hdiutil", "detach", "-force", str(mount)], capture_output=True)
     shutil.rmtree(work, ignore_errors=True)
     start_swap(bundle, new_app)
+
+
+async def download(url: str, target: Path, on_progress) -> None:
+    async with httpx.AsyncClient(timeout=httpx.Timeout(600, connect=10), follow_redirects=True) as client:
+        async with client.stream("GET", url) as response:
+            response.raise_for_status()
+            total = int(response.headers.get("content-length") or 0)
+            done = 0
+            with target.open("wb") as out:
+                async for chunk in response.aiter_bytes(1 << 16):
+                    out.write(chunk)
+                    done += len(chunk)
+                    if total:
+                        await on_progress({"type": "progress", "percent": round(100 * done / total)})

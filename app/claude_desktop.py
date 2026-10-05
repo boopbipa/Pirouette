@@ -8,6 +8,7 @@ quitter et rouvrir l'app Claude pour qu'elle en tienne compte.
 from __future__ import annotations
 
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -15,6 +16,8 @@ NAME = "pirouette"
 
 
 def config_path() -> Path:
+    if sys.platform == "win32":  # app Claude pour Windows : %APPDATA%\Claude
+        return Path(os.getenv("APPDATA", Path.home())) / "Claude" / "claude_desktop_config.json"
     return Path.home() / "Library" / "Application Support" / "Claude" / "claude_desktop_config.json"
 
 

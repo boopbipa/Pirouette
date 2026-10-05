@@ -31,6 +31,7 @@ exe = EXE(
     console=False,
     argv_emulation=False,
     codesign_identity=None,
+    icon=str(ROOT / "packaging" / "Pirouette.ico") if sys.platform == "win32" else None,
 )
 coll = COLLECT(exe, a.binaries, a.datas, name="Pirouette")
 

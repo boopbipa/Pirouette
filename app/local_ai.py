@@ -56,6 +56,22 @@ def ram_gb() -> float | None:
             return round(int(out.stdout.strip()) / 1024**3, 1)
         except (OSError, ValueError, subprocess.SubprocessError):
             pass
+    if os.name == "nt":
+        try:
+            import ctypes
+
+            class MemoryStatus(ctypes.Structure):
+                _fields_ = [("dwLength", ctypes.c_ulong), ("dwMemoryLoad", ctypes.c_ulong),
+                            ("ullTotalPhys", ctypes.c_ulonglong), ("ullAvailPhys", ctypes.c_ulonglong),
+                            ("ullTotalPageFile", ctypes.c_ulonglong), ("ullAvailPageFile", ctypes.c_ulonglong),
+                            ("ullTotalVirtual", ctypes.c_ulonglong), ("ullAvailVirtual", ctypes.c_ulonglong),
+                            ("ullAvailExtendedVirtual", ctypes.c_ulonglong)]
+
+            memory = MemoryStatus(dwLength=ctypes.sizeof(MemoryStatus))
+            if ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(memory)):
+                return round(memory.ullTotalPhys / 1024**3, 1)
+        except (OSError, AttributeError, ValueError):
+            pass
     return None
 
 
@@ -72,6 +88,10 @@ def ollama_app_path() -> Path | None:
         for base in (Path("/Applications"), Path.home() / "Applications"):
             if (base / "Ollama.app").exists():
                 return base / "Ollama.app"
+    if os.name == "nt":  # installé pour l'utilisateur : %LOCALAPPDATA%\Programs\Ollama
+        app = Path(os.getenv("LOCALAPPDATA", Path.home())) / "Programs" / "Ollama" / "ollama app.exe"
+        if app.exists():
+            return app
     return None
 
 
@@ -84,7 +104,10 @@ def open_ollama() -> bool:
     app = ollama_app_path()
     if app is None:
         return False
-    subprocess.Popen(["open", "-a", str(app)])
+    if os.name == "nt":
+        subprocess.Popen([str(app)], creationflags=getattr(subprocess, "DETACHED_PROCESS", 0))
+    else:
+        subprocess.Popen(["open", "-a", str(app)])
     return True
 
 

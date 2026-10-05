@@ -38,6 +38,23 @@ cherche plus et ne la propose nulle part.
 
 Fabriquer le `.dmg` soi-même sur un Mac : `pip install -r requirements-desktop.txt && packaging/build_macos.sh`.
 
+## Installer l'app sur Windows (bêta)
+
+1. Télécharge **[Pirouette-Windows-Setup.exe](https://github.com/boopbipa/Pirouette/releases/latest/download/Pirouette-Windows-Setup.exe)**
+   (Windows 10 ou 11, 64 bits ; le lien pointe toujours vers la dernière version).
+2. Lance-le. Windows affiche peut-être « Windows a protégé votre ordinateur » (pas de certificat payant) :
+   **Informations complémentaires → Exécuter quand même**, une seule fois.
+3. L'installation se fait pour l'utilisateur seul (`%LOCALAPPDATA%\Programs\Pirouette`), sans droits
+   d'administrateur ; Pirouette est dans le menu Démarrer. Données : `%APPDATA%\Pirouette`.
+4. Mises à jour : comme sur Mac (Réglages → « Installer la mise à jour », puis fermer et rouvrir Pirouette) ; un petit
+   script attend la fermeture de la fenêtre puis lance l'installateur sans rien demander.
+
+Différences avec le Mac : pas de rappel quotidien ; Pages / Keynote lus seulement quand le fichier contient son aperçu
+(sinon, l'exporter en PDF) ; l'app Claude pour Windows se branche pareil (Réglages → L'app Claude). Les textes de
+l'interface parlent du PC au lieu du Mac. Fabrication : `packaging/build_windows.ps1` (PyInstaller + Inno Setup,
+`packaging/pirouette.iss`), lancée par GitHub Actions avec les .dmg ; l'installateur y est testé (serveur, PDF / Word /
+PowerPoint, app Claude, installation silencieuse, fenêtre ouverte).
+
 ## Installation pour développer (run.sh)
 
 Prérequis : Python 3.10+ (`brew install python` si besoin).

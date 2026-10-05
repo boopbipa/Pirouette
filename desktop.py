@@ -32,6 +32,20 @@ def data_dir() -> Path:
     return base / "Pirouette"
 
 
+def std_stream(which: str):
+    """Entrée / sortie standard en binaire. L'app Windows n'a pas de console : Python n'y branche alors rien
+    (sys.stdout vaut None), mais l'app Claude, elle, lui passe des tuyaux ; on les récupère auprès de Windows."""
+    stream = getattr(sys, which)
+    if stream is not None:
+        return stream.buffer
+    import ctypes
+    import msvcrt
+
+    handle = ctypes.windll.kernel32.GetStdHandle({"stdin": -10, "stdout": -11, "stderr": -12}[which])
+    fd = msvcrt.open_osfhandle(handle, os.O_RDONLY if which == "stdin" else os.O_WRONLY)
+    return os.fdopen(fd, "rb" if which == "stdin" else "wb", buffering=0 if which != "stdin" else -1)
+
+
 def free_port() -> int:
     with socket.socket() as sock:
         sock.bind(("127.0.0.1", 0))
@@ -145,7 +159,7 @@ def serve_claude() -> None:
     from app.mcp_server import serve
     from app.storage import Store
 
-    serve(Store(Path(os.environ["QUIZZ_DATA_DIR"])))
+    serve(Store(Path(os.environ["QUIZZ_DATA_DIR"])), std_stream("stdin"), std_stream("stdout"))
 
 
 def app_menu() -> list:
@@ -185,7 +199,9 @@ def main() -> None:
     url = f"http://127.0.0.1:{port}/"
 
     if "--server-only" in sys.argv:
-        print(json.dumps({"url": url, "data_dir": os.environ["QUIZZ_DATA_DIR"]}), flush=True)
+        out = std_stream("stdout")
+        out.write((json.dumps({"url": url, "data_dir": os.environ["QUIZZ_DATA_DIR"]}) + "\n").encode())
+        out.flush()
         try:
             while True:
                 time.sleep(3600)
@@ -213,7 +229,8 @@ def main() -> None:
         background_color="#FAF8F3",
         text_select=True,  # indispensable pour sélectionner un mot et demander sa définition
     )
-    webview.start(menu=app_menu())
+    # La barre des menus (« Rechercher une mise à jour… ») est celle du Mac ; sous Windows, tout passe par Réglages.
+    webview.start(menu=app_menu() if sys.platform == "darwin" else [])
     server.should_exit = True
     # Fenêtre fermée : on s'arrête pour de bon. Sinon Python attend ses tâches de fond (une création de quiz, une
     # requête en cours…) et l'app restait ouverte sans fenêtre, bloquée, empêchant aussi la mise à jour de s'installer.

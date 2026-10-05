@@ -244,7 +244,19 @@ async def save_settings(body: SettingsIn) -> dict:
 # ---------- Branchement à l'app Claude (MCP, voir app/mcp_server.py) ----------
 
 def _claude_app_view() -> dict:
-    return claude_desktop.status() | {"supported": sys.platform == "darwin" and os.getenv("PIROUETTE_DESKTOP") == "1"}
+    supported = sys.platform in ("darwin", "win32") and os.getenv("PIROUETTE_DESKTOP") == "1"
+    return claude_desktop.status() | {"supported": supported}
+
+
+def reveal(path: Path, select: bool = False) -> None:
+    """Montre un dossier (ou un fichier, sélectionné) dans le Finder ou l'Explorateur Windows."""
+    try:
+        if sys.platform == "darwin":
+            subprocess.run(["open", "-R", str(path)] if select else ["open", str(path)], capture_output=True, timeout=10)
+        elif os.name == "nt":
+            subprocess.Popen(["explorer", f"/select,{path}"] if select else ["explorer", str(path)])
+    except OSError:
+        pass
 
 
 @app.get("/api/claude-app")
@@ -286,8 +298,7 @@ async def open_backups() -> dict:
     """Ouvre le dossier des sauvegardes dans le Finder (app Mac)."""
     folder = backup.backup_dir(store)
     folder.mkdir(parents=True, exist_ok=True)
-    if sys.platform == "darwin":
-        subprocess.run(["open", str(folder)], capture_output=True, timeout=10)
+    reveal(folder)
     return {"path": str(folder)}
 
 
@@ -1928,8 +1939,7 @@ async def export_to_downloads(kind: str, item_id: str) -> dict:
         path.write_bytes(content)
     else:
         path.write_text(content, encoding="utf-8")
-    if sys.platform == "darwin":
-        subprocess.run(["open", "-R", str(path)], capture_output=True, timeout=10)
+    reveal(path, select=True)
     return {"path": str(path), "name": path.name}
 
 
@@ -2205,6 +2215,12 @@ def _mail(subject: str, text: str) -> dict:
     if os.getenv("PIROUETTE_DESKTOP") == "1" and sys.platform == "darwin":
         # Dans l'app, on demande à macOS d'ouvrir le mail prêt à partir dans Mail (ou l'app de mail par défaut).
         opened = subprocess.run(["open", mailto], capture_output=True).returncode == 0
+    elif os.getenv("PIROUETTE_DESKTOP") == "1" and os.name == "nt":
+        try:
+            os.startfile(mailto)  # l'app de mail par défaut de Windows
+            opened = True
+        except OSError:
+            pass
     return {"mailto": mailto, "opened": opened, "to": FEEDBACK_EMAIL, "subject": subject, "body": text}
 
 

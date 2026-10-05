@@ -1,6 +1,40 @@
 const $ = (sel) => document.querySelector(sel);
 const TYPE_LABELS = { qcm: "QCM", vrai_faux: "Vrai / Faux", reponse_courte: "Réponse courte", texte_a_trous: "Texte à trous" };
 const BLANK = "_____";
+// Sous Windows : les textes écrits pour le Mac (« ton Mac », ⌘Q, Finder…) sont reformulés à l'affichage,
+// y compris ceux ajoutés plus tard par l'interface.
+const ON_WINDOWS = /Windows/.test(navigator.userAgent);
+const WINDOWS_WORDS = [
+  [/quitte l'app Claude \(⌘Q\)/g, "ferme complètement l'app Claude (clic droit sur son icône près de l'horloge → Quitter)"],
+  [/\(⌘Q\)/g, "(clic droit sur son icône près de l'horloge → Quitter)"],
+  [/glisse Ollama dans Applications/g, "installe-le (Suivant, Suivant…)"],
+  [/depuis tes Applications/g, "depuis le menu Démarrer"],
+  [/la barre des menus/g, "la barre des tâches, près de l'horloge"],
+  [/\bFinder\b/g, "Explorateur"],
+  [/\bmacOS\b/g, "Windows"],
+  [/pour Mac\b/g, "pour Windows"],
+  [/l'app Mac( \(Pirouette\.app\))?/g, "l'app installée"],
+  [/\b(ton|ce|le|du|un|au|sur|son) Mac\b/g, "$1 PC"],
+];
+function windowsText(node) {
+  let text = node.nodeValue;
+  if (!text || !/Mac|⌘|Finder|Applications|barre des menus/.test(text)) return;
+  for (const [pattern, words] of WINDOWS_WORDS) text = text.replace(pattern, words);
+  if (text !== node.nodeValue) node.nodeValue = text;
+}
+function windowsTexts(root) {
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  for (let node = walker.nextNode(); node; node = walker.nextNode()) windowsText(node);
+}
+if (ON_WINDOWS) {
+  document.documentElement.classList.add("windows");
+  windowsTexts(document.body);
+  new MutationObserver((changes) => changes.forEach((change) => {
+    if (change.type === "characterData") windowsText(change.target);
+    change.addedNodes.forEach((node) => (node.nodeType === 3 ? windowsText(node) : node.nodeType === 1 && windowsTexts(node)));
+  })).observe(document.body, { childList: true, subtree: true, characterData: true });
+}
+
 // Petites icônes dessinées (pas d'emoji dans l'app).
 const svgIcon = (path) => `<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${path}</svg>`;
 const ICON_EDIT = svgIcon('<path d="M4 20h4L19 9l-4-4L4 16z"/><path d="m13.5 6.5 4 4"/>');
@@ -4275,6 +4309,9 @@ const WELCOME = [
 ];
 // Les nouveautés de chaque version (le carton « Quoi de neuf » ne s'affiche que si la version en a)
 const WHATS_NEW = {
+  "0.50.0": [
+    ["🪟", "Pirouette pour Windows", "Une version Windows (bêta) est disponible : à partager avec tes amis sur PC"],
+  ],
   "0.49.0": [
     ["←", "Revenir en arrière", "« ← Précédent » dans les révisions : reviens sur une carte ou une question et change ta réponse"],
     ["🔍", "Zoomer sur une carte", "Pince le trackpad, la souris sur la flashcard : elle grandit par-dessus la page"],

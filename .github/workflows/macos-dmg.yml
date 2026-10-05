@@ -1,7 +1,7 @@
-name: Pirouette pour Mac (.dmg)
+name: Pirouette pour Mac et Windows
 
-# Fabrique les .dmg (Apple Silicon et Intel) sur des Mac GitHub, les teste,
-# puis publie la page de téléchargement « Releases » avec des liens permanents.
+# Fabrique les .dmg (Apple Silicon et Intel) sur des Mac GitHub et l'installateur Windows sur un PC GitHub,
+# les teste, puis publie la page de téléchargement « Releases » avec des liens permanents.
 
 on:
   push:
@@ -81,9 +81,63 @@ jobs:
           path: fenetre.png
           if-no-files-found: ignore
 
+  windows:
+    name: Windows (installateur)
+    if: ${{ !github.event.repository.private }}
+    runs-on: windows-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Dépendances
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements-desktop.txt pytest
+
+      # Pour l'instant à titre d'information : les tests ont été écrits sur Mac et Linux
+      - name: Tests (informatif)
+        continue-on-error: true
+        run: python -m pytest -q
+
+      - name: Fabrication de l'app et de l'installateur
+        run: packaging/build_windows.ps1
+
+      - name: Test de l'app empaquetée (serveur, PDF/Word/PowerPoint, app Claude)
+        run: python packaging/smoke_test.py dist/Pirouette/Pirouette.exe
+
+      - name: Installation silencieuse (comme une mise à jour)
+        shell: pwsh
+        run: |
+          $setup = Get-ChildItem dist\*-Windows-Setup.exe | Select-Object -First 1
+          Start-Process -FilePath $setup.FullName -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART' -Wait
+          $exe = "$env:LOCALAPPDATA\Programs\Pirouette\Pirouette.exe"
+          if (-not (Test-Path $exe)) { throw "Pirouette.exe n'a pas été installé" }
+          Write-Host "✓ Installé dans $exe"
+
+      - name: Test de la fenêtre (l'app doit rester ouverte)
+        shell: pwsh
+        run: |
+          $app = Start-Process -FilePath "$env:LOCALAPPDATA\Programs\Pirouette\Pirouette.exe" -PassThru
+          Start-Sleep -Seconds 30
+          if ($app.HasExited) { throw "Pirouette s'est fermée au démarrage (code $($app.ExitCode))" }
+          Write-Host "✓ La fenêtre Pirouette est ouverte"
+          Stop-Process -Id $app.Id -Force
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Pirouette-Windows
+          path: dist/*-Windows-Setup.exe
+          if-no-files-found: error
+
   release:
     name: Page de téléchargement
-    needs: dmg
+    needs: [dmg, windows]
+    # Le Mac est publié même si la version Windows a échoué (elle rejoindra la version suivante)
+    if: ${{ always() && needs.dmg.result == 'success' }}
     # Sur Mac aussi : les machines Linux de GitHub ont parfois été introuvables (publication annulée)
     runs-on: macos-latest
     permissions:
@@ -106,8 +160,13 @@ jobs:
           # Noms sans numéro de version : les liens .../releases/latest/download/… restent valables d'une version à l'autre
           cp dmg/*-Apple-Silicon.dmg Pirouette-Apple-Silicon.dmg
           cp dmg/*-Intel.dmg Pirouette-Intel.dmg
+          FILES="Pirouette-Apple-Silicon.dmg Pirouette-Intel.dmg"
+          if ls dmg/*-Windows-Setup.exe >/dev/null 2>&1; then
+            cp dmg/*-Windows-Setup.exe Pirouette-Windows-Setup.exe
+            FILES="$FILES Pirouette-Windows-Setup.exe"
+          fi
           # Une version republiée remplace la précédente du même numéro (les nouveautés arrivent sans changer de lien)
           gh release delete "$TAG" --yes --cleanup-tag || true
-          gh release create "$TAG" Pirouette-Apple-Silicon.dmg Pirouette-Intel.dmg \
+          gh release create "$TAG" $FILES \
             --target "$GITHUB_SHA" --title "Pirouette ${VERSION}" \
             --notes-file packaging/RELEASE_NOTES.md --latest
