@@ -376,8 +376,8 @@ flashcards exportées s'importent aussi dans Anki et Quizlet.
 
 **Tout exporter d'un coup** : « Gérer le cours » → « Exporter quiz et flashcards », ou l'icône « exporter » d'un
 semestre dans Mes cours (tous ses cours). Pirouette enregistre un seul fichier **.zip** (« Pirouette - L1 S1.zip ») :
-un dossier par cours, chaque quiz en .txt (lisible, importable seul) et les flashcards. **Réimporter** : Mes cours →
-« Importer ». Pour chaque cours du paquet, Pirouette retrouve le cours du même nom (ou d'un nom très proche :
+un dossier par cours, chaque quiz en .txt (lisible, importable seul) et les flashcards. **Réimporter** : dans le cours, « Gérer le cours » → « **Importer quiz et flashcards** » (le .zip va directement dans
+ce cours ; un .txt de quiz ou de flashcards aussi), ou Mes cours → « Importer » (plusieurs cours d'un coup). Pour chaque cours du paquet, Pirouette retrouve le cours du même nom (ou d'un nom très proche :
 « Neuroscience » ≈ « Neurosciences ») ; sinon il propose de le **rattacher à la main** à un de tes cours, de le **créer**
 (rangé dans le semestre du même nom) ou de l'ignorer. Les questions et les cartes déjà présentes ne sont pas doublées :
 réimporter le même paquet n'ajoute rien.

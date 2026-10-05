@@ -1625,28 +1625,78 @@ $("#pack-import-btn").addEventListener("click", () => { $("#pack-input").value =
 $("#pack-input").addEventListener("change", async () => {
   const file = $("#pack-input").files[0];
   if (!file) return;
-  const form = new FormData();
-  form.append("file", file);
+  state.packInto = null;
   try {
-    state.pack = await api("/api/pack/preview", { method: "POST", body: form });
+    state.pack = await previewPack(file);
   } catch (err) {
     return setStatus("#courses-status", err.message, false);
   }
-  const options = (row) => [
-    ...state.pack.existing.map((c) => `<option value="${c.id}" ${row.match?.id === c.id ? "selected" : ""}>${escapeHtml(c.name)}</option>`),
-    `<option value="new" ${row.match ? "" : "selected"}>Créer le cours « ${escapeHtml(row.name)} »</option>`,
-    `<option value="">Ne pas importer</option>`].join("");
+  showPackDialog();
+});
+async function previewPack(file) {
+  const form = new FormData();
+  form.append("file", file);
+  return api("/api/pack/preview", { method: "POST", body: form });
+}
+// Où importer chaque cours du paquet. Depuis la page d'un cours (`into`) : le cours du paquet qui lui ressemble le plus
+// va dans ce cours, les autres ne sont pas importés (on peut changer).
+function showPackDialog(into = null) {
+  const rows = state.pack.courses;
+  const best = into ? Math.max(0, rows.findIndex((r) => r.match?.id === into.id)) : -1;
+  const target = (row, i) => into ? (i === best ? into.id : "") : row.match?.id ?? "new";
+  const options = (row, i) => [
+    ...state.pack.existing.map((c) => `<option value="${c.id}" ${target(row, i) === c.id ? "selected" : ""}>${escapeHtml(c.name)}</option>`),
+    `<option value="new" ${target(row, i) === "new" ? "selected" : ""}>Créer le cours « ${escapeHtml(row.name)} »</option>`,
+    `<option value="" ${target(row, i) === "" ? "selected" : ""}>Ne pas importer</option>`].join("");
   $("#pack-rows").innerHTML = state.pack.courses.map((row, i) => `
     <li class="pack-row">
       <span class="pack-name"><strong>${escapeHtml(row.name)}</strong>
         <small class="muted">${[row.quizzes ? plural(row.quizzes, "quiz", "quiz") : "", row.cards ? plural(row.cards, "carte", "cartes") : ""].filter(Boolean).join(" · ")}${row.folder ? ` · ${escapeHtml(row.folder)}` : ""}</small></span>
       <span class="pack-arrow" aria-hidden="true">→</span>
-      <select class="chip" data-pack-target="${i}" aria-label="Où importer ${escapeHtml(row.name)}">${options(row)}</select>
-      ${row.match ? `<small class="pack-found">retrouvé</small>` : `<small class="pack-new">à rattacher</small>`}
+      <select class="chip" data-pack-target="${i}" aria-label="Où importer ${escapeHtml(row.name)}">${options(row, i)}</select>
+      ${into ? "" : row.match ? `<small class="pack-found">retrouvé</small>` : `<small class="pack-new">à rattacher</small>`}
     </li>`).join("");
   $("#pack-error").hidden = true;
   $("#pack-dialog").showModal();
+}
+const packSummary = (done) => {
+  const parts = [done.questions ? plural(done.questions, "question", "questions") : "", done.cards ? plural(done.cards, "carte", "cartes") : ""].filter(Boolean);
+  return parts.length ? `Importé : ${parts.join(" et ")}` : "";
+};
+// Gérer le cours → Importer quiz et flashcards : un paquet .zip (exporté de Pirouette) ou un quiz / des cartes en texte
+$("#course-import").addEventListener("click", () => {
+  $("#course-more-menu").hidden = true;
+  $("#course-import-input").value = "";
+  $("#course-import-input").click();
 });
+$("#course-import-input").addEventListener("change", async () => {
+  const file = $("#course-import-input").files[0];
+  if (!file) return;
+  if (!/\.zip$/i.test(file.name)) {
+    state.importFrom = null;
+    return importTextFile(file);
+  }
+  const course = state.course;
+  try {
+    state.pack = await previewPack(file);
+  } catch (err) {
+    return setStatus("#course-status", err.message, false);
+  }
+  state.packInto = course.id;
+  if (state.pack.courses.length > 1) return showPackDialog(course);  // plusieurs cours dans le paquet : on choisit
+  try {
+    const done = await api("/api/pack/import", jsonBody("POST", { token: state.pack.token, targets: [course.id] }));
+    await afterCourseImport(done);
+  } catch (err) {
+    setStatus("#course-status", err.message, false);
+  }
+});
+async function afterCourseImport(done) {
+  state.deck = null;
+  await refreshCourse();
+  const text = packSummary(done);
+  setStatus("#course-status", text ? `${text} dans ce cours.` : "Rien de nouveau : ces quiz et ces cartes étaient déjà là.", true);
+}
 $("#pack-rows").addEventListener("change", (e) => {
   const select = e.target.closest("[data-pack-target]");
   const badge = select?.parentElement.querySelector(".pack-found, .pack-new");
@@ -1659,9 +1709,10 @@ $("#pack-go").addEventListener("click", async () => {
   try {
     const done = await api("/api/pack/import", jsonBody("POST", { token: state.pack.token, targets }));
     $("#pack-dialog").close();
-    const parts = [done.questions ? plural(done.questions, "question", "questions") : "", done.cards ? plural(done.cards, "carte", "cartes") : ""].filter(Boolean);
-    setStatus("#courses-status", parts.length
-      ? `Importé : ${parts.join(" et ")} dans ${plural(done.courses, "cours", "cours")}${done.created ? ` (dont ${plural(done.created, "nouveau cours", "nouveaux cours")})` : ""}.`
+    if (state.packInto && state.course?.id === state.packInto) return afterCourseImport(done);  // depuis la page du cours
+    const text = packSummary(done);
+    setStatus("#courses-status", text
+      ? `${text} dans ${plural(done.courses, "cours", "cours")}${done.created ? ` (dont ${plural(done.created, "nouveau cours", "nouveaux cours")})` : ""}.`
       : "Rien de nouveau : ces quiz et ces cartes étaient déjà là.", true);
     loadCourses();
   } catch (err) {
@@ -1700,7 +1751,10 @@ $("#cards-export").addEventListener("click", () => exportItem("cards", state.cou
 $("#import-input").addEventListener("change", async (e) => {
   const file = e.target.files[0];
   e.target.value = "";
-  if (!file) return;
+  if (file) importTextFile(file);
+});
+// Un quiz ou des flashcards en texte (.txt exporté de Pirouette, Anki, Quizlet…) : Pirouette reconnaît lequel des deux
+async function importTextFile(file) {
   const onCards = state.importFrom === "cartes";
   const status = onCards ? "#cards-status" : "#quiz-status";
   const form = new FormData();
@@ -1718,7 +1772,7 @@ $("#import-input").addEventListener("change", async (e) => {
   } catch (err) {
     setStatus(status, err.message, false);
   }
-});
+}
 
 // Aperçu d'un quiz dans le cours : ses questions et leurs réponses, sans le passer.
 document.addEventListener("click", async (e) => {
@@ -4113,6 +4167,9 @@ const WELCOME = [
 ];
 // Les nouveautés de chaque version (le carton « Quoi de neuf » ne s'affiche que si la version en a)
 const WHATS_NEW = {
+  "0.48.0": [
+    ["⇩", "Importer dans un cours", "« Gérer le cours » → « Importer quiz et flashcards » : un paquet .zip ou un .txt, directement dans ce cours"],
+  ],
   "0.47.0": [
     ["✂", "Claude découpe ton cours", "Un cours pas encore découpé ? « Avec l'app Claude » : il trouve les chapitres, puis crée quiz et flashcards"],
     ["↻", "Toujours à jour", "En revenant dans Pirouette, la page du cours montre ce que Claude vient d'ajouter"],

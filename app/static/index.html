@@ -653,9 +653,11 @@
           <button class="ghost small manage-btn" type="button" id="course-more" aria-haspopup="menu">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
             Gérer le cours <span class="caret" aria-hidden="true">▾</span></button>
+          <input type="file" id="course-import-input" accept=".zip,application/zip,.txt,.csv,.tsv,.md,text/plain" hidden>
           <div class="plus-menu more-menu" id="course-more-menu" role="menu" hidden>
             <button type="button" role="menuitem" id="rename-course"><strong>Renommer le cours</strong></button>
             <button type="button" role="menuitem" id="course-exam"><strong>Semaine des partiels</strong></button>
+            <button type="button" role="menuitem" id="course-import"><strong>Importer quiz et flashcards</strong></button>
             <button type="button" role="menuitem" id="course-export"><strong>Exporter quiz et flashcards</strong></button>
             <button type="button" role="menuitem" id="reset-stats"><strong>Réinitialiser les statistiques</strong></button>
             <button type="button" role="menuitem" id="delete-course" class="danger"><strong>Supprimer le cours</strong></button>
