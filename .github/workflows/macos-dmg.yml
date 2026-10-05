@@ -54,7 +54,7 @@ jobs:
           SUPABASE_KEY: ${{ secrets.SUPABASE_PUBLISHABLE_KEY }}
         shell: bash
         run: |
-          python -c "import json, os; u, k = os.environ.get('SUPABASE_URL', ''), os.environ.get('SUPABASE_KEY', ''); (u and k) and open('app/online_config.json', 'w').write(json.dumps({'url': u, 'key': k})); print('Défis en ligne :', 'branchés' if u and k else 'pas de secrets, onglet caché')"
+          python -c "import json, os; u, k = os.environ.get('SUPABASE_URL', ''), os.environ.get('SUPABASE_KEY', ''); (u and k) and open('app/online_config.json', 'w').write(json.dumps({'url': u, 'key': k})); print('::notice title=Défis en ligne::' + ('branchés (secrets SUPABASE trouvés)' if u and k else 'PAS de secrets SUPABASE_URL / SUPABASE_PUBLISHABLE_KEY : onglet Défis caché'))"
 
       - name: Fabrication de l'app et du .dmg
         run: packaging/build_macos.sh
@@ -117,7 +117,7 @@ jobs:
           SUPABASE_KEY: ${{ secrets.SUPABASE_PUBLISHABLE_KEY }}
         shell: bash
         run: |
-          python -c "import json, os; u, k = os.environ.get('SUPABASE_URL', ''), os.environ.get('SUPABASE_KEY', ''); (u and k) and open('app/online_config.json', 'w').write(json.dumps({'url': u, 'key': k})); print('Défis en ligne :', 'branchés' if u and k else 'pas de secrets, onglet caché')"
+          python -c "import json, os; u, k = os.environ.get('SUPABASE_URL', ''), os.environ.get('SUPABASE_KEY', ''); (u and k) and open('app/online_config.json', 'w').write(json.dumps({'url': u, 'key': k})); print('::notice title=Défis en ligne::' + ('branchés (secrets SUPABASE trouvés)' if u and k else 'PAS de secrets SUPABASE_URL / SUPABASE_PUBLISHABLE_KEY : onglet Défis caché'))"
 
       - name: Fabrication de l'app et de l'installateur
         run: packaging/build_windows.ps1
