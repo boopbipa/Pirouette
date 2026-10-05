@@ -24,8 +24,22 @@ class FakeSupabase:
         if path == "/auth/v1/signup":  # compte anonyme
             user = str(uuid.uuid4())
             self.users[user] = user
-            return httpx.Response(200, json={"access_token": uuid.uuid4().hex, "refresh_token": "r", "expires_in": 3600,
+            token = uuid.uuid4().hex
+            self.token_user[token] = user
+            return httpx.Response(200, json={"access_token": token, "refresh_token": "r", "expires_in": 3600,
                                              "user": {"id": user, "is_anonymous": True}})
+        if path == "/auth/v1/user/identities/authorize":  # relier un compte anonyme à Google
+            self.linking = self.token_user.get(request.headers["Authorization"].removeprefix("Bearer "))
+            return httpx.Response(200, json={"url": "https://accounts.google.com/o/oauth2/auth?lien=1"})
+        if path == "/auth/v1/token" and params.get("grant_type") == "pkce":
+            if body["auth_code"] != "bon-code" or not body["code_verifier"]:
+                return httpx.Response(400, json={"msg": "invalid flow state"})
+            user = getattr(self, "linking", None) or str(uuid.uuid4())
+            token = uuid.uuid4().hex
+            self.token_user[token] = user
+            return httpx.Response(200, json={"access_token": token, "refresh_token": "r", "expires_in": 3600,
+                                             "user": {"id": user, "email": "pilou@gmail.com", "is_anonymous": False,
+                                                      "user_metadata": {"full_name": "Pierre-Louis"}}})
         table = path.removeprefix("/rest/v1/")
         rows = self.tables[table]
         filters = {k: v.removeprefix("eq.") for k, v in params.items() if v.startswith("eq.")}
@@ -128,3 +142,25 @@ def test_friends_and_a_challenge(tmp_path, fake):
     assert run(alice.friends())["friends"] == []
     alice.logout()
     assert run(alice.me())["connected"] is False
+
+
+def test_google_sign_in_and_linking(tmp_path, fake):
+    new = player(tmp_path, fake, "new")
+    url = run(new.google_url("http://127.0.0.1:5000/api/online/google/callback"))
+    assert url.startswith("https://exemple.supabase.co/auth/v1/authorize?provider=google")
+    assert "code_challenge=" in url and "redirect_to=http%3A%2F%2F127.0.0.1%3A5000" in url
+    with pytest.raises(online.OnlineError):
+        run(new.google_finish("mauvais-code"))
+    run(new.google_url("http://127.0.0.1:5000/api/online/google/callback"))
+    me = run(new.google_finish("bon-code"))
+    assert me["connected"] and me["google"] and me["name"] == "Pierre-Louis" and me["profile"] is None
+    with pytest.raises(online.OnlineError, match="expiré"):
+        run(new.google_finish("bon-code"))  # un code ne sert qu'une fois
+
+    # Un compte « pseudo » est relié à Google : même identifiant, mêmes amis et scores
+    old = player(tmp_path, fake, "old")
+    before = run(old.start("Pilou"))["profile"]["id"]
+    url = run(old.google_url("http://127.0.0.1:5000/api/online/google/callback"))
+    assert url.startswith("https://accounts.google.com/")
+    me = run(old.google_finish("bon-code"))
+    assert me["google"] and me["profile"]["id"] == before and me["profile"]["pseudo"] == "Pilou"

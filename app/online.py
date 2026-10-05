@@ -8,12 +8,16 @@ Les cours eux-mêmes ne quittent jamais l'ordinateur.
 
 from __future__ import annotations
 
+import base64
+import hashlib
 import json
 import os
 import random
+import secrets
 import time
 from datetime import date
 from pathlib import Path
+from urllib.parse import urlencode
 
 import httpx
 
@@ -31,6 +35,7 @@ def _config() -> dict:
 URL = (os.getenv("PIROUETTE_SUPABASE_URL") or _config().get("url", "")).rstrip("/")
 KEY = os.getenv("PIROUETTE_SUPABASE_KEY") or _config().get("key", "")
 CHALLENGE_SIZE = 10
+_PENDING: dict = {}  # connexion Google en cours : le vérificateur PKCE (un seul Pirouette par ordinateur)
 
 
 class OnlineError(Exception):
@@ -94,10 +99,14 @@ class Online:
 
     def _keep(self, data: dict) -> None:
         user = data.get("user") or {}
+        before = self._session()
+        meta = user.get("user_metadata") or {}
         self._save_session({"access_token": data["access_token"], "refresh_token": data["refresh_token"],
                             "expires_at": int(time.time()) + int(data.get("expires_in", 3600)),
-                            "user_id": user.get("id") or self._session().get("user_id"),
-                            "email": user.get("email") or self._session().get("email")})
+                            "user_id": user.get("id") or before.get("user_id"),
+                            "email": user.get("email") or before.get("email"),
+                            "anonymous": user.get("is_anonymous", before.get("anonymous", True)),
+                            "name": meta.get("full_name") or meta.get("name") or before.get("name")})
 
     # ---------- Compte : un pseudo suffit (compte anonyme, gardé sur cet ordinateur) ----------
     async def start(self, pseudo: str) -> dict:
@@ -110,6 +119,36 @@ class Online:
     def logout(self) -> None:
         self._save_session(None)
 
+    # ---------- Connexion avec Google ----------
+    # Le navigateur s'ouvre sur la page de Google ; après le choix du compte, Supabase renvoie vers Pirouette
+    # (http://127.0.0.1:<port>/api/online/google/callback?code=…), qui échange ce code contre une session (PKCE :
+    # seul ce Pirouette, qui a gardé le « vérificateur », peut faire l'échange). Un compte « pseudo » déjà créé
+    # est relié à Google (mêmes amis, mêmes scores) au lieu d'en créer un nouveau.
+    async def google_url(self, redirect_to: str) -> str:
+        if not configured():
+            raise OnlineError("Les défis en ligne ne sont pas encore ouverts dans cette version.")
+        verifier = secrets.token_urlsafe(64)
+        challenge = base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest()).rstrip(b"=").decode()
+        _PENDING.clear()
+        _PENDING["verifier"] = verifier
+        params = {"provider": "google", "redirect_to": redirect_to, "code_challenge": challenge,
+                  "code_challenge_method": "s256"}
+        session = self._session()
+        if session.get("access_token") and session.get("anonymous", True):
+            response = await self._call("GET", "/auth/v1/user/identities/authorize",
+                                        params=params | {"skip_http_redirect": "true"})
+            return response.json()["url"]
+        return f"{URL}/auth/v1/authorize?{urlencode(params)}"
+
+    async def google_finish(self, code: str) -> dict:
+        verifier = _PENDING.pop("verifier", None)
+        if not verifier:
+            raise OnlineError("Cette connexion a expiré : recommence depuis Pirouette.")
+        response = await self._call("POST", "/auth/v1/token?grant_type=pkce", auth=False,
+                                    json={"auth_code": code, "code_verifier": verifier})
+        self._keep(response.json())
+        return await self.me()
+
     # ---------- Profil ----------
     async def me(self) -> dict:
         session = self._session()
@@ -118,6 +157,7 @@ class Online:
         rows = (await self._call("GET", "/rest/v1/profiles", params={"id": f"eq.{session['user_id']}",
                                                                       "select": "id,pseudo,friend_code"})).json()
         return {"connected": True, "configured": True, "email": session.get("email"),
+                "google": not session.get("anonymous", True), "name": session.get("name"),
                 "profile": rows[0] if rows else None}
 
     async def set_pseudo(self, pseudo: str) -> dict:

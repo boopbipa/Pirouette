@@ -1696,3 +1696,10 @@ html, body { height: 100%; overflow: hidden; }
 .friend-actions { display: flex; align-items: center; gap: 8px; }
 .online-review .question-tools { display: none; }
 .nav-pill a[hidden] { display: none; }
+.google-btn { display: inline-flex; align-items: center; gap: 10px; padding: 10px 18px; border-radius: 999px;
+              border: 1px solid var(--border); background: var(--surface); color: var(--text); font-weight: 600; cursor: pointer; }
+.google-btn:hover { border-color: var(--muted); }
+.google-btn svg { width: 20px; height: 20px; }
+.online-or { margin: 18px 0 4px; }
+.online-me-actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+#online-google-box { margin-bottom: 18px; padding-bottom: 6px; border-bottom: 1px solid var(--border); }

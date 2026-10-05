@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from html import escape as html_escape
 import json
 import os
 import random
@@ -2121,6 +2122,41 @@ async def online_logout() -> dict:
 @app.put("/api/online/pseudo")
 async def online_pseudo(body: OnlineTextIn) -> dict:
     return await _online_call(_online().set_pseudo(body.text))
+
+
+@app.post("/api/online/google")
+async def online_google(request: Request) -> dict:
+    """Ouvre la page de connexion Google dans le navigateur ; Supabase renverra vers le retour ci-dessous."""
+    callback = str(request.base_url).rstrip("/") + "/api/online/google/callback"
+    url = await _online_call(_online().google_url(callback))
+    opened = False
+    if os.getenv("PIROUETTE_DESKTOP") == "1":
+        import webbrowser
+
+        opened = webbrowser.open(url)
+    return {"url": url, "opened": opened}
+
+
+@app.get("/api/online/google/callback")
+async def online_google_callback(code: str = "", error_description: str = "", error: str = "") -> HTMLResponse:
+    """Retour de Google (dans le navigateur) : on termine la connexion et on invite à revenir dans Pirouette."""
+    if code:
+        try:
+            me = await _online().google_finish(code)
+            title, text = "C'est bon !", ("Tu es connecté avec Google" + (f" ({me['email']})" if me.get("email") else "")
+                                           + ". Tu peux fermer cet onglet et revenir dans Pirouette.")
+        except online.OnlineError as exc:
+            title, text = "Connexion impossible", str(exc)
+    else:
+        title = "Connexion impossible"
+        text = ("Google n'a pas autorisé la connexion" + (f" ({error_description or error})" if error_description or error else "")
+                + ". Si tu n'es pas dans la liste des testeurs de l'app, demande à être ajouté.")
+    page = f"""<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>Pirouette</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>body{{font-family:-apple-system,system-ui,sans-serif;background:#FAF8F3;color:#2b211c;display:grid;place-items:center;
+min-height:100vh;margin:0}}main{{max-width:420px;padding:32px;text-align:center}}h1{{color:#B4532A}}</style></head>
+<body><main><h1>{html_escape(title)}</h1><p>{html_escape(text)}</p></main></body></html>"""
+    return HTMLResponse(page)
 
 
 @app.get("/api/online/friends")

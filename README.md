@@ -425,8 +425,10 @@ prénom). Les compteurs (cartes à revoir, suivi des révisions) sont calculés 
 
 ## Défis entre amis (en ligne)
 
-Onglet **Défis** : on choisit un **pseudo** (pas d'e-mail ni de mot de passe : un compte anonyme, gardé dans les réglages
-de cet ordinateur), on s'ajoute entre amis avec un **code ami** de 6 caractères (amis dès que l'autre accepte ou ajoute
+Onglet **Défis** : « **Se connecter avec Google** » (le navigateur s'ouvre ; au retour, Supabase renvoie vers
+`http://127.0.0.1:<port>/api/online/google/callback`, échange PKCE ; le compte se retrouve sur tous les ordinateurs) ou
+simplement un **pseudo** (pas d'e-mail ni de mot de passe : un compte anonyme, gardé dans les réglages de cet ordinateur,
+que « Relier à Google » rattache ensuite à Google sans perdre amis ni scores), on s'ajoute entre amis avec un **code ami** de 6 caractères (amis dès que l'autre accepte ou ajoute
 notre code), puis « **Défier mes amis** » tire 10 questions d'un de ses quiz. Chacun le fait une fois ; le classement
 (score, temps) n'apparaît qu'après avoir joué. En ligne : pseudo, code ami, questions des défis, scores — jamais les cours.
 
@@ -435,6 +437,10 @@ Service : Supabase (`app/online.py`, base et règles d'accès dans `docs/supabas
 `SUPABASE_PUBLISHABLE_KEY`), écrits dans `app/online_config.json` au moment de la fabrication. Sans eux, l'onglet Défis
 reste caché. Une tâche GitHub quotidienne (`supabase-keepalive.yml`) évite la mise en pause du projet gratuit.
 Pour développer : `PIROUETTE_SUPABASE_URL` et `PIROUETTE_SUPABASE_KEY`.
+Côté Supabase / Google : fournisseur Google activé (identifiant OAuth « Application Web » de Google Cloud, URI de
+redirection `https://<projet>.supabase.co/auth/v1/callback`), « Allow anonymous sign-ins » et « Allow manual linking »
+activés, `http://127.0.0.1:*/**` dans les Redirect URLs. Tant que l'app Google est en mode Test, seuls les
+« utilisateurs tests » ajoutés dans Google Cloud (Audience) peuvent se connecter avec Google.
 
 ## Configuration (`.env`)
 

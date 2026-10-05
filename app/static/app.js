@@ -4312,6 +4312,9 @@ const WELCOME = [
 ];
 // Les nouveautés de chaque version (le carton « Quoi de neuf » ne s'affiche que si la version en a)
 const WHATS_NEW = {
+  "0.52.0": [
+    ["G", "Se connecter avec Google", "Dans Défis : ton compte (amis, scores) te suit sur tous tes ordinateurs"],
+  ],
   "0.51.0": [
     ["🏆", "Défis entre amis", "Onglet Défis : un pseudo, tes amis par leur code, et 10 questions de tes quiz à faire chacun, avec classement"],
   ],
@@ -6074,15 +6077,50 @@ async function openOnline() {
   }
   $("#online-off").hidden = me.configured;
   $("#online-pseudo").hidden = !me.configured || Boolean(me.profile);
+  // Connecté avec Google mais pas encore de pseudo : on le choisit (prérempli avec le prénom)
+  const fresh = me.connected && !me.profile;
+  $("#online-google-box").hidden = fresh;
+  $("#online-pseudo-title").textContent = fresh ? "Dernière étape : ton pseudo" : "Choisis ton pseudo pour commencer";
+  $("#online-pseudo-help").hidden = fresh;
+  if (fresh && me.name && !$("#online-pseudo-input").value) $("#online-pseudo-input").value = me.name.split(" ")[0];
   $("#online-main").hidden = !me.connected || !me.profile;
   if (!me.connected || !me.profile) return;
   state.online = me;
   $("#online-hello").textContent = `Salut ${me.profile.pseudo} !`;
+  $("#online-link-google").hidden = me.google;   // compte « pseudo » : on peut le relier à Google
+  $("#online-logout").hidden = !me.google;       // compte Google : on peut se déconnecter (et revenir plus tard)
   $("#online-code-me").textContent = me.profile.friend_code;
   renderOnlineQuizzes();
   await Promise.all([renderChallenges(), renderFriends()]);
 }
 
+// Connexion avec Google : le navigateur s'ouvre ; au retour, Pirouette guette la connexion quelques minutes
+document.addEventListener("click", async (e) => {
+  if (!e.target.closest("[data-google-login]")) return;
+  const status = state.online?.profile ? "#online-me-status" : "#online-pseudo-status";
+  try {
+    const { url, opened } = await api("/api/online/google", { method: "POST" });
+    if (!opened) window.open(url, "_blank");
+    setStatus(status, "Termine la connexion dans ton navigateur, puis reviens ici.", true);
+    const before = JSON.stringify(await api("/api/online").catch(() => ({})));
+    clearInterval(state.googleWait);
+    let tries = 0;
+    state.googleWait = setInterval(async () => {
+      const me = await api("/api/online").catch(() => null);
+      if (++tries > 90 || (me && JSON.stringify(me) !== before)) {
+        clearInterval(state.googleWait);
+        if (!$("#view-online").hidden) openOnline();
+      }
+    }, 2000);
+  } catch (err) {
+    setStatus(status, err.message, false);
+  }
+});
+$("#online-logout").addEventListener("click", async () => {
+  if (!await askConfirm("Se déconnecter ? Tu retrouveras ton compte en te reconnectant avec Google.", { ok: "Se déconnecter" })) return;
+  await api("/api/online/logout", { method: "POST" });
+  openOnline();
+});
 $("#online-pseudo").addEventListener("submit", async (e) => {
   e.preventDefault();
   try {
