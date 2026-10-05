@@ -84,7 +84,8 @@ jobs:
   release:
     name: Page de téléchargement
     needs: dmg
-    runs-on: ubuntu-latest
+    # Sur Mac aussi : les machines Linux de GitHub ont parfois été introuvables (publication annulée)
+    runs-on: macos-latest
     permissions:
       contents: write
     steps:
