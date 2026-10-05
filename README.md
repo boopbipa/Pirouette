@@ -32,7 +32,9 @@ masqué ; il se réactive en lançant l'app avec `PIROUETTE_CLAUDE=1`. Comparais
    (choisis le dossier `data` de la version lancée avec `run.sh`).
 
 Les données de l'app sont dans `~/Bibliothèque/Application Support/Pirouette`.
-Ollama est une app à part : l'assistant des Réglages guide son installation.
+Ollama est une app à part, **en option** : rien n'est demandé au premier lancement (l'app Claude suffit). Réglages →
+IA locale → « Utiliser l'IA locale » l'active ; l'assistant guide alors son installation. Décochée, Pirouette ne la
+cherche plus et ne la propose nulle part.
 
 Fabriquer le `.dmg` soi-même sur un Mac : `pip install -r requirements-desktop.txt && packaging/build_macos.sh`.
 
@@ -272,7 +274,13 @@ gardé).
   chapitre), des séances de révision entre deux, puis la consolidation (erreurs, cartes difficiles) et des partiels
   blancs à la fin. Une séance se coche « faite » (automatiquement quand ses quiz sont passés, ou quand on a révisé ce
   jour-là) ; « Recalculer » repart d'aujourd'hui sans reprogrammer les chapitres déjà vus.
-- **Révision du jour** (sans plan) : les cartes dont le rappel est arrivé, plus 20 nouvelles cartes au plus par jour, avec des
+- **Révision du jour** (sans plan) : **30 éléments au plus** (Réglages → Révisions → « Taille de la révision du jour » ; les
+  plus urgents d'abord, le reste attend demain), sans deux fois la même notion (carte en double, ou question de quiz qui
+  répète une carte). « **← Précédent** » revient sur la carte ou la question d'avant et annule ce qu'on y avait répondu
+  (la carte retrouve son suivi) ; dans un quiz, « Changer ma réponse » sur une question déjà faite. Pincer le trackpad,
+  la souris sur une flashcard, la **zoome** (par-dessus la page, sans dépasser la fenêtre). Les propositions d'un QCM
+  sont mélangées à chaque passage. Contenu :
+  les cartes dont le rappel est arrivé, plus 20 nouvelles cartes au plus par jour, avec des
   questions de tes quiz glissées entre les cartes (celles ratées, jamais faites ou réussies il y a plus d'une semaine).
   Tout arrive dans un ordre mélangé (de même pour les séances du plan et « Là où tu bloques »).
   Après chaque carte : **Je ne savais pas / Je savais** (glisser la carte, ou ← / →). Pirouette en déduit quand la

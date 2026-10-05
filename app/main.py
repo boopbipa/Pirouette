@@ -10,6 +10,7 @@ import re
 import subprocess
 import sys
 import threading
+import unicodedata
 import urllib.parse
 from dataclasses import replace
 from datetime import date, datetime, timedelta
@@ -39,7 +40,7 @@ from .focus import (MANUAL_SCHEMA, MANUAL_SYSTEM, best_chunk, build_manual_promp
 from .partiel import BATCH, GRADE_SCHEMA, GRADE_SYSTEM, build_grade_prompt, read_grades  # noqa: E402
 from .quiz import (CHARS_PER_CARD, CHARS_PER_QUESTION, COURSE_SHARES, QUESTION_TYPES, QuizOptions,  # noqa: E402
                    assemble_quiz, cards_coverage_size, chunk_text, coverage_size, normalize_question)
-from .revision import is_duplicate, normalize_cards  # noqa: E402
+from .revision import STOPWORDS, is_duplicate, normalize_cards  # noqa: E402
 from .storage import NotFound, Store  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent
@@ -130,6 +131,8 @@ class SettingsIn(BaseModel):
     reminder_time: str | None = None    # rappel quotidien « HH:MM » (Mac) ; "" pour l'arrêter
     new_per_day: int | None = None      # nouvelles cartes par jour dans la révision du jour
     quiz_size: int | None = None        # questions tirées quand on lance un grand quiz ; 0 = toutes
+    daily_size: int | None = None       # éléments (cartes + questions) au plus dans la révision du jour
+    local_ai: bool | None = None        # IA locale (Ollama) en option : activée ou non dans les Réglages
     shortcuts: dict[str, str] | None = None  # touches du clavier choisies (action → touche) ; {} = par défaut
     keys_instant: bool | None = None    # au clavier, valider dès qu'on choisit une réponse
     welcome_seen: str | None = None     # cartons de bienvenue vus (« 1 ») / dernière version dont on a vu les nouveautés
@@ -156,6 +159,8 @@ def _settings_view() -> dict:
         "reminder_supported": reminder.supported(),
         "new_per_day": store.new_per_day(),
         "quiz_size": int(store.get_settings().get("quiz_size", 10)),
+        "daily_size": _daily_size(),
+        "local_ai": store.get_settings().get("local_ai"),
         "shortcuts": store.get_settings().get("shortcuts") or {},
         "keys_instant": bool(store.get_settings().get("keys_instant", False)),
         "welcome_seen": store.get_settings().get("welcome_seen") or "",
@@ -202,6 +207,10 @@ async def save_settings(body: SettingsIn) -> dict:
         store.save_settings(new_per_day=max(0, min(body.new_per_day, 200)))
     if body.quiz_size is not None:
         store.save_settings(quiz_size=max(0, min(body.quiz_size, 50)))
+    if body.local_ai is not None:
+        store.save_settings(local_ai=body.local_ai)
+    if body.daily_size is not None:
+        store.save_settings(daily_size=max(10, min(body.daily_size, 200)))
     if body.shortcuts is not None:
         clean = {str(k)[:20]: str(v)[:20] for k, v in list(body.shortcuts.items())[:40] if v}
         store.save_settings(shortcuts=clean)
@@ -356,12 +365,18 @@ async def ollama_pull(body: PullIn) -> StreamingResponse:
 
 @app.get("/api/config")
 async def config() -> dict:
-    ollama_models = await ollama_provider.list_models()
+    # L'IA locale est en option : désactivée dans les Réglages, Pirouette ne la cherche même pas. Sans choix
+    # (nouvelle installation), elle compte si Ollama est déjà là, sinon elle reste discrète (rien à installer).
+    choice = store.get_settings().get("local_ai")
+    ollama_models = await ollama_provider.list_models() if choice is not False else None
+    enabled = bool(choice) or (choice is None and bool(ollama_models))
     return {
         "default_provider": os.getenv("QUIZZ_DEFAULT_PROVIDER", "local") if CLAUDE_ENABLED else "local",
+        "claude_app": _claude_app_view().get("installed", False),
         "local": {
+            "enabled": enabled,
             "running": ollama_models is not None,
-            "available": bool(ollama_models),
+            "available": enabled and bool(ollama_models),
             "models": ollama_models or [],
             "default_model": ollama_provider.choose_model(None, ollama_models or []),
         },
@@ -1200,6 +1215,12 @@ async def review_card(course_id: str, card_id: str, body: ReviewIn) -> dict:
     return card | {"next": srs.preview(card)}
 
 
+@app.post("/api/courses/{course_id}/cards/{card_id}/review/undo")
+async def undo_review(course_id: str, card_id: str) -> dict:
+    card = store.undo_review(course_id, card_id)
+    return card | {"next": srs.preview(card)}
+
+
 # ---------- Révision : cartes du jour, points faibles, suivi ----------
 
 def _scope(course: str, folder: str) -> list[str]:
@@ -1224,6 +1245,67 @@ def _question_item(entry: dict) -> dict:
     return {"kind": "question", "course_id": quiz.get("course_id"), "course_name": quiz.get("course_name") or "",
             "quiz_id": quiz["id"], "quiz_title": quiz["title"], "index": entry["index"],
             "question": quiz["questions"][entry["index"]], "stat": entry["stat"]}
+
+
+DAILY_SIZE = 30
+
+
+def _daily_size() -> int:
+    return int(store.get_settings().get("daily_size", DAILY_SIZE))
+
+
+def _notion_words(text: str) -> frozenset[str]:
+    text = unicodedata.normalize("NFD", str(text).lower())
+    return frozenset(w for w in re.findall(r"\w+", "".join(c for c in text if unicodedata.category(c) != "Mn"))
+                     if w not in STOPWORDS)
+
+
+def _same_notion(notion: tuple, others: list) -> bool:
+    """Même question (à peu de mots près) et même réponse : la même carte, ou une question de quiz qui la répète."""
+    def close(a, b, at):
+        return bool(a | b) and len(a & b) / len(a | b) >= at
+    front, back = notion
+    return any(close(front, f, 0.8) and (not back or not b or close(back, b, 0.5)) for f, b in others)
+
+
+def _today_counts(ids: list[str]) -> dict:
+    """Ce que comptera la révision du jour (plafonnée à la taille choisie dans les Réglages)."""
+    size, cards = _daily_size(), len(store.today_cards(ids))
+    questions = min(SESSION_QUESTIONS, len(store.weak_questions(ids)) + len(store.review_questions(ids)))
+    questions = min(questions, max(3, size // 4)) if cards else min(questions, size)
+    return {"cards": min(cards, size - questions), "questions": questions}
+
+
+def _daily_pick(cards: list, asked: list, size: int, n_questions: int | None = None) -> tuple[list, list]:
+    """La séance du jour : au plus `size` éléments, pris dans l'ordre de priorité (le reste attend demain), sans deux
+    fois la même notion (une carte en double, ou une question de quiz qui pose la même chose qu'une carte)."""
+    if n_questions is None:
+        n_questions = min(len(asked), max(3, size // 4)) if cards else min(len(asked), size)
+    n_cards = size - n_questions
+    seen, notions, kept_cards, kept_asked = set(), [], [], []
+    for item in cards:
+        if len(kept_cards) >= n_cards:
+            break
+        card = item["card"]
+        notion = (_notion_words(card.get("front", "")), _notion_words(card.get("back", "")))
+        if card["id"] in seen or _same_notion(notion, notions):
+            continue
+        seen.add(card["id"])
+        notions.append(notion)
+        kept_cards.append(item)
+    for item in asked:
+        if len(kept_asked) >= n_questions:
+            break
+        q = item["question"]
+        notion = (_notion_words(q.get("question", "")),
+                  frozenset() if q.get("type") == "vrai_faux" else _notion_words(str(q.get("answer", ""))))
+        if _same_notion(notion, notions):
+            continue
+        notions.append(notion)
+        kept_asked.append(item)
+    random.shuffle(kept_cards)  # la priorité choisit les éléments de la séance, pas leur ordre
+    random.shuffle(kept_asked)
+    return kept_cards, kept_asked
 
 
 def _interleave(cards: list, questions: list) -> list:
@@ -1280,12 +1362,11 @@ def _session(mode: str, course: str, folder: str, filter: str, questions: bool, 
         max_cards, max_questions = plans.session_size(minutes if minutes in plans.MINUTES else 15)
         hard = store.weak_cards(ids)[:max_cards // 3]
         seen = {e["card"]["id"] for e in hard}
-        cards = [_card_item(e) for e in hard + [e for e in store.today_cards(ids) if e["card"]["id"] not in seen]][:max_cards]
-        random.shuffle(cards)  # la priorité choisit les cartes de la séance, pas leur ordre
+        cards = [_card_item(e) for e in hard + [e for e in store.today_cards(ids) if e["card"]["id"] not in seen]]
         chosen = store.weak_questions(ids)[:max_questions]
         chosen += store.review_questions(ids)[:max_questions - len(chosen)]
         asked = [_question_item(e) for e in chosen] if questions else []
-        random.shuffle(asked)
+        cards, asked = _daily_pick(cards, asked, max_cards + len(asked), n_questions=len(asked))
         return {"mode": mode, "items": _interleave(cards, asked), "cards": len(cards), "questions": len(asked)}
     if mode == "chapter":
         # Un chapitre : ses cartes, et (avec `questions`) les questions de ses quiz, mélangées.
@@ -1307,11 +1388,10 @@ def _session(mode: str, course: str, folder: str, filter: str, questions: bool, 
     in_chapter = (lambda e: _same_title(chapter, e["card"].get("scope") or [])) if chapter else (lambda e: True)
     if mode == "today":
         cards = [_card_item(e) for e in store.today_cards(ids) if in_chapter(e)]
-        random.shuffle(cards)  # toutes les cartes du jour seront vues : autant les mélanger
         chosen = store.weak_questions(ids)[:SESSION_QUESTIONS]
         chosen += store.review_questions(ids)[:SESSION_QUESTIONS - len(chosen)]
         asked = [_question_item(e) for e in chosen] if questions else []
-        random.shuffle(asked)
+        cards, asked = _daily_pick(cards, asked, _daily_size())
     elif mode == "weak":
         cards = [_card_item(e) for e in store.weak_cards(ids) if in_chapter(e)][:30]
         asked = [_question_item(e) for e in store.weak_questions(ids)[:20]] if questions else []
@@ -1663,8 +1743,7 @@ async def progress(course: str = "", folder: str = "") -> dict:
         exam = {"date": day, "days": (date.fromisoformat(day) - date.today()).days, "from": "dossier"} if day else None
     return data | {
         "exam": exam,
-        "today": {"cards": len(store.today_cards(ids)),
-                  "questions": min(SESSION_QUESTIONS, len(store.weak_questions(ids)) + len(store.review_questions(ids)))},
+        "today": _today_counts(ids),
         "weak": {"cards": len(store.weak_cards(ids)), "questions": len(store.weak_questions(ids))},
         "hard": _hard_cards(ids),
         "new_per_day": store.new_per_day(),

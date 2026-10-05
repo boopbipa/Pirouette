@@ -159,7 +159,7 @@ const plural = (n, one, many) => `${n} ${n > 1 ? many : one}`;
 function renderStats(stats) {
   const sub = $("#hero-sub");
   if (!stats.courses) {
-    sub.textContent = "Bienvenue ! Trois étapes pour bien démarrer :";
+    sub.textContent = "Bienvenue ! Deux étapes pour bien démarrer :";
     return;
   }
   sub.innerHTML = stats.cards_today
@@ -167,11 +167,10 @@ function renderStats(stats) {
     : stats.decks ? "Tes cartes sont à jour pour aujourd'hui." : "Prêt pour un quiz ou quelques flashcards ?";
 }
 
-// Premier lancement : trois étapes (l'IA, un semestre, un premier cours), cochées au fur et à mesure.
+// Premier lancement : deux étapes (un semestre, un premier cours), cochées au fur et à mesure.
 function renderGuide(config, folders, stats) {
+  // L'IA (app Claude ou IA locale, en option) n'est pas demandée ici : elle se branche dans Réglages, au besoin.
   const steps = [
-    { done: config.local.available || config.claude.available, title: "Installe l'IA locale",
-      text: "Elle lit tes cours et écrit les quiz, sur ton Mac. Quelques clics dans Réglages.", action: `<a class="button primary small" href="#/reglages">Ouvrir les réglages</a>` },
     { done: folders.length > 0, title: "Crée ton semestre",
       text: "Tes cours s'y rangent, avec la date de tes partiels et ton plan de révision.", action: `<button class="primary small" type="button" data-guide="semestre">Créer un semestre</button>` },
     { done: stats.courses > 0, title: "Importe ton premier cours",
@@ -204,7 +203,7 @@ async function openHome() {
   const [profile, stats, config, folders] = await Promise.all([api("/api/profile"), api("/api/stats"), api("/api/config"), api("/api/folders")]);
   const guiding = renderGuide(config, folders, stats);
   renderHomeHeat(guiding);
-  $("#setup-banner").hidden = guiding || config.local.available || config.claude.available;
+  $("#setup-banner").hidden = guiding || config.claude_app || config.local.available || config.claude.available;
   $(".home-actions").hidden = guiding;
   state.course = null;
   state.profile = profile;
@@ -483,6 +482,7 @@ async function openSettings() {
   $("#settings-key-remove").hidden = !claude.saved_in_app;
   $("#settings-key-form").hidden = !settings.claude_enabled;  // Claude est mis de côté pour l'instant
   $("#local-thinking").checked = settings.local_thinking;
+  renderLocalChoice();
   renderDefinitionRule(settings.definition_rule);
   renderReminder(settings);
   $("#calib-result").hidden = $("#calib-status").hidden = true;
@@ -580,6 +580,7 @@ function renderReminder(settings) {
     : "Disponible dans l'app Mac (Pirouette.app).";
   $("#new-per-day").value = settings.new_per_day;
   $("#quiz-size").value = settings.quiz_size;
+  $("#daily-size").value = settings.daily_size;
   applyShortcuts(settings);
   renderKeysSettings();
   $("#revision-status").hidden = true;
@@ -615,6 +616,26 @@ $("#quiz-size").addEventListener("change", async (e) => {
   setStatus("#revision-status", settings.quiz_size
     ? `Un quiz de plus de ${settings.quiz_size} questions en tire ${settings.quiz_size} à chaque lancement.`
     : "Chaque quiz se fait en entier.", true);
+});
+// IA locale en option : décochée, ses réglages se replient et Pirouette ne la propose plus nulle part
+function renderLocalChoice() {
+  api("/api/config").then((config) => {
+    state.config = config;
+    $("#local-ai-on").checked = config.local.enabled;
+    $("#local-ai-body").hidden = !config.local.enabled;
+    if (config.local.enabled) refreshLocalAi();
+  }).catch(() => {});
+}
+$("#local-ai-on").addEventListener("change", async (e) => {
+  await api("/api/settings", jsonBody("PUT", { local_ai: e.target.checked }));
+  $("#local-ai-body").hidden = !e.target.checked;
+  state.config = null;
+  if (e.target.checked) refreshLocalAi(); else clearTimeout(aiSetup.timer);
+});
+$("#daily-size").addEventListener("change", async (e) => {
+  const settings = await api("/api/settings", jsonBody("PUT", { daily_size: Number(e.target.value) || 30 }));
+  e.target.value = settings.daily_size;
+  setStatus("#revision-status", `La révision du jour compte ${settings.daily_size} cartes et questions au plus : les plus urgentes d'abord, le reste attend demain.`, true);
 });
 $("#new-per-day").addEventListener("change", async (e) => {
   const settings = await api("/api/settings", jsonBody("PUT", { new_per_day: Number(e.target.value) || 0 }));
@@ -905,7 +926,7 @@ const aiSetup = { timer: null, downloading: false };
 
 async function refreshLocalAi() {
   clearTimeout(aiSetup.timer);
-  if ($("#view-settings").hidden) return;
+  if ($("#view-settings").hidden || $("#local-ai-body").hidden) return;  // IA locale désactivée : rien à surveiller
   const status = await api("/api/ollama/status");
   renderLocalAi(status);
   if (!status.running) aiSetup.timer = setTimeout(refreshLocalAi, 3000);
@@ -1479,6 +1500,11 @@ function renderSplitOffer(course = state.course) {
   const show = Boolean(f && f.chapters_by === "none" && !chaptersRunning(f.id));
   $("#split-offer").hidden = !show;
   if (show) $("#split-offer-title").textContent = `« ${baseName(f.name)} » est d'un seul bloc.`;
+  // IA locale désactivée : le découpage passe par l'app Claude (bouton principal)
+  const noLocal = state.config?.local?.enabled === false;
+  $("#split-ai").hidden = noLocal;
+  $("#split-app").classList.toggle("primary", noLocal);
+  $("#split-app").classList.toggle("ghost", !noLocal);
 }
 const splitTarget = () => focusFile() || state.course.files[0];
 $("#split-ai").addEventListener("click", async () => {
@@ -2107,6 +2133,9 @@ async function detectChapters(fileIds, { quiet = false } = {}) {
 
 // Ce qui manque à l'IA locale, dit simplement (Ollama fermé, ou ouvert mais sans modèle)
 function localProblem(config) {
+  if (config?.local?.enabled === false) {
+    return "L'IA locale est désactivée (<a href=\"#/reglages\">Réglages → IA locale</a>) : passe par l'app Claude.";
+  }
   if (!config?.local?.running) {
     return "Pirouette ne trouve pas Ollama sur ce Mac : ouvre l'app <b>Ollama</b> (l'icône en forme de lama dans la barre "
       + "des menus doit apparaître), puis réessaie (<a href=\"#/reglages\">Réglages → IA locale</a>).";
@@ -2152,7 +2181,7 @@ async function loadConfig({ keepSelection = false } = {}) {
 
   // Tant qu'Ollama n'est pas prêt, on revérifie toutes les 5 s (inutile de recharger la page).
   clearTimeout(state.configTimer);
-  if (!config.local.available) state.configTimer = setTimeout(() => loadConfig({ keepSelection: true }), 5000);
+  if (!config.local.available && config.local.enabled) state.configTimer = setTimeout(() => loadConfig({ keepSelection: true }), 5000);
   if (keepSelection) return;
 
   // Dernier moteur choisi (ou celui par défaut).
@@ -2642,6 +2671,7 @@ async function startSession(params, { title, back }) {
 
 function runSession(items, { title, back, params = null }) {
   foldJobs();
+  items.forEach((item) => mixChoices(item.question));
   state.session = { items, index: 0, flipped: false, results: [], title, back, params };
   $("#session-correction").hidden = true;
   $("#cards-title").textContent = title;
@@ -2659,6 +2689,7 @@ function showItem() {
   s.revealed = false;  // la réponse a été vue : on peut noter (et retourner la carte autant qu'on veut)
   s.checked = null;
   $("#cards-counter").textContent = `${s.index + 1} / ${s.items.length}`;
+  $("#session-prev").hidden = s.index === 0;
   $("#cards-bar").style.width = `${(s.index / s.items.length) * 100}%`;
   const several = new Set(s.items.map((i) => i.course_id)).size > 1;
   $("#session-origin").textContent = item.kind === "question"
@@ -2684,7 +2715,7 @@ function showCard() {
   $("#card-front").textContent = card.front;
   $("#card-back").textContent = card.back;
   $("#card-back-question").textContent = card.front;
-  $("#card-source").innerHTML = card.source ? `Dans ton cours : « ${escapeHtml(plainMd(card.source))} »` : "";
+  $("#card-source").innerHTML = card.source ? `« ${escapeHtml(plainMd(card.source))} »` : "";
   $("#card-front-hint").textContent = typing ? "Écris ta réponse ci-dessous" : "Clique ou appuie sur Espace pour retourner";
   $("#typed-area").hidden = !typing;
   $("#typed-answer").value = "";
@@ -2715,6 +2746,7 @@ function dressCard(card, s) {
   const rarity = cardRarity(card);
   // La nouvelle carte repart du centre d'un coup (pas de retour animé depuis le bord de l'écran)
   el.style.transition = "none";
+  unzoomCard();
   el.classList.remove("rare", "holo", "fly-again", "fly-good", "dragging", "thrown");
   ["--dx", "--dy", "--dr"].forEach((v) => el.style.removeProperty(v));
   void el.offsetWidth;
@@ -2750,14 +2782,48 @@ $("#flashcard").addEventListener("pointermove", (e) => {
   const box = el.getBoundingClientRect();
   const x = (e.clientX - box.left) / box.width;
   const y = (e.clientY - box.top) / box.height;
+  if (el.classList.contains("zoomed")) return;  // zoomée : la carte reste à plat, pour bien la lire
   el.classList.add("tilting");
   el.style.setProperty("--ry", `${(x - 0.5) * 16}deg`);
   el.style.setProperty("--rx", `${(0.5 - y) * 14}deg`);
   el.style.setProperty("--mx", `${x * 100}%`);
   el.style.setProperty("--my", `${y * 100}%`);
 });
+// Zoom : pincer sur le trackpad, la souris sur la carte (Safari : événements « gesture », sinon molette + ctrl).
+// Plafonné pour que la carte tienne dans la fenêtre (et ne soit jamais floue ou trop grosse pour se lire).
+const ZOOM_MAX = 2;
+function zoomCard(next) {
+  const el = $("#flashcard");
+  // Taille et place sans le zoom en cours (la carte peut être en pleine animation)
+  const top = el.offsetParent.getBoundingClientRect().top + el.offsetTop;
+  const room = Math.min((innerHeight - top - 12) / el.offsetHeight, (innerWidth - 24) / el.offsetWidth, ZOOM_MAX);
+  const z = Math.max(1, Math.min(next, Math.max(1, room)));
+  el.style.setProperty("--zoom", z.toFixed(3));
+  el.classList.toggle("zoomed", z > 1.01);
+  if (z > 1.01) { el.style.setProperty("--rx", "0deg"); el.style.setProperty("--ry", "0deg"); }
+}
+function unzoomCard() {
+  const el = $("#flashcard");
+  el.style.setProperty("--zoom", "1");
+  el.classList.remove("zoomed", "zooming");
+}
+let gestureStart = 1;
+$("#flashcard").addEventListener("gesturestart", (e) => {
+  e.preventDefault();
+  gestureStart = Number($("#flashcard").style.getPropertyValue("--zoom")) || 1;
+  $("#flashcard").classList.add("zooming");
+});
+$("#flashcard").addEventListener("gesturechange", (e) => { e.preventDefault(); zoomCard(gestureStart * e.scale); });
+$("#flashcard").addEventListener("gestureend", (e) => { e.preventDefault(); $("#flashcard").classList.remove("zooming"); });
+$("#flashcard").addEventListener("wheel", (e) => {
+  if (!e.ctrlKey) return;  // pincer = molette + ctrl (Chrome, Firefox) ; la molette seule fait défiler la page
+  e.preventDefault();
+  $("#flashcard").classList.add("zooming");
+  zoomCard((Number($("#flashcard").style.getPropertyValue("--zoom")) || 1) * Math.exp(-e.deltaY / 100));
+}, { passive: false });
 $("#flashcard").addEventListener("pointerleave", () => {
   const el = $("#flashcard");
+  unzoomCard();
   el.classList.remove("tilting");
   el.style.setProperty("--rx", "0deg");
   el.style.setProperty("--ry", "0deg");
@@ -3022,8 +3088,38 @@ function showSessionQuestion(item) {
 
 function recordSessionAnswer(item, given, correct) {
   state.session.results.push({ kind: "question", item, given, correct });
-  api(`/api/quizzes/${item.quiz_id}/answers`, jsonBody("POST", { answers: [{ index: item.index, correct }] })).catch(() => {});
+  // Réponse changée après un retour en arrière : l'ancienne ne compte plus
+  const replaces = item.replaces;
+  delete item.replaces;
+  api(`/api/quizzes/${item.quiz_id}/answers`, jsonBody("POST", { answers: [{ index: item.index, correct,
+    ...(replaces === undefined ? {} : { replaces }) }] })).catch(() => {});
 }
+
+// « Précédent » : la carte ou la question d'avant revient, sans réponse ; ce qu'on y avait répondu est annulé
+// (la carte retrouve son suivi d'avant), on peut donc changer d'avis.
+async function sessionBack() {
+  const s = state.session;
+  if (!s || s.index === 0 || s.leaving || s.sliding || s.goingBack) return;
+  s.goingBack = true;
+  const target = s.index - 1;
+  // Annule les réponses données à partir de l'élément d'avant (y compris la question affichée, si on y a répondu)
+  for (let i = s.results.length - 1; i >= 0; i--) {
+    const r = s.results[i];
+    if (s.items.indexOf(r.item) < target) break;
+    s.results.splice(i, 1);
+    if (r.kind === "question") r.item.replaces = r.correct;
+    else {
+      const card = r.item.card;
+      const restored = await api(`/api/courses/${r.item.course_id}/cards/${card.id}/review/undo`, { method: "POST" }).catch(() => null);
+      if (restored) Object.assign(card, restored);
+    }
+  }
+  s.goingBack = false;
+  if (state.session !== s) return;
+  s.index = target;
+  showItem();
+}
+$("#session-prev").addEventListener("click", sessionBack);
 
 const SQ_DELETE_ITEM = `<button type="button" class="danger" data-sq-delete><strong>Supprimer cette question</strong><small>Hors sujet : elle ne sera plus posée</small></button>`;
 const SQ_DELETE = `<div class="question-tools end">${qtoolsHtml([SQ_DELETE_ITEM])}</div>`;
@@ -3868,6 +3964,7 @@ function startQuiz(quiz, questions, { back = state.quizBack } = {}) {
   foldJobs();
   const drawn = !questions;
   questions = questions || drawQuestions(quiz);
+  questions.forEach(mixChoices);
   state.quizBack = back || null;
   state.quiz = quiz;
   state.questions = questions;
@@ -3972,6 +4069,7 @@ function showAnswered(q, result) {
     ${q.explanation ? `<p>${escapeHtml(cleanExplanation(q.explanation))}</p>` : ""}${sourceHtml(q)}${keyTermsHtml(q)}`;
   fb.hidden = false;
   showReportButton(q, result.given);
+  fb.insertAdjacentHTML("beforeend", `<p><button type="button" class="link-button" id="change-answer">Changer ma réponse</button></p>`);
   $("#validate-btn").hidden = true;
   $("#dunno-btn").hidden = true;
   $("#next-btn").hidden = false;
@@ -3979,6 +4077,16 @@ function showAnswered(q, result) {
   $("#next-btn").textContent = last ? "Voir le résultat" : "Question suivante";
 }
 
+// Revenu sur une question déjà faite : on peut y répondre de nouveau (l'ancienne réponse ne compte plus)
+$("#feedback").addEventListener("click", (e) => {
+  if (e.target.id !== "change-answer") return;
+  const q = state.questions[state.index];
+  const i = state.results.findIndex((r) => r.question === q);
+  if (i < 0) return;
+  q.replaces = state.results[i].correct;
+  state.results.splice(i, 1);
+  renderQuestion();
+});
 $("#prev-btn").addEventListener("click", () => {
   if (state.index === 0) return;
   state.index -= 1;
@@ -4167,6 +4275,13 @@ const WELCOME = [
 ];
 // Les nouveautés de chaque version (le carton « Quoi de neuf » ne s'affiche que si la version en a)
 const WHATS_NEW = {
+  "0.49.0": [
+    ["←", "Revenir en arrière", "« ← Précédent » dans les révisions : reviens sur une carte ou une question et change ta réponse"],
+    ["🔍", "Zoomer sur une carte", "Pince le trackpad, la souris sur la flashcard : elle grandit par-dessus la page"],
+    ["🎲", "Réponses mélangées", "La bonne réponse d'un QCM n'est plus souvent la première"],
+    ["⏱", "Révision du jour plus courte", "30 cartes et questions au plus (réglable), sans doublon ; le reste attend demain"],
+    ["🦙", "IA locale en option", "Plus demandée au démarrage : à activer dans Réglages si tu la veux"],
+  ],
   "0.48.0": [
     ["⇩", "Importer dans un cours", "« Gérer le cours » → « Importer quiz et flashcards » : un paquet .zip ou un .txt, directement dans ce cours"],
   ],
@@ -4496,7 +4611,10 @@ function validateShort(q) {
 // Chaque réponse compte pour le suivi et les points faibles (même si on ne va pas au bout du quiz).
 function saveAnswer(q, correct) {
   const index = state.quiz.questions.indexOf(q);
-  if (index >= 0) api(`/api/quizzes/${state.quiz.id}/answers`, jsonBody("POST", { answers: [{ index, correct }] })).catch(() => {});
+  const replaces = q.replaces;
+  delete q.replaces;
+  if (index >= 0) api(`/api/quizzes/${state.quiz.id}/answers`, jsonBody("POST", { answers: [{ index, correct,
+    ...(replaces === undefined ? {} : { replaces }) }] })).catch(() => {});
 }
 
 function record(q, given, correct) {
@@ -4706,6 +4824,13 @@ function normalize(s) {
 }
 function looselyEqual(a, b) {
   return normalize(a) === normalize(b);
+}
+// Les propositions d'un QCM, dans un ordre différent à chaque passage (l'IA met souvent la bonne en premier).
+// Sur place : la question reste le même objet (ses statistiques la retrouvent). Vrai / Faux garde son ordre.
+function mixChoices(q) {
+  if (!q?.choices?.length || q.type === "vrai_faux") return q;
+  q.choices.splice(0, q.choices.length, ...shuffle(q.choices));
+  return q;
 }
 function shuffle(list) {
   const copy = [...list];
@@ -4946,6 +5071,7 @@ $("#partiel-go").addEventListener("click", async () => {
 
 function startExam(course, items, { timer, minutes }) {
   foldJobs();
+  items.forEach((item) => mixChoices(item.question));
   clearInterval(state.exam?.tick);
   state.exam = { course, items, answers: items.map(() => ""), doubts: items.map(() => false), index: 0,
                  timer, limit: timer === "down" ? minutes * 60 : null, started: Date.now(), running: true, hideClock: false };
@@ -5695,9 +5821,10 @@ function openPrepare(course = state.course) {
 function setPrepareLocal(config) {
   const ready = config?.local?.available !== false;
   const local = document.querySelector("[data-prepare-engine=local]");
+  local.hidden = config?.local?.enabled === false;  // IA locale désactivée dans les Réglages : seulement l'app Claude
   local.disabled = !ready;
   local.title = ready ? "" : "IA locale pas encore prête sur ce Mac";
-  $("#prepare-local-off").hidden = ready;
+  $("#prepare-local-off").hidden = ready || local.hidden;
   if (!ready) $("#prepare-local-off").innerHTML = `IA locale indisponible. ${localProblem(config)}
     <button class="link-button" type="button" data-local-tuto>Suivre le tuto pas à pas</button>`;
   if (!state.prepareEngine || !ready) state.prepareEngine = ready ? "local" : "app";

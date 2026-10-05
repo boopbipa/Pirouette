@@ -317,13 +317,18 @@ button.small { padding: 6px 12px; font-size: 14px; }
 /* Flashcards : de vraies cartes à collectionner (cadre selon la rareté, relief, reflet, pile, tirage) */
 .tcg-table { position: relative; display: flex; justify-content: center; padding: 14px 0 6px; perspective: 1400px; }
 .flashcard.tcg {
-  --rx: 0deg; --ry: 0deg; --mx: 50%; --my: 30%; --dx: 0px; --dy: 0px; --dr: 0deg;
+  --rx: 0deg; --ry: 0deg; --mx: 50%; --my: 30%; --dx: 0px; --dy: 0px; --dr: 0deg; --zoom: 1;
   --frame: linear-gradient(150deg, #eef0f3, #b9bfc9 42%, #f7f8fa 58%, #a4abb6);
   position: relative; z-index: 2; display: block; width: min(330px, 86vw); aspect-ratio: 63 / 88; cursor: pointer; outline: none;
-  transform-style: preserve-3d; transform: translate(var(--dx), var(--dy)) rotate(var(--dr)) rotateX(var(--rx)) rotateY(var(--ry));
+  transform-style: preserve-3d; transform-origin: 50% 0;
+  transform: translate(var(--dx), var(--dy)) rotate(var(--dr)) scale(var(--zoom)) rotateX(var(--rx)) rotateY(var(--ry));
   transition: transform .5s cubic-bezier(.2, .8, .2, 1); touch-action: pan-y; user-select: none; -webkit-user-select: none;
 }
 .flashcard.tcg.dragging { transition: none; cursor: grabbing; }
+/* Zoom au trackpad (pincer, souris sur la carte) : elle grandit vers le bas, par-dessus le reste de la page */
+.flashcard.tcg.zooming { transition: transform .12s ease-out; }
+.flashcard.tcg.zoomed { z-index: 20; }
+.tcg-table:has(.flashcard.zoomed) { z-index: 20; }
 .flashcard.tcg.tilting { transition: transform .08s linear; }
 .flashcard.tcg.rare { --frame: linear-gradient(150deg, #f9e6a6, #d6a73c 40%, #fcefc1 57%, #bb8a26); }
 .flashcard.tcg.holo { --frame: linear-gradient(125deg, #ffc9e4, #bfe9ff 22%, #d4ffd0 44%, #fff0b8 66%, #e2ccff 88%); }
@@ -334,7 +339,9 @@ button.small { padding: 6px 12px; font-size: 14px; }
   backface-visibility: hidden; -webkit-backface-visibility: hidden; overflow: hidden;
   box-shadow: 0 1px 0 rgba(255, 255, 255, .6) inset, 0 22px 40px -22px rgba(30, 20, 10, .55), 0 3px 8px -4px rgba(30, 20, 10, .3);
 }
-.flashcard-back { transform: rotateY(180deg); }
+/* Chaque face légèrement décollée : WebKit ne fait plus clignoter la face cachée (cadre blanc) quand la carte s'incline */
+.flashcard-front { transform: translateZ(1px); }
+.flashcard-back { transform: rotateY(180deg) translateZ(1px); }
 .tcg-body {
   position: relative; display: flex; flex-direction: column; gap: 9px; height: 100%; padding: 12px 13px 10px;
   border-radius: 10px; background: var(--surface); box-shadow: 0 0 0 1px rgba(0, 0, 0, .08) inset;
@@ -363,8 +370,8 @@ button.small { padding: 6px 12px; font-size: 14px; }
 .tcg-cat { flex: none; width: 18px; height: 18px; color: var(--accent); margin-top: -5px; }
 .tcg-course { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: right; }
 .tcg-foot { display: flex; justify-content: space-between; gap: 10px; font: 600 10.5px/1 var(--sans); letter-spacing: .08em; color: var(--muted); opacity: .8; }
-.tcg-glare { position: absolute; inset: 0; border-radius: inherit; pointer-events: none; opacity: 0; transition: opacity .3s;
-             background: radial-gradient(circle at var(--mx) var(--my), rgba(255, 255, 255, .55), rgba(255, 255, 255, 0) 45%);
+.tcg-glare { position: absolute; inset: 0; border-radius: inherit; pointer-events: none; opacity: 0; transition: opacity .4s ease;
+             background: radial-gradient(circle at var(--mx) var(--my), rgba(255, 255, 255, .3), rgba(255, 255, 255, 0) 45%);
              mix-blend-mode: soft-light; }
 .flashcard.tilting .tcg-glare { opacity: 1; }
 /* Holographique (carte acquise) : l'arc-en-ciel sur le cadre et l'illustration, le texte reste net */
@@ -376,6 +383,7 @@ button.small { padding: 6px 12px; font-size: 14px; }
 }
 .flashcard.holo .tcg-glare { mix-blend-mode: overlay; }
 @media (prefers-color-scheme: dark) {
+  .tcg-glare { background: radial-gradient(circle at var(--mx) var(--my), rgba(255, 255, 255, .12), rgba(255, 255, 255, 0) 45%); }
   .tcg-art { background: radial-gradient(circle at 25% 15%, rgba(255, 255, 255, .1), transparent 55%), var(--accent-soft); }
   .flashcard.holo .tcg-art { color: #241b2e; }
 }

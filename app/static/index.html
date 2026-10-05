@@ -41,7 +41,7 @@
       <div class="hero">
         <h1 class="greeting" id="greeting">On révise ?</h1>
         <p class="hero-sub" id="hero-sub"></p>
-        <p class="setup-banner" id="setup-banner" hidden>Pour créer des quiz, il faut l'IA locale : <a href="#/reglages">installe-la en quelques clics dans Réglages</a>.</p>
+        <p class="setup-banner" id="setup-banner" hidden>Pour créer quiz et flashcards : <a href="#/reglages">branche l'app Claude dans Réglages</a> (l'IA locale y est aussi, en option).</p>
         <form class="name-prompt" id="name-prompt" hidden>
           <label for="name-input">Comment tu t'appelles ?</label>
           <input type="text" id="name-input" placeholder="Ton prénom" maxlength="40">
@@ -428,6 +428,10 @@
           <button class="ghost small" type="button" id="reminder-test">Essayer maintenant</button>
         </div>
         <div class="field inline-field">
+          <label for="daily-size">Taille de la révision du jour <small class="muted">(cartes + questions ; le reste attend demain)</small></label>
+          <input type="number" id="daily-size" min="10" max="200" value="30">
+        </div>
+        <div class="field inline-field">
           <label for="new-per-day">Nouvelles cartes par jour dans la révision du jour</label>
           <input type="number" id="new-per-day" min="0" max="200" value="20">
         </div>
@@ -536,8 +540,11 @@
       </div>
 
       <div class="card" id="local-ai">
-        <h2>IA locale</h2>
-        <p class="muted small-text">Gratuite et hors ligne : l'IA tourne directement sur ton ordinateur, grâce à l'app Ollama.</p>
+        <h2>IA locale <small class="muted">(en option)</small></h2>
+        <p class="muted small-text">Gratuite et hors ligne : l'IA tourne directement sur ton ordinateur, grâce à l'app Ollama.
+          Pas indispensable : l'app Claude suffit pour créer quiz et flashcards.</p>
+        <label class="option-row"><input type="checkbox" id="local-ai-on"> Utiliser l'IA locale</label>
+        <div id="local-ai-body">
         <button class="ghost small local-tuto" type="button" id="local-tuto">✦ Tuto pas à pas : installer l'IA locale</button>
         <ol class="steps">
           <li class="step" id="step-install">
@@ -565,6 +572,7 @@
               Sans effet sur les autres modèles (qwen2.5…).</small></span>
         </label>
         <p class="status" id="local-thinking-status" hidden></p>
+        </div>
       </div>
 
       <div class="card" id="definitions-card">
@@ -977,6 +985,7 @@
       <div class="session-top">
         <p class="muted small-text session-origin" id="session-origin"></p>
         <div class="session-tools">
+          <button class="ghost small" type="button" id="session-prev" title="Revenir à la carte ou la question d'avant, et changer ta réponse" hidden>← Précédent</button>
           <button class="ghost small shuffle-btn" type="button" id="session-shuffle" title="Rebattre les cartes qui restent">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 4h4v4M4 20 20 4M20 16v4h-4M15 15l5 5M4 4l5 5"/></svg>Mélanger</button>
           <div class="filters mini" id="session-mode" role="radiogroup" aria-label="Façon de réviser les cartes">

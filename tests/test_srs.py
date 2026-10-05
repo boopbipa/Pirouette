@@ -202,3 +202,44 @@ def test_exam_week_orients_revisions(client):
     # Partiels dans 4 jours : il faut en voir 30 par jour, le quota monte
     client.put(f"/api/courses/{cid}/exam", json={"date": (today + timedelta(days=4)).isoformat()})
     assert len(store.today_cards([cid])) == 29
+
+
+def test_daily_session_is_capped_and_without_twins(client):
+    store = main.store
+    bio = store.create_course("Bio")["id"]
+    cards = [card(id=f"n{i}", front=f"Définition numéro {i} ?", back=f"Réponse {i}") for i in range(60)]
+    cards.append(card(id="twin", front="Définition numéro 0 ?", back="Réponse 0"))  # la même carte, deux fois
+    store.save_doc(bio, "cards", {"cards": cards})
+    store.save_settings(new_per_day=100)
+    questions = [{"type": "qcm", "question": "Définition numéro 1 ?", "choices": ["Réponse 1", "b"], "answer": "Réponse 1"},
+                 {"type": "qcm", "question": "Autre chose ?", "choices": ["a", "b"], "answer": "a"}]
+    store.save_quiz({"title": "Quiz", "questions": questions, "course_id": bio, "course_name": "Bio"})
+    today = client.get("/api/session?mode=today").json()
+    assert len(today["items"]) <= 30  # au plus 30 éléments par défaut, le reste attend
+    fronts = [i["card"]["front"] for i in today["items"] if i["kind"] == "card"]
+    assert len(fronts) == len(set(fronts))
+    asked = [i["question"]["question"] for i in today["items"] if i["kind"] == "question"]
+    assert "Autre chose ?" in asked and ("Définition numéro 1 ?" not in asked or "Définition numéro 1 ?" not in fronts)
+    client.put("/api/settings", json={"daily_size": 15})
+    assert len(client.get("/api/session?mode=today").json()["items"]) <= 15
+
+
+def test_undo_a_card_review_and_change_a_quiz_answer(client):
+    store = main.store
+    bio = store.create_course("Bio")["id"]
+    store.save_doc(bio, "cards", {"cards": [card(id="c1", front="Mitose ?", back="Division")]})
+    before = store.get_doc(bio, "cards")["cards"][0].copy()
+    client.post(f"/api/courses/{bio}/cards/c1/review", json={"rating": "again"})
+    assert store.get_doc(bio, "cards")["cards"][0]["status"] != before["status"] or store.get_doc(bio, "cards")["cards"][0]["reviews"] == 1
+    undone = client.post(f"/api/courses/{bio}/cards/c1/review/undo").json()
+    assert undone["reviews"] == 0 and undone["status"] == "new" and "undo" not in undone and undone["front"] == "Mitose ?"
+    day = date.today().isoformat()
+    assert store.activity()[day][bio]["cards"] == 0
+    client.post(f"/api/courses/{bio}/cards/c1/review", json={"rating": "good"})
+    assert store.get_doc(bio, "cards")["cards"][0]["reviews"] == 1
+    # Une question : ratée, puis réponse changée en juste
+    quiz = store.save_quiz({"title": "Q", "course_id": bio, "questions": [
+        {"type": "qcm", "question": "?", "choices": ["a", "b"], "answer": "a"}]})
+    client.post(f"/api/quizzes/{quiz['id']}/answers", json={"answers": [{"index": 0, "correct": False}]})
+    stats = client.post(f"/api/quizzes/{quiz['id']}/answers", json={"answers": [{"index": 0, "correct": True, "replaces": False}]}).json()
+    assert stats["0"]["right"] == 1 and stats["0"]["wrong"] == 0 and stats["0"]["last"] is True

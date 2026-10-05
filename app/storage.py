@@ -68,6 +68,9 @@ def _check_id(value: str, length: int = 12) -> str:
     return value
 
 
+# Ce qui fait le contenu d'une carte (le reste est son suivi : statut, intervalle, dates…)
+CARD_CONTENT = {"id", "front", "back", "source", "scope", "origin", "created_at", "figure", "image"}
+
 class Store:
     def __init__(self, root: Path):
         self.root = Path(root)
@@ -593,9 +596,24 @@ class Store:
         deck, card = self._deck_card(course_id, card_id)
         rating = rating or ("good" if known else "again")
         was_new = srs.is_new(card)
+        # L'état d'avant, pour revenir en arrière pendant la séance (« Précédent ») et changer d'avis
+        before = {k: v for k, v in card.items() if k not in CARD_CONTENT and k != "undo"}
         srs.schedule(card, rating, exam=self.exam_date(course_id))
+        card["undo"] = {"before": before, "ok": int(rating != "again"), "new": int(was_new), "day": date.today().isoformat()}
         _write(self._doc_path(course_id, "cards"), deck)
         self.log_activity(course_id, cards=1, cards_ok=int(rating != "again"), new=int(was_new))
+        return card
+
+    def undo_review(self, course_id: str, card_id: str) -> dict:
+        """Annule la dernière réponse à une carte : elle retrouve son état d'avant (le journal du jour aussi)."""
+        deck, card = self._deck_card(course_id, card_id)
+        undo = card.pop("undo", None)
+        if undo:
+            content = {k: v for k, v in card.items() if k in CARD_CONTENT}
+            card.clear()
+            card.update(undo["before"] | content)
+            self.log_activity(course_id, day=date.fromisoformat(undo["day"]), cards=-1, cards_ok=-undo["ok"], new=-undo["new"])
+        _write(self._doc_path(course_id, "cards"), deck)
         return card
 
     def _deck_card(self, course_id: str, card_id: str) -> tuple[dict, dict]:
@@ -914,6 +932,11 @@ class Store:
             if not 0 <= index < len(quiz["questions"]):
                 continue
             stat = stats.setdefault(str(index), {"right": 0, "wrong": 0})
+            if answer.get("replaces") is not None:
+                # Réponse changée (retour en arrière) : la précédente ne compte plus
+                was = bool(answer["replaces"])
+                stat["right" if was else "wrong"] = max(0, stat["right" if was else "wrong"] - 1)
+                self.log_activity(quiz.get("course_id"), questions=-1, questions_ok=-int(was))
             correct = bool(answer["correct"])
             stat["right" if correct else "wrong"] += 1
             stat.update(last=correct, date=_now())
