@@ -150,4 +150,19 @@ def main(binary: str) -> None:
 
 
 if __name__ == "__main__":
-    main(sys.argv[1])
+    # Console Windows : écrire en UTF-8 (les messages de l'app contiennent « → », « é »…)
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(encoding="utf-8", errors="replace")
+        except (AttributeError, ValueError):
+            pass
+    try:
+        main(sys.argv[1])
+    except BaseException as exc:
+        # Visible dans le résumé GitHub (annotation), même sans ouvrir le journal
+        import traceback
+
+        last = traceback.extract_tb(exc.__traceback__)[-1]
+        detail = f"{type(exc).__name__}: {exc}"[:600].replace("\n", " ")
+        print(f"::error title=Test de l'app empaquetée::{detail} (ligne {last.lineno})", flush=True)
+        raise
