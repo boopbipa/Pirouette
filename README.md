@@ -103,8 +103,10 @@ dans **Safari** → menu Fichier → **Ajouter au Dock** (ou, dans Chrome / Edge
    définition repérée et par notion importante — et Pirouette fixe le nombre d'après la longueur du chapitre (de 10 à
    40 ; environ une question pour 450 caractères). Le quiz devient une **banque de questions** : à chaque lancement,
    Pirouette en **tire 10** (Réglages → Révisions → « Questions tirées quand tu lances un quiz », 0 pour tout faire),
-   d'abord celles ratées la dernière fois et celles jamais posées, puis les plus anciennes. « Faire les 40 » lance le
-   quiz entier ; à la fin, « Nouveau tirage » en tire 10 autres. Pour une banque, la maîtrise du chapitre compte la
+   d'abord celles ratées la dernière fois et celles jamais posées, puis les plus anciennes. Dans Réviser → Quiz, un grand
+   quiz a deux boutons : « **Quiz entier** » (toutes ses questions, mélangées) et « **10 questions** » (le tirage) ; « Faire
+   les 40 » pendant un tirage lance aussi le quiz entier. En haut de la liste, « **10 questions au hasard** » pioche dans
+   tous les quiz du cours choisi (ou de toute la matière), tous chapitres confondus ; à la fin, « Nouveau tirage » en tire 10 autres. Pour une banque, la maîtrise du chapitre compte la
    part des questions réussies, pas le score d'un tirage. « Nombre précis » redonne un quiz de N questions. L'IA locale
    reçoit au plus 12 questions à écrire par demande (le texte est découpé), et la demande pour l'app Claude demande
    aussi de couvrir tout le chapitre. Recréer un quiz sur un chapitre déjà couvert n'ajoute que ce qui manque.

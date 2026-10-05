@@ -66,3 +66,19 @@ def test_new_file_is_not_split_until_asked(tmp_path, monkeypatch):
     assert cleared["chapters"] == [] and cleared["chapters_by"] == "none"
     kept = client.delete(f"/api/courses/{cid}/files/{f['id']}/chapters?keep=true").json()["course"]["files"][0]
     assert kept["chapters_by"] == "whole"
+
+
+def test_random_questions_from_all_quizzes(tmp_path, monkeypatch):
+    client, cid, cm1, glossary = _subject(tmp_path, monkeypatch)
+    many = [{"type": "reponse_courte", "question": f"G{i} ?", "answer": "a", "choices": []} for i in range(25)]
+    main.store.save_quiz({"course_id": cid, "title": "Glossaire", "scope": ["20. Contenu latent"],
+                          "sources": ["Glossaire.txt — 20. Contenu latent"], "questions": many})
+    # Toute la matière : 10 questions tirées parmi les 26, que des questions
+    data = client.get(f"/api/session?mode=quiz&course={cid}").json()
+    assert data["questions"] == 10 and data["cards"] == 0 and all(i["kind"] == "question" for i in data["items"])
+    assert len({(i["quiz_id"], i["index"]) for i in data["items"]}) == 10
+    # Un seul cours : seulement ses quiz (le premier fichier n'a qu'une question)
+    one = client.get(f"/api/session?mode=quiz&course={cid}&file={cm1}").json()
+    assert one["questions"] == 1
+    glossary_only = client.get(f"/api/session?mode=quiz&course={cid}&file={glossary}").json()
+    assert glossary_only["questions"] == 10 and all(i["question"]["question"].startswith("G") for i in glossary_only["items"])

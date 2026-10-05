@@ -1250,6 +1250,16 @@ SESSION_QUESTIONS = 10
 async def session(mode: str = "today", course: str = "", folder: str = "", filter: str = "review",
                   questions: bool = True, minutes: int = 15, chapter: str = "", file: str = "") -> dict:
     result = _session(mode, course, folder, filter, questions, minutes, chapter)
+    if mode == "quiz":
+        # Quelques questions au hasard dans tous les quiz (du cours choisi, de la matière…), le tirage après le filtre
+        size = int(store.get_settings().get("quiz_size", 10)) or SESSION_QUESTIONS
+        items = result["items"]
+        if file and course:
+            owner = store.get_course(course)
+            quizzes = {q["id"]: q for q in store.list_quizzes() if q.get("course_id") == course}
+            items = [i for i in items if _file_of(owner, quizzes.get(i["quiz_id"], {})) == file]
+        items = random.sample(items, min(size, len(items)))
+        return result | {"items": items, "cards": 0, "questions": len(items)}
     if not file or not course:
         return result
     # Un seul cours (fichier) de la matière : ses cartes et les questions de ses quiz
@@ -1319,6 +1329,14 @@ def _session(mode: str, course: str, folder: str, filter: str, questions: bool, 
                     asked += [_question_item({"quiz": quiz, "index": i, "stat": (quiz.get("stats") or {}).get(str(i))})
                               for i in range(len(quiz["questions"]))]
             random.shuffle(asked)
+    elif mode == "quiz":
+        # Toutes les questions des quiz (un chapitre si `chapter`) ; le tirage se fait dans session()
+        cards, asked = [], []
+        for summary in store.list_quizzes():
+            if summary.get("course_id") in ids and (not chapter or _same_title(chapter, summary.get("scope") or [])):
+                quiz = store.get_quiz(summary["id"])
+                asked += [_question_item({"quiz": quiz, "index": i, "stat": (quiz.get("stats") or {}).get(str(i))})
+                          for i in range(len(quiz["questions"]))]
     elif mode == "cards":
         tests = {"review": lambda c: c["status"] != "known", "known": lambda c: c["status"] == "known"}
         test = tests.get(filter, lambda c: True)

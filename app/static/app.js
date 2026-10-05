@@ -1588,7 +1588,11 @@ function quizItem(q, course, number = null, { play = false } = {}) {
         <small><span class="badge">${best}</span>${q.attempts > 1 ? ` <span class="muted">${q.attempts} essais</span>` : ""}
           ${outdated ? ` <span class="badge warn-badge" title="Le cours a été modifié depuis la création de ce quiz">cours mis à jour depuis</span>` : ""}</small>
       </button>
-      ${play ? `<button class="primary small" data-open-quiz="${q.id}">Faire le quiz</button>` : `
+      ${play ? (q.count > (state.quizSize || 10) + 2
+        ? `<span class="quiz-play-actions">
+            <button class="ghost small" data-open-quiz="${q.id}" data-full="1">Quiz entier (${q.count})</button>
+            <button class="primary small" data-open-quiz="${q.id}">${state.quizSize || 10} questions</button></span>`
+        : `<button class="primary small" data-open-quiz="${q.id}" data-full="1">Faire le quiz</button>`) : `
       <button class="icon" data-export-quiz="${q.id}" aria-label="Exporter ce quiz (fichier texte)" title="Exporter (fichier texte à envoyer)">${ICON_SHARE}</button>
       <button class="icon" data-rename-quiz="${q.id}" data-title="${escapeHtml(label)}" aria-label="Renommer ce quiz" title="Renommer">${ICON_EDIT}</button>
       <button class="icon" data-delete-quiz="${q.id}" aria-label="Supprimer ce quiz" title="Supprimer">${ICON_TRASH}</button>`}
@@ -1724,7 +1728,9 @@ document.addEventListener("click", async (e) => {
   try {
     if (openQuiz) {
       const back = !$("#view-review-scope").hidden ? location.hash : null;
-      startQuiz(await api(`/api/quizzes/${openQuiz}`), undefined, { back });
+      const quiz = await api(`/api/quizzes/${openQuiz}`);
+      // « Quiz entier » : toutes les questions, mélangées ; sinon un tirage (10 par défaut) pour les grands quiz
+      startQuiz(quiz, target.dataset.full ? shuffle(quiz.questions) : undefined, { back });
     }
     if (renameQuiz) {
       const title = await askText("Nouveau nom du quiz", target.dataset.title);
@@ -3396,9 +3402,22 @@ state.deckChapter = null;
 // Mode Quiz : tous les quiz du cours ou du semestre
 function renderScopeQuizzes() {
   const all = state.scopeQuizzes || [];
+  const total = all.reduce((n, q) => n + q.count, 0);
+  const size = state.quizSize || 10;
+  $("#quiz-mix").hidden = total <= size;
+  $("#quiz-mix-title").textContent = `${size} questions au hasard`;
+  $("#quiz-mix-text").textContent = `Piochées dans ${all.length > 1 ? `les ${all.length} quiz` : "le quiz"} de `
+    + `${state.reviewFile ? `« ${baseName(state.reviewFile.name)} »` : "la matière"} (${total} questions), tous chapitres confondus.`;
   $("#scope-quizzes").innerHTML = all.length ? all.map((q) => quizItem(q, null, null, { play: true })).join("")
     : `<li class="empty muted">Pas encore de quiz : crée-les depuis la page du cours (Mes cours).</li>`;
 }
+
+// Quelques questions au hasard dans tous les quiz du choix (un cours ou toute la matière)
+$("#quiz-mix-start").addEventListener("click", () => {
+  const f = state.reviewFile;
+  startSession({ mode: "quiz", ...reviewScope(), questions: "1", ...(f ? { file: f.id } : {}) },
+    { title: `Quiz au hasard · ${f ? baseName(f.name) : state.reviewScope.name}`, back: state.reviewScope.hash });
+});
 
 // Le bandeau « Révision du jour » : son bouton lance la séance (celle du plan s'il y en a un) ; ailleurs, il montre ses réglages
 $("#hero-start").addEventListener("click", (e) => {
@@ -4078,6 +4097,10 @@ const WELCOME = [
 ];
 // Les nouveautés de chaque version (le carton « Quoi de neuf » ne s'affiche que si la version en a)
 const WHATS_NEW = {
+  "0.46.0": [
+    ["🎲", "10 questions au hasard", "Dans Réviser → Quiz, un tirage dans tous les quiz du cours, tous chapitres confondus"],
+    ["⇄", "Quiz entier ou 10 questions", "Un grand quiz se fait en entier ou sur 10 questions, au choix"],
+  ],
   "0.45.1": [
     ["🔀", "Révision du jour mélangée", "Cartes et questions arrivent dans le désordre, plus dans l'ordre des chapitres"],
   ],

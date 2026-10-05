@@ -177,7 +177,14 @@
         </div>
 
         <div class="scope-section" id="scope-quizzes-box" data-mode="quiz">
-          <p class="muted small-text">Un quiz de plus de 10 questions en tire 10 à chaque fois : d'abord celles ratées ou jamais vues.</p>
+          <div class="quiz-mix" id="quiz-mix" hidden>
+            <div>
+              <strong id="quiz-mix-title">10 questions au hasard</strong>
+              <p class="muted small-text" id="quiz-mix-text"></p>
+            </div>
+            <button class="primary" type="button" id="quiz-mix-start">Commencer →</button>
+          </div>
+          <p class="muted small-text">Un grand quiz se fait en entier, ou sur 10 questions (d'abord celles ratées ou jamais vues).</p>
           <ul class="quiz-list" id="scope-quizzes"></ul>
         </div>
 
