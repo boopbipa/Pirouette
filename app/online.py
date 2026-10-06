@@ -77,6 +77,7 @@ class Online:
             self._save_session(None)
             raise OnlineError("Ta connexion a expiré : reconnecte-toi.")
         if response.status_code >= 400:
+            _log(f"{method} {path} -> {response.status_code} {response.text[:500]}")
             detail = ""
             try:
                 body = response.json()
@@ -101,7 +102,10 @@ class Online:
         user = data.get("user") or {}
         before = self._session()
         meta = user.get("user_metadata") or {}
-        self._save_session({"access_token": data["access_token"], "refresh_token": data["refresh_token"],
+        if not data.get("access_token"):
+            _log(f"session sans jeton : {str(data)[:300]}")
+            raise OnlineError("Le service en ligne n'a pas renvoyé de session : réessaie.")
+        self._save_session({"access_token": data["access_token"], "refresh_token": data.get("refresh_token", ""),
                             "expires_at": int(time.time()) + int(data.get("expires_in", 3600)),
                             "user_id": user.get("id") or before.get("user_id"),
                             "email": user.get("email") or before.get("email"),
@@ -268,6 +272,16 @@ class Online:
             "challenge_id": challenge_id, "user_id": self._session().get("user_id"),
             "score": score, "total": total, "seconds": seconds},
             headers={"Prefer": "resolution=ignore-duplicates"})
+
+
+def _log(line: str) -> None:
+    """Journal des refus du service en ligne (pour comprendre un problème), dans le dossier des données."""
+    try:
+        folder = Path(os.environ.get("QUIZZ_DATA_DIR", "."))
+        with (folder / "online.log").open("a", encoding="utf-8") as out:
+            out.write(f"{time.strftime('%Y-%m-%d %H:%M:%S')} {line}\n")
+    except OSError:
+        pass
 
 
 def _check_pseudo(pseudo: str) -> str:

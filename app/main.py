@@ -2147,6 +2147,9 @@ async def online_google_callback(code: str = "", error_description: str = "", er
                                            + ". Tu peux fermer cet onglet et revenir dans Pirouette.")
         except online.OnlineError as exc:
             title, text = "Connexion impossible", str(exc)
+        except Exception as exc:  # imprévu : on montre le détail (à envoyer pour qu'on corrige)
+            title = "Connexion impossible"
+            text = f"Erreur inattendue de Pirouette : {type(exc).__name__}: {exc}"
     else:
         title = "Connexion impossible"
         text = ("Google n'a pas autorisé la connexion" + (f" ({error_description or error})" if error_description or error else "")
