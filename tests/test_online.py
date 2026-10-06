@@ -41,6 +41,9 @@ class FakeSupabase:
                                              "user": {"id": user, "email": "pilou@gmail.com", "is_anonymous": False,
                                                       "user_metadata": {"full_name": "Pierre-Louis"}}})
         table = path.removeprefix("/rest/v1/")
+        if getattr(self, "old_base", False) and table == "challenges" and (
+                "time_limit" in params.get("select", "") or (body and "time_limit" in body)):
+            return httpx.Response(400, json={"message": "column challenges.time_limit does not exist"})
         rows = self.tables[table]
         filters = {k: v.removeprefix("eq.") for k, v in params.items() if v.startswith("eq.")}
         match = [r for r in rows if all(str(r.get(k)) == v for k, v in filters.items())]
@@ -164,3 +167,18 @@ def test_google_sign_in_and_linking(tmp_path, fake):
     assert url.startswith("https://accounts.google.com/")
     me = run(old.google_finish("bon-code"))
     assert me["google"] and me["profile"]["id"] == before and me["profile"]["pseudo"] == "Pilou"
+
+
+def test_timed_challenge_and_old_base(tmp_path, fake):
+    alice = player(tmp_path, fake, "alice")
+    run(alice.start("Alice"))
+    quiz = {"title": "Neuro", "questions": [{"type": "qcm", "question": f"Q{i} ?", "choices": ["a", "b"], "answer": "a"}
+                                            for i in range(30)]}
+    challenge = run(alice.create_challenge(quiz, size=15, time_limit=300))
+    assert len(challenge["questions"]) == 15 and challenge["time_limit"] == 300
+    assert run(alice.challenge(challenge["id"]))["time_limit"] == 300
+    # Base pas encore mise à jour (pas de colonne du chrono) : le défi se crée quand même, sans chrono
+    fake.old_base = True
+    other = run(alice.create_challenge(quiz, size=5, time_limit=120))
+    assert "time_limit" not in other and len(other["questions"]) == 5
+    assert len(run(alice.challenges(days=100000))) == 2

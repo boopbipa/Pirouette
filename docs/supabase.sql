@@ -41,6 +41,7 @@ create table if not exists public.challenges (
   subject text check (char_length(subject) <= 120),
   questions jsonb not null check (jsonb_typeof(questions) = 'array' and jsonb_array_length(questions) between 1 and 20),
   day date not null default current_date,
+  time_limit int check (time_limit between 30 and 3600),  -- chrono pour tout le défi (secondes), facultatif
   created_at timestamptz not null default now()
 );
 alter table public.challenges enable row level security;
@@ -99,3 +100,6 @@ create policy "mon score" on public.attempts for insert to authenticated
 
 create index if not exists challenges_owner_day on public.challenges (owner, day desc);
 create index if not exists attempts_user on public.attempts (user_id);
+
+-- Mise à jour (chrono des défis) : pour une base créée avant, cette ligne suffit
+alter table public.challenges add column if not exists time_limit int check (time_limit between 30 and 3600);

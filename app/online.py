@@ -224,26 +224,37 @@ class Online:
             await self._call("DELETE", "/rest/v1/friendships", params={"user_id": f"eq.{a}", "friend_id": f"eq.{b}"})
 
     # ---------- Défis ----------
-    async def create_challenge(self, quiz: dict, size: int = CHALLENGE_SIZE) -> dict:
-        """Un défi : quelques questions d'un de mes quiz (sans le cours), que mes amis pourront faire."""
+    async def create_challenge(self, quiz: dict, size: int = CHALLENGE_SIZE, time_limit: int | None = None) -> dict:
+        """Un défi : quelques questions d'un quiz (ou de tous les quiz d'un cours), sans le cours lui-même, que mes
+        amis pourront faire ; `time_limit` (secondes) : un chrono pour tout le défi."""
         questions = [{k: q.get(k) for k in ("type", "question", "choices", "answer", "explanation")}
                      for q in quiz.get("questions", []) if q.get("question") and q.get("answer") is not None]
         if not questions:
-            raise OnlineError("Ce quiz n'a pas de question à partager.")
-        picked = random.sample(questions, min(size, len(questions)))
+            raise OnlineError("Pas de question à partager : crée d'abord un quiz.")
+        picked = random.sample(questions, min(max(3, min(int(size), 20)), len(questions)))
         body = {"owner": self._session().get("user_id"), "title": str(quiz.get("title") or "Défi")[:120],
                 "subject": str(quiz.get("course_name") or "")[:120] or None, "questions": picked}
-        rows = (await self._call("POST", "/rest/v1/challenges", json=body,
-                                 headers={"Prefer": "return=representation"})).json()
+        if time_limit:
+            body["time_limit"] = max(30, min(int(time_limit), 3600))
+        try:
+            rows = (await self._call("POST", "/rest/v1/challenges", json=body,
+                                     headers={"Prefer": "return=representation"})).json()
+        except OnlineError as exc:
+            if "time_limit" not in str(exc):
+                raise
+            # La base n'a pas encore la colonne du chrono (mise à jour SQL à faire) : défi sans chrono
+            body.pop("time_limit", None)
+            rows = (await self._call("POST", "/rest/v1/challenges", json=body,
+                                     headers={"Prefer": "return=representation"})).json()
         return rows[0] if rows else body
 
     async def challenges(self, days: int = 7) -> list[dict]:
         """Les défis récents (les miens et ceux de mes amis), avec les scores et mon essai."""
         since = date.fromordinal(date.today().toordinal() - days).isoformat()
-        rows = (await self._call("GET", "/rest/v1/challenges", params={
-            "select": "id,title,subject,day,created_at,owner,questions,author:profiles!challenges_owner_fkey(pseudo),"
-                      "attempts(user_id,score,total,seconds,player:profiles!attempts_user_id_fkey(pseudo))",
-            "day": f"gte.{since}", "order": "created_at.desc"})).json()
+        select = ("id,title,subject,day,created_at,owner,questions,time_limit,"
+                  "author:profiles!challenges_owner_fkey(pseudo),"
+                  "attempts(user_id,score,total,seconds,player:profiles!attempts_user_id_fkey(pseudo))")
+        rows = (await self._get_challenges({"select": select, "day": f"gte.{since}", "order": "created_at.desc"})).json()
         me = self._session().get("user_id")
         for row in rows:
             row["count"] = len(row.get("questions") or [])
@@ -260,13 +271,23 @@ class Online:
         return rows
 
     async def challenge(self, challenge_id: str) -> dict:
-        rows = (await self._call("GET", "/rest/v1/challenges", params={
+        rows = (await self._get_challenges({
             "id": f"eq.{challenge_id}",
             # Liens explicites : défis et profils se rejoignent aussi par les scores (sinon Supabase refuse, ambigu)
-            "select": "id,title,subject,questions,author:profiles!challenges_owner_fkey(pseudo)"})).json()
+            "select": "id,title,subject,questions,time_limit,author:profiles!challenges_owner_fkey(pseudo)"})).json()
         if not rows:
             raise OnlineError("Ce défi n'existe plus.")
         return rows[0]
+
+    async def _get_challenges(self, params: dict) -> httpx.Response:
+        try:
+            return await self._call("GET", "/rest/v1/challenges", params=params)
+        except OnlineError as exc:
+            if "time_limit" not in str(exc):
+                raise
+            # Base pas encore mise à jour (pas de chrono) : on lit sans
+            return await self._call("GET", "/rest/v1/challenges",
+                                    params=params | {"select": params["select"].replace("time_limit,", "")})
 
     async def submit(self, challenge_id: str, score: int, total: int, seconds: int | None) -> None:
         await self._call("POST", "/rest/v1/attempts", json={

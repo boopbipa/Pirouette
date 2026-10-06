@@ -429,7 +429,8 @@ Onglet **Défis** : « **Se connecter avec Google** » (le navigateur s'ouvre ; 
 `http://127.0.0.1:<port>/api/online/google/callback`, échange PKCE ; le compte se retrouve sur tous les ordinateurs) ou
 simplement un **pseudo** (pas d'e-mail ni de mot de passe : un compte anonyme, gardé dans les réglages de cet ordinateur,
 que « Relier à Google » rattache ensuite à Google sans perdre amis ni scores), on s'ajoute entre amis avec un **code ami** de 6 caractères (amis dès que l'autre accepte ou ajoute
-notre code), puis « **Défier mes amis** » tire 10 questions d'un de ses quiz. Chacun le fait une fois ; le classement
+notre code), puis « **Défier mes amis** » tire 5 à 20 questions d'un de ses quiz ou de **tout un cours** (tous ses
+quiz), avec ou sans **chrono** pour tout le défi (2 à 15 min ; à zéro, les questions sans réponse comptent fausses). Chacun le fait une fois ; le classement
 (score, temps) n'apparaît qu'après avoir joué. En ligne : pseudo, code ami, questions des défis, scores — jamais les cours.
 
 Service : Supabase (`app/online.py`, base et règles d'accès dans `docs/supabase.sql`). L'adresse du projet et sa clé

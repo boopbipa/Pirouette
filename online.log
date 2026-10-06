@@ -1,3 +1,10 @@
 2026-10-06 10:27:47 POST /auth/v1/token?grant_type=pkce -> 400 {"msg":"invalid flow state"}
 2026-10-06 10:28:16 POST /auth/v1/token?grant_type=pkce -> 400 {"msg":"invalid flow state"}
 2026-10-06 11:53:28 POST /auth/v1/token?grant_type=pkce -> 400 {"msg":"invalid flow state"}
+2026-10-06 22:00:48 POST /auth/v1/token?grant_type=pkce -> 400 {"msg":"invalid flow state"}
+2026-10-06 22:00:59 POST /auth/v1/token?grant_type=pkce -> 400 {"msg":"invalid flow state"}
+2026-10-06 22:00:59 POST /rest/v1/challenges -> 400 {"message":"column challenges.time_limit does not exist"}
+2026-10-06 22:00:59 GET /rest/v1/challenges -> 400 {"message":"column challenges.time_limit does not exist"}
+2026-10-06 22:03:10 POST /auth/v1/token?grant_type=pkce -> 400 {"msg":"invalid flow state"}
+2026-10-06 22:03:10 POST /rest/v1/challenges -> 400 {"message":"column challenges.time_limit does not exist"}
+2026-10-06 22:03:10 GET /rest/v1/challenges -> 400 {"message":"column challenges.time_limit does not exist"}

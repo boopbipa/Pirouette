@@ -91,7 +91,7 @@
     <!-- Défis entre amis (en ligne) : un compte, des amis, 10 questions à faire chacun -->
     <section id="view-online" class="view" hidden>
       <h1>Défis entre amis</h1>
-      <p class="muted" id="online-intro">Lance un défi de 10 questions tirées de tes quiz : tes amis le font aussi, et vous comparez vos scores.
+      <p class="muted" id="online-intro">Lance un défi tiré d'un de tes quiz ou de tout un cours (5 à 20 questions, avec ou sans chrono) : tes amis le font aussi, et vous comparez vos scores.
         Seuls ton pseudo, les questions du défi et les scores sont en ligne : tes cours restent sur ton ordinateur.</p>
       <div class="card" id="online-off" hidden>
         <h2>Bientôt disponible</h2>
@@ -133,7 +133,16 @@
           <h2>Défis de la semaine</h2>
           <ul class="challenge-list" id="online-challenges"></ul>
           <div class="online-new">
-            <select class="chip" id="online-quiz" aria-label="Quiz du défi"></select>
+            <span class="online-new-label">Nouveau défi :</span>
+            <select class="chip" id="online-quiz" aria-label="Cours ou quiz du défi"></select>
+            <select class="chip" id="online-size" aria-label="Nombre de questions">
+              <option value="5">5 questions</option><option value="10" selected>10 questions</option>
+              <option value="15">15 questions</option><option value="20">20 questions</option>
+            </select>
+            <select class="chip" id="online-time" aria-label="Chrono">
+              <option value="">Sans chrono</option><option value="120">⏱ 2 min</option><option value="300">⏱ 5 min</option>
+              <option value="600">⏱ 10 min</option><option value="900">⏱ 15 min</option>
+            </select>
             <button class="primary small" type="button" id="online-launch">Défier mes amis</button>
           </div>
           <p class="status" id="online-challenge-status" hidden></p>
@@ -1140,7 +1149,8 @@
     <section id="view-quiz" class="view" hidden>
       <div class="quiz-head">
         <h1 id="quiz-title"></h1>
-        <span id="quiz-counter" class="pill"></span>
+        <span class="quiz-head-pills"><span id="quiz-timer" class="pill quiz-timer" hidden></span>
+          <span id="quiz-counter" class="pill"></span></span>
       </div>
       <div class="progress"><div id="progress-bar"></div></div>
       <p class="status" id="quiz-note" hidden></p>

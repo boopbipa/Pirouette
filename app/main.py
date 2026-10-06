@@ -2093,7 +2093,10 @@ class OnlineTextIn(BaseModel):
 
 
 class ChallengeIn(BaseModel):
-    quiz_id: str
+    quiz_id: str = ""           # un de mes quiz…
+    course_id: str = ""         # …ou tout un cours (les questions de tous ses quiz)
+    size: int = online.CHALLENGE_SIZE
+    time_limit: int | None = None  # chrono pour tout le défi, en secondes
 
 
 class ChallengeScoreIn(BaseModel):
@@ -2191,7 +2194,14 @@ async def online_challenges() -> list[dict]:
 
 @app.post("/api/online/challenges")
 async def online_new_challenge(body: ChallengeIn) -> dict:
-    return await _online_call(_online().create_challenge(store.get_quiz(body.quiz_id)))
+    if body.course_id:
+        course = store.get_course(body.course_id)
+        questions = [q for summary in store.list_quizzes(body.course_id)
+                     for q in store.get_quiz(summary["id"]).get("questions", [])]
+        source = {"title": course["name"], "course_name": course["name"], "questions": questions}
+    else:
+        source = store.get_quiz(body.quiz_id)
+    return await _online_call(_online().create_challenge(source, body.size, body.time_limit))
 
 
 @app.get("/api/online/challenges/{challenge_id}")

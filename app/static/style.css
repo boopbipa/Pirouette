@@ -1703,3 +1703,7 @@ html, body { height: 100%; overflow: hidden; }
 .online-or { margin: 18px 0 4px; }
 .online-me-actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 #online-google-box { margin-bottom: 18px; padding-bottom: 6px; border-bottom: 1px solid var(--border); }
+.online-new-label { font-weight: 600; font-size: 14.5px; }
+.quiz-head-pills { display: inline-flex; gap: 8px; align-items: center; }
+.quiz-timer { font-variant-numeric: tabular-nums; }
+.quiz-timer.urgent { background: var(--ko-soft); color: var(--ko); }

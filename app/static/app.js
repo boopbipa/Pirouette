@@ -3998,6 +3998,7 @@ function drawQuestions(quiz) {
 
 function startQuiz(quiz, questions, { back = state.quizBack } = {}) {
   foldJobs();
+  startQuizTimer(quiz);
   const drawn = !questions;
   questions = questions || drawQuestions(quiz);
   questions.forEach(mixChoices);
@@ -4312,6 +4313,10 @@ const WELCOME = [
 ];
 // Les nouveautés de chaque version (le carton « Quoi de neuf » ne s'affiche que si la version en a)
 const WHATS_NEW = {
+  "0.53.0": [
+    ["📚", "Défi sur tout un cours", "Dans Défis : un quiz ou tout un cours, de 5 à 20 questions"],
+    ["⏱", "Défis chronométrés", "2, 5, 10 ou 15 minutes pour tout le défi ; à zéro, les questions sans réponse comptent fausses"],
+  ],
   "0.52.0": [
     ["G", "Se connecter avec Google", "Dans Défis : ton compte (amis, scores) te suit sur tous tes ordinateurs"],
   ],
@@ -4718,6 +4723,27 @@ function next() {
   else showResults();
 }
 
+// Chrono d'un défi : pour tout le quiz ; à zéro, les questions sans réponse comptent fausses et c'est fini
+function startQuizTimer(quiz) {
+  clearInterval(state.quizTimer);
+  const timer = $("#quiz-timer");
+  timer.hidden = !quiz.timeLimit;
+  if (!quiz.timeLimit) return;
+  const end = Date.now() + quiz.timeLimit * 1000;
+  const tick = () => {
+    const left = Math.max(0, Math.round((end - Date.now()) / 1000));
+    timer.textContent = `⏱ ${Math.floor(left / 60)}:${String(left % 60).padStart(2, "0")}`;
+    timer.classList.toggle("urgent", left <= 30);
+    if (left > 0 || state.quiz !== quiz) return;
+    clearInterval(state.quizTimer);
+    if ($("#view-quiz").hidden) return;
+    notify("Temps écoulé ! Les questions sans réponse comptent comme fausses.");
+    showResults();
+  };
+  tick();
+  state.quizTimer = setInterval(tick, 500);
+}
+
 // ---------- Résultats ----------
 function showResults() {
   state.resultsFilter = "all";
@@ -4729,8 +4755,10 @@ function showResults() {
   $("#review").classList.toggle("online-review", Boolean(state.quiz.online));
   if (state.quiz.online) {
     // Défi entre amis : le score part en ligne (un seul essai compte), pas dans les quiz de l'ordinateur
+    clearInterval(state.quizTimer);
+    $("#quiz-timer").hidden = true;
     const seconds = Math.round((Date.now() - state.quiz.started) / 1000);
-    api(`/api/online/challenges/${state.quiz.online}/score`, jsonBody("POST", { score: good, total: state.results.length, seconds }))
+    api(`/api/online/challenges/${state.quiz.online}/score`, jsonBody("POST", { score: good, total: state.questions.length, seconds }))
       .catch(() => {});
     $("#retry-btn").hidden = $("#retry-wrong-btn").hidden = true;  // un défi ne se fait qu'une fois
     return;
@@ -4744,7 +4772,7 @@ function showResults() {
 // Correction : toutes les questions, ou seulement les erreurs.
 function renderResults() {
   const good = state.results.filter((r) => r.correct).length;
-  const total = state.results.length;
+  const total = state.quiz?.online ? state.questions.length : state.results.length;  // défi : sur toutes ses questions
   $("#score").textContent = total ? `${good} / ${total} (${Math.round((good / total) * 100)} %)` : "—";
   $("#retry-wrong-btn").hidden = good === total;
   const filter = state.resultsFilter || "all";
@@ -6147,18 +6175,33 @@ $("#online-copy").addEventListener("click", async () => {
 });
 
 // Mes quiz, pour lancer un défi
+// Un défi se fait à partir d'un cours entier (les questions de tous ses quiz) ou d'un seul quiz
 async function renderOnlineQuizzes() {
-  const quizzes = (await api("/api/quizzes").catch(() => [])).filter((q) => q.count >= 3);
+  const [all, known] = await Promise.all([api("/api/quizzes").catch(() => []), api("/api/courses").catch(() => [])]);
+  const names = Object.fromEntries(known.map((c) => [c.id, c.name]));
+  const quizzes = all.filter((q) => q.count >= 3).map((q) => ({ ...q, course_name: names[q.course_id] || q.course_name }));
+  const courses = new Map();
+  quizzes.forEach((q) => {
+    if (!q.course_id || !names[q.course_id]) return;
+    const c = courses.get(q.course_id) || { name: names[q.course_id], count: 0 };
+    c.count += q.count;
+    courses.set(q.course_id, c);
+  });
   $("#online-quiz").innerHTML = quizzes.length
-    ? quizzes.map((q) => `<option value="${q.id}">${escapeHtml(q.course_name ? `${q.course_name} · ${q.title}` : q.title)}</option>`).join("")
+    ? `<optgroup label="Tout un cours">${[...courses].map(([id, c]) =>
+        `<option value="course:${id}">${escapeHtml(c.name)} (${c.count} questions)</option>`).join("")}</optgroup>
+       <optgroup label="Un quiz">${quizzes.map((q) =>
+        `<option value="quiz:${q.id}">${escapeHtml(q.course_name ? `${q.course_name} · ${q.title}` : q.title)}</option>`).join("")}</optgroup>`
     : `<option value="">Pas encore de quiz</option>`;
   $("#online-launch").disabled = !quizzes.length;
 }
 $("#online-launch").addEventListener("click", async () => {
-  const quizId = $("#online-quiz").value;
-  if (!quizId) return;
+  const [kind, id] = $("#online-quiz").value.split(":");
+  if (!id) return;
   try {
-    await api("/api/online/challenges", jsonBody("POST", { quiz_id: quizId }));
+    await api("/api/online/challenges", jsonBody("POST", {
+      [kind === "course" ? "course_id" : "quiz_id"]: id,
+      size: Number($("#online-size").value), time_limit: Number($("#online-time").value) || null }));
     setStatus("#online-challenge-status", "Défi lancé : tes amis le voient dans leur onglet Défis.", true);
     renderChallenges();
   } catch (err) {
@@ -6178,7 +6221,7 @@ async function renderChallenges() {
     <li class="challenge">
       <div class="challenge-head">
         <span><strong>${escapeHtml(c.title)}</strong>
-          <small class="muted">${c.mine ? "Ton défi" : `Défi de ${escapeHtml(c.author)}`}${c.subject ? ` · ${escapeHtml(c.subject)}` : ""} · ${c.count} questions · ${formatDate(c.created_at)}</small></span>
+          <small class="muted">${c.mine ? "Ton défi" : `Défi de ${escapeHtml(c.author)}`}${c.subject ? ` · ${escapeHtml(c.subject)}` : ""} · ${c.count} questions${c.time_limit ? ` · ⏱ ${Math.round(c.time_limit / 60)} min` : ""} · ${formatDate(c.created_at)}</small></span>
         ${c.done ? `<span class="badge">Fait</span>` : `<button class="primary small" type="button" data-play-challenge="${c.id}">Jouer</button>`}
       </div>
       ${c.done ? `<ol class="leaderboard">${c.scores.map((s) => `<li class="${s.me ? "me" : ""}">
@@ -6190,8 +6233,10 @@ $("#online-challenges").addEventListener("click", async (e) => {
   if (!play) return;
   try {
     const c = await api(`/api/online/challenges/${play.dataset.playChallenge}`);
+    if (c.time_limit && !await askConfirm(`Ce défi se joue en ${Math.round(c.time_limit / 60)} min chrono, en une seule fois. Prêt ?`,
+      { ok: "C'est parti" })) return;
     const quiz = { id: null, online: c.id, started: Date.now(), title: `Défi · ${c.title}`, questions: c.questions,
-                   course_name: c.subject || "" };
+                   course_name: c.subject || "", timeLimit: c.time_limit || null };
     startQuiz(quiz, shuffle(c.questions), { back: "#/defis" });
   } catch (err) {
     setStatus("#online-challenge-status", err.message, false);
