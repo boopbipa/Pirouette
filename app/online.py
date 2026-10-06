@@ -43,7 +43,8 @@ class OnlineError(Exception):
 
 
 def configured() -> bool:
-    return bool(URL and KEY)
+    # Une clé mal recopiée (« … », espace) casserait chaque requête : on la considère absente
+    return bool(URL and KEY and KEY.isascii() and URL.isascii() and " " not in KEY)
 
 
 class Online:

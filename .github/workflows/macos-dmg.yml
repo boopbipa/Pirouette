@@ -54,7 +54,7 @@ jobs:
           SUPABASE_KEY: ${{ secrets.SUPABASE_PUBLISHABLE_KEY }}
         shell: bash
         run: |
-          python -c "import json, os; u, k = os.environ.get('SUPABASE_URL', ''), os.environ.get('SUPABASE_KEY', ''); (u and k) and open('app/online_config.json', 'w').write(json.dumps({'url': u, 'key': k})); print('::notice title=Défis en ligne::' + ('branchés (secrets SUPABASE trouvés)' if u and k else 'PAS de secrets SUPABASE_URL / SUPABASE_PUBLISHABLE_KEY : onglet Défis caché'))"
+          python -c "import json, os, re; u, k = os.environ.get('SUPABASE_URL', '').strip(), os.environ.get('SUPABASE_KEY', '').strip(); ok = bool(re.fullmatch(r'https://[a-z0-9]+\.supabase\.co/?', u)) and bool(re.fullmatch(r'[A-Za-z0-9_.-]{20,}', k)); ok and open('app/online_config.json', 'w').write(json.dumps({'url': u, 'key': k})); print('::notice title=Défis en ligne::branchés (secrets SUPABASE trouvés et valides)' if ok else '::warning title=Défis en ligne::secrets SUPABASE absents ou mal recopiés (adresse https://xxx.supabase.co, clé complète sans « … ») : onglet Défis caché')"
 
       - name: Fabrication de l'app et du .dmg
         run: packaging/build_macos.sh
@@ -117,7 +117,7 @@ jobs:
           SUPABASE_KEY: ${{ secrets.SUPABASE_PUBLISHABLE_KEY }}
         shell: bash
         run: |
-          python -c "import json, os; u, k = os.environ.get('SUPABASE_URL', ''), os.environ.get('SUPABASE_KEY', ''); (u and k) and open('app/online_config.json', 'w').write(json.dumps({'url': u, 'key': k})); print('::notice title=Défis en ligne::' + ('branchés (secrets SUPABASE trouvés)' if u and k else 'PAS de secrets SUPABASE_URL / SUPABASE_PUBLISHABLE_KEY : onglet Défis caché'))"
+          python -c "import json, os, re; u, k = os.environ.get('SUPABASE_URL', '').strip(), os.environ.get('SUPABASE_KEY', '').strip(); ok = bool(re.fullmatch(r'https://[a-z0-9]+\.supabase\.co/?', u)) and bool(re.fullmatch(r'[A-Za-z0-9_.-]{20,}', k)); ok and open('app/online_config.json', 'w').write(json.dumps({'url': u, 'key': k})); print('::notice title=Défis en ligne::branchés (secrets SUPABASE trouvés et valides)' if ok else '::warning title=Défis en ligne::secrets SUPABASE absents ou mal recopiés (adresse https://xxx.supabase.co, clé complète sans « … ») : onglet Défis caché')"
 
       - name: Fabrication de l'app et de l'installateur
         run: packaging/build_windows.ps1
