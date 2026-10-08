@@ -1714,3 +1714,10 @@ html.windows [data-mac-only], html:not(.windows) [data-win-only] { display: none
 .manual-snippet { white-space: pre; overflow-x: auto; font-size: 12px; margin: 6px 0; }
 .manual-file { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 6px; }
 .manual-file code { word-break: break-all; font-size: 12px; }
+
+/* Mes cours : un seul bouton bien visible ; « + Nouveau semestre » discret, sous les semestres */
+.new-course-big { font-size: 15px; padding: 11px 22px; }
+.add-folder-row { display: block; width: 100%; margin: 14px 0 6px; padding: 12px; border: 1.5px dashed var(--border);
+  border-radius: 14px; background: transparent; color: var(--muted); font: inherit; font-size: 14px; cursor: pointer; }
+.add-folder-row:hover { color: var(--accent); border-color: var(--accent); }
+.pack-link { margin: 14px 0 0; text-align: center; }

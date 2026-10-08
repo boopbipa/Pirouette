@@ -12,6 +12,7 @@ import subprocess
 import sys
 import threading
 import unicodedata
+import uuid
 import urllib.parse
 from dataclasses import replace
 from datetime import date, datetime, timedelta
@@ -694,6 +695,60 @@ async def analyse_definitions(file: UploadFile | None = File(None), text: str = 
 @app.delete("/api/courses/{course_id}/files/{file_id}")
 async def delete_file(course_id: str, file_id: str) -> dict:
     return store.remove_file(course_id, file_id)
+
+
+class MoveFileIn(BaseModel):
+    target_id: str | None = None   # cours de destination (None : un nouveau cours, du nom du fichier)
+    with_items: bool = True        # avec ses quiz et ses flashcards
+
+
+@app.get("/api/courses/{course_id}/files/{file_id}/items")
+async def file_items(course_id: str, file_id: str) -> dict:
+    """Ce qui vient de ce fichier : nombre de quiz et de cartes (avant de le déplacer)."""
+    course = store.get_course(course_id)
+    quizzes = [q for q in store.list_quizzes(course_id) if _file_of(course, q) == file_id]
+    cards = [c for c in (store.get_doc(course_id, "cards") or {}).get("cards", []) if _file_of(course, c) == file_id]
+    return {"quizzes": len(quizzes), "cards": len(cards)}
+
+
+@app.post("/api/courses/{course_id}/files/{file_id}/move")
+async def move_file(course_id: str, file_id: str, body: MoveFileIn) -> dict:
+    """Déplace un fichier vers un autre cours (existant ou nouveau), avec ses quiz et flashcards si on le veut."""
+    course = store.get_course(course_id)
+    entry = next((f for f in course["files"] if f["id"] == file_id), None)
+    if entry is None:
+        raise HTTPException(404, "Fichier introuvable")
+    # Ce qui vient de ce fichier, repéré avant le déplacement (d'après les fichiers du cours de départ)
+    quizzes = [q["id"] for q in store.list_quizzes(course_id) if _file_of(course, q) == file_id] if body.with_items else []
+    deck = store.get_doc(course_id, "cards") or {}
+    moving = [c for c in deck.get("cards", []) if body.with_items and _file_of(course, c) == file_id]
+    target = store.get_course(body.target_id) if body.target_id else None
+    if target is None:
+        target = store.create_course(Path(entry["name"]).stem)
+        if course.get("folder_id"):
+            store.move_course(target["id"], course["folder_id"])  # même semestre que le cours de départ
+    try:
+        target = store.move_file(course_id, file_id, target["id"])
+    except ValueError as exc:
+        if not body.target_id:
+            store.delete_course(target["id"])
+        raise HTTPException(400, str(exc)) from exc
+    for quiz_id in quizzes:
+        quiz = store.get_quiz(quiz_id)
+        quiz.update(course_id=target["id"], course_name=target["name"], course_version=target["version"])
+        store.save_quiz(quiz)
+    if moving:
+        ids = {c["id"] for c in moving}
+        deck["cards"] = [c for c in deck["cards"] if c["id"] not in ids]
+        store.save_doc(course_id, "cards", deck)
+        dest = store.get_doc(target["id"], "cards") or {"course_id": target["id"], "course_name": target["name"], "cards": []}
+        taken = {c["id"] for c in dest["cards"]}
+        for card in moving:
+            if card["id"] in taken:
+                card = card | {"id": uuid.uuid4().hex[:8]}
+            dest["cards"].append(card)
+        store.save_doc(target["id"], "cards", dest)
+    return {"course_id": target["id"], "course_name": target["name"], "quizzes": len(quizzes), "cards": len(moving)}
 
 
 # ---------- Génération (quiz, flashcards) ----------

@@ -1199,20 +1199,39 @@ $("#settings-import-btn").addEventListener("click", async () => {
 // ---------- Nouveau cours : une petite fenêtre, on y glisse son fichier ----------
 const newCourse = { files: [] };
 
+// Le dernier semestre choisi en créant un cours : proposé d'office la fois suivante
+const lastFolder = () => { try { return localStorage.getItem("pirouette.lastFolder") || ""; } catch { return ""; } };
 async function openNewCourse({ folder = "" } = {}) {
   newCourse.files = [];
   $("#new-course-name").value = "";
   $("#new-course-status").hidden = true;
   $("#new-course-create").disabled = false;
   renderNewCourseFiles();
-  const folders = (await api("/api/folders")).filter((f) => !f.archived);
-  $("#new-course-folder-field").hidden = !folders.length;
+  const [folders, courses] = await Promise.all([api("/api/folders"), api("/api/courses")]);
+  const open = folders.filter((f) => !f.archived);
+  $("#new-course-folder-field").hidden = !open.length;
   $("#new-course-folder").innerHTML = `<option value="">Sans semestre</option>`
-    + folders.map((f) => `<option value="${f.id}">${escapeHtml(f.name)}</option>`).join("");
-  $("#new-course-folder").value = folders.some((f) => f.id === folder) ? folder : "";
+    + open.map((f) => `<option value="${f.id}">${escapeHtml(f.name)}</option>`).join("");
+  const wanted = folder || lastFolder();
+  $("#new-course-folder").value = open.some((f) => f.id === wanted) ? wanted : "";
+  // Ranger le fichier dans un cours qui existe déjà (Statistiques, Psychanalyse…) ou en créer un
+  const folderName = Object.fromEntries(folders.map((f) => [f.id, f.name]));
+  $("#new-course-target").innerHTML = `<option value="">Un nouveau cours</option>`
+    + courses.map((c) => `<option value="${c.id}">${escapeHtml(c.name)}${folderName[c.folder_id] ? ` · ${escapeHtml(folderName[c.folder_id])}` : ""}</option>`).join("");
+  $("#new-course-target").value = "";
+  $("#new-course-target-field").hidden = !courses.length;
+  renderNewCourseTarget();
   $("#new-course-dialog").showModal();
   $("#new-course-name").focus();
 }
+function renderNewCourseTarget() {
+  const existing = Boolean($("#new-course-target").value);
+  $("#new-course-name-field").hidden = existing;
+  $("#new-course-folder-field").hidden = existing || !$("#new-course-folder").options.length || $("#new-course-folder").options.length < 2;
+  $("#new-course-create").textContent = existing ? "Ajouter au cours" : "Créer le cours";
+  $("#new-course-dialog h2").textContent = existing ? "Ajouter un fichier à un cours" : "Nouveau cours";
+}
+$("#new-course-target").addEventListener("change", renderNewCourseTarget);
 
 function renderNewCourseFiles() {
   const files = newCourse.files;
@@ -1242,6 +1261,15 @@ courseDrop.addEventListener("drop", (e) => addNewCourseFiles(e.dataTransfer.file
 
 $("#new-course-form").addEventListener("submit", async (e) => {
   e.preventDefault();
+  const existing = $("#new-course-target").value;
+  if (existing) {
+    if (!newCourse.files.length) return setStatus("#new-course-status", "Glisse d'abord le fichier à ajouter à ce cours.", false);
+    $("#new-course-dialog").close();
+    history.pushState(null, "", `#/cours/${existing}`);
+    document.querySelectorAll("[data-nav]").forEach((a) => a.classList.toggle("on", a.dataset.nav === "cours"));
+    await openCourse(existing);
+    return uploadFiles(newCourse.files);
+  }
   const name = $("#new-course-name").value.trim();
   if (!name) {
     setStatus("#new-course-status", "Donne un nom au cours (ou glisse un fichier : son nom sera repris).", false);
@@ -1251,6 +1279,7 @@ $("#new-course-form").addEventListener("submit", async (e) => {
   try {
     const course = await api("/api/courses", jsonBody("POST", { name }));
     const folder = $("#new-course-folder").value;
+    try { localStorage.setItem("pirouette.lastFolder", folder); } catch {}
     if (folder) await api(`/api/courses/${course.id}/folder`, jsonBody("PUT", { folder_id: folder }));
     $("#new-course-dialog").close();
     const files = newCourse.files;
@@ -1424,8 +1453,9 @@ async function renderTiles(course) {
   const focus = focusFile(course);
   const shown = data.chapters.filter((ch) => !focus || fileOf(ch) === focus).length;
   $("#fold-chapitres-count").textContent = shown ? `· ${shown}` : "";
-  // « Tout préparer » seulement s'il reste un chapitre sans quiz ou sans flashcards
-  $("#prepare-open").hidden = !data.chapters.some((ch) => (!focus || fileOf(ch) === focus) && (!ch.questions || !ch.cards));
+  // « Tout préparer » : seulement pour un cours qui vient d'être importé (encore ni quiz ni flashcards)
+  const mine = data.chapters.filter((ch) => !focus || fileOf(ch) === focus);
+  $("#prepare-open").hidden = !course.files.length || !mine.length || mine.some((ch) => ch.questions || ch.cards);
   $("#chapter-list").innerHTML = data.chapters.map((ch, i) => {
     // Plusieurs fichiers : seulement les chapitres du cours affiché
     if (focus && fileOf(ch) !== focus) return "";
@@ -1448,6 +1478,41 @@ document.addEventListener("click", async (e) => {
     state.replacing = replace;
     $("#replace-input").value = "";
     return $("#replace-input").click();
+  }
+});
+// Déplacer un fichier vers un autre cours (ou un nouveau), avec ou sans ses quiz et ses flashcards
+document.addEventListener("click", async (e) => {
+  const id = e.target.closest("[data-move-file]")?.dataset.moveFile;
+  if (!id) return;
+  const file = state.course.files.find((f) => f.id === id);
+  const [courses, items] = await Promise.all([api("/api/courses"),
+    api(`/api/courses/${state.course.id}/files/${id}/items`).catch(() => ({ quizzes: 0, cards: 0 }))]);
+  state.moving = id;
+  $("#move-file-title").textContent = `Déplacer « ${baseName(file.name)} »`;
+  $("#move-file-target").innerHTML = courses.filter((c) => c.id !== state.course.id)
+    .map((c) => `<option value="${c.id}">${escapeHtml(c.name)}</option>`).join("")
+    + `<option value="">Un nouveau cours « ${escapeHtml(baseName(file.name))} »</option>`;
+  const what = [items.quizzes === 1 ? "son quiz" : items.quizzes ? `ses ${items.quizzes} quiz` : "",
+    items.cards === 1 ? "sa flashcard" : items.cards ? `ses ${items.cards} flashcards` : ""].filter(Boolean);
+  $("#move-file-items").checked = true;
+  $("#move-file-items").closest(".option-row").hidden = !what.length;
+  $("#move-file-items-text").textContent = `Avec ${what.join(" et ")}`;
+  $("#move-file-status").hidden = true;
+  $("#move-file-dialog").showModal();
+});
+$("#move-file-cancel").addEventListener("click", () => $("#move-file-dialog").close());
+$("#move-file-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  try {
+    const done = await api(`/api/courses/${state.course.id}/files/${state.moving}/move`, jsonBody("POST", {
+      target_id: $("#move-file-target").value || null, with_items: $("#move-file-items").checked }));
+    $("#move-file-dialog").close();
+    state.deck = null;
+    await refreshCourse();
+    const moved = [done.quizzes ? plural(done.quizzes, "quiz", "quiz") : "", done.cards ? plural(done.cards, "flashcard", "flashcards") : ""].filter(Boolean);
+    setStatus("#course-status", `Fichier déplacé dans « ${done.course_name} »${moved.length ? `, avec ${moved.join(" et ")}` : ""}.`, true);
+  } catch (err) {
+    setStatus("#move-file-status", err.message, false);
   }
 });
 $("#replace-input").addEventListener("change", async () => {
@@ -1645,6 +1710,7 @@ function renderFiles(course) {
       </div>
       <div class="file-actions">
         <button class="ghost small" type="button" data-replace-file="${f.id}" title="Dépose la version à jour : les chapitres sont redécoupés, tes quiz et cartes gardés">Nouvelle version</button>
+        <button class="ghost small" type="button" data-move-file="${f.id}" title="Vers un autre cours, avec ses quiz et flashcards si tu veux">Déplacer</button>
         ${chapters.length ? `<button class="ghost small" type="button" data-clear-chapters="${f.id}" title="Le fichier redevient un seul bloc ; quiz et cartes déjà créés sont gardés">Effacer les chapitres</button>` : ""}
         <button class="icon" data-remove-file="${f.id}" aria-label="Retirer ${escapeHtml(f.name)}" title="Retirer du cours">✕</button>
       </div>
@@ -1686,7 +1752,11 @@ $("#course-export").addEventListener("click", () => {
   $("#course-more-menu").hidden = true;
   exportItem("course", state.course.id, "#course-status");
 });
-$("#pack-import-btn").addEventListener("click", () => { $("#pack-input").value = ""; $("#pack-input").click(); });
+$("#pack-import-btn").addEventListener("click", () => {
+  $("#new-course-dialog").close();
+  $("#pack-input").value = "";
+  $("#pack-input").click();
+});
 $("#pack-input").addEventListener("change", async () => {
   const file = $("#pack-input").files[0];
   if (!file) return;
@@ -4317,6 +4387,11 @@ const WELCOME = [
 ];
 // Les nouveautés de chaque version (le carton « Quoi de neuf » ne s'affiche que si la version en a)
 const WHATS_NEW = {
+  "0.55.0": [
+    ["＋", "Nouveau cours plus simple", "Range ton fichier dans un cours qui existe déjà, ou crée-en un ; le dernier semestre choisi est proposé d'office"],
+    ["⇄", "Déplacer un fichier", "Dans « Modifier » : vers un autre cours, avec ses quiz et flashcards si tu veux"],
+    ["✦", "« Tout préparer » à sa place", "En haut du cours, seulement tant qu'il n'a ni quiz ni flashcards"],
+  ],
   "0.54.1": [
     ["🔌", "App Claude sous Windows", "Le branchement marche aussi avec l'app Claude récente pour Windows (elle lisait un autre fichier)"],
     ["✎", "Brancher à la main", "Réglages → App Claude : le texte à coller et le fichier où le coller, si jamais"],
@@ -5970,7 +6045,6 @@ document.querySelector(".prepare-engine").addEventListener("click", (e) => {
 ["#prepare-quizzes", "#prepare-cards", "#prepare-nq", "#prepare-nc"].forEach((id) =>
   $(id).addEventListener("change", () => { if (state.prepareEngine === "app") $("#prepare-request").textContent = prepareRequest(); }));
 function renderPrepare(course) {
-  $("#prepare-open").hidden = !course.files.length;
   if (state.offerPrepare !== course.id || !chapterUnits(course).length) return;
   state.offerPrepare = null;
   openPrepare(course);
@@ -6019,8 +6093,6 @@ $("#tree-toggle").addEventListener("click", () => {
   renderTreeToggle();
 });
 $("#prepare-open").addEventListener("click", (e) => {
-  e.preventDefault();  // un bouton dans le titre du dépliant ne le replie pas
-  e.stopPropagation();
   openPrepare();
 });
 $("#prepare-later").addEventListener("click", () => $("#prepare-panel").close());

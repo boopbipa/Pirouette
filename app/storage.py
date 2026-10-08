@@ -504,6 +504,34 @@ class Store:
         self._save_course(course)
         return course
 
+    def move_file(self, course_id: str, file_id: str, target_id: str) -> dict:
+        """Déplace un fichier (et ses chapitres) vers un autre cours. Les quiz et cartes se déplacent à part."""
+        if course_id == target_id:
+            raise ValueError("Le fichier est déjà dans ce cours.")
+        course, target = self.get_course(course_id), self.get_course(target_id)
+        entry = next((f for f in course["files"] if f["id"] == _check_id(file_id, 8)), None)
+        if entry is None:
+            raise NotFound(file_id)
+        if any(f["name"].lower() == entry["name"].lower() for f in target["files"]):
+            raise ValueError(f"« {target['name']} » contient déjà un fichier « {entry['name']} ».")
+        src_dir, dst_dir = self._course_dir(course_id) / "files", self._course_dir(target_id) / "files"
+        dst_dir.mkdir(exist_ok=True)
+        if any(dst_dir.glob(f"{file_id}.*")):  # (identifiant déjà pris là-bas : très improbable)
+            new_id = _new_id(8)
+            for path in src_dir.glob(f"{file_id}.*"):
+                shutil.move(str(path), dst_dir / (new_id + path.name[len(file_id):]))
+            entry = entry | {"id": new_id}
+        else:
+            for path in src_dir.glob(f"{file_id}.*"):
+                shutil.move(str(path), dst_dir / path.name)
+        course["files"] = [f for f in course["files"] if f["id"] != file_id]
+        target["files"].append(entry)
+        for c in (course, target):
+            c["version"] += 1
+            c["updated_at"] = _now()
+            self._save_course(c)
+        return target
+
     def original_file(self, course_id: str, file_id: str) -> tuple[str, bytes] | None:
         """Le fichier tel que déposé (nom, contenu), pour le relire avec une version plus récente de l'extraction."""
         course = self.get_course(course_id)

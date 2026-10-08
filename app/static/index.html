@@ -65,10 +65,8 @@
       <div class="page-head">
         <h1>Mes cours <span class="muted count" id="course-count"></span></h1>
         <div class="head-actions">
-          <button class="ghost small" type="button" id="pack-import-btn" title="Réimporter des quiz et flashcards exportés (paquet .zip)">Importer</button>
           <input type="file" id="pack-input" accept=".zip,application/zip" hidden>
-          <button class="ghost small" type="button" id="new-folder">+ Semestre</button>
-          <button class="primary small" type="button" id="new-course-btn">+ Nouveau cours</button>
+          <button class="primary new-course-big" type="button" id="new-course-btn">+ Nouveau cours</button>
         </div>
       </div>
       <p class="status" id="courses-status" hidden></p>
@@ -78,6 +76,7 @@
       </div>
       <p class="empty-state muted" id="courses-empty" hidden>Pas encore de cours : clique sur « + Nouveau cours » et dépose ton premier fichier.</p>
       <div id="folder-list"></div>
+      <button class="add-folder-row" type="button" id="new-folder">+ Nouveau semestre</button>
       <div id="archived" hidden>
         <div class="section-title"><h2>Archivés</h2><span class="muted small-text">Les semestres passés, rangés à part</span></div>
         <div id="archived-list"></div>
@@ -750,6 +749,8 @@
           </div>
         </div>
         <div class="more">
+          <button class="primary small" type="button" id="prepare-open" hidden
+                  title="Claude crée un quiz et des flashcards pour chaque chapitre de ce cours">Tout préparer</button>
           <label class="ghost small button-like add-course-file" for="file-input" id="add-course-file"
                  title="Un autre cours de cette matière (CM2, TD…) : ses chapitres, quiz et flashcards s'ajoutent à ceux-ci, rien n'est remplacé">+ Ajouter un cours</label>
           <button class="ghost small manage-btn" type="button" id="course-more" aria-haspopup="menu">
@@ -837,8 +838,7 @@
           <span class="tree-chev" aria-hidden="true"></span><span id="tree-toggle-text">Replier</span></button>
         <div class="tree-branches" id="tree-branches">
           <details class="card tree-fold" id="panel-chapitres">
-            <summary><span class="fold-title">Chapitres</span><small class="muted" id="fold-chapitres-count"></small>
-              <button class="primary small fold-action" type="button" id="prepare-open">Tout préparer</button></summary>
+            <summary><span class="fold-title">Chapitres</span><small class="muted" id="fold-chapitres-count"></small></summary>
             <div class="fold-body">
               <ul class="course-chapter-list" id="chapter-list"></ul>
               <p class="status" id="course-chapters-status" hidden></p>
@@ -1258,6 +1258,23 @@
     </form>
   </dialog>
 
+  <!-- Déplacer un fichier vers un autre cours, avec ou sans ses quiz et flashcards -->
+  <dialog id="move-file-dialog" class="report-dialog">
+    <form id="move-file-form">
+      <h2 id="move-file-title">Déplacer le fichier</h2>
+      <div class="field">
+        <label for="move-file-target">Vers le cours</label>
+        <select id="move-file-target"></select>
+      </div>
+      <label class="option-row"><input type="checkbox" id="move-file-items" checked> <span id="move-file-items-text">Avec ses quiz et ses flashcards</span></label>
+      <p class="status" id="move-file-status" hidden></p>
+      <div class="actions">
+        <button class="primary" type="submit">Déplacer</button>
+        <button class="ghost" type="button" id="move-file-cancel">Annuler</button>
+      </div>
+    </form>
+  </dialog>
+
   <!-- Nouveau cours -->
   <dialog id="new-course-dialog" class="report-dialog">
     <form id="new-course-form">
@@ -1267,7 +1284,11 @@
         <strong id="new-course-drop-title">Glisse ton cours ici</strong>
         <span class="muted small-text" id="new-course-drop-sub">ou clique pour choisir · PDF, Word, PowerPoint, Pages, Keynote, texte</span>
       </label>
-      <div class="field">
+      <div class="field" id="new-course-target-field">
+        <label for="new-course-target">Ranger dans</label>
+        <select id="new-course-target"></select>
+      </div>
+      <div class="field" id="new-course-name-field">
         <label for="new-course-name">Nom du cours</label>
         <input type="text" id="new-course-name" maxlength="120" placeholder="ex. Neurosciences, chap. 4" autocomplete="off">
       </div>
@@ -1280,6 +1301,8 @@
         <button class="primary" type="submit" id="new-course-create">Créer le cours</button>
         <button class="ghost" type="button" id="new-course-cancel">Annuler</button>
       </div>
+      <p class="small-text muted pack-link">Des quiz et flashcards exportés de Pirouette (.zip) ?
+        <button class="link-button" type="button" id="pack-import-btn">Les importer</button></p>
     </form>
   </dialog>
 
