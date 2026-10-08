@@ -131,7 +131,7 @@ def test_thinking_is_off_by_default_and_only_sent_to_thinking_models(client, mon
 def test_claude_api_is_set_aside_for_the_claude_app(client, monkeypatch):
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
     config = client.get("/api/config").json()
-    assert config["claude"]["enabled"] is False and config["default_provider"] == "local"  # on passe par l'app Claude
+    assert config["claude"]["enabled"] is False and config["default_provider"] == "app"  # on passe par l'app Claude
     assert config["claude"]["available"] is False
     assert client.get("/api/settings").json()["claude_enabled"] is False
     cid = client.post("/api/courses", json={"name": "Bio"}).json()["id"]
@@ -174,20 +174,12 @@ def test_context_is_automatic_for_18_gb_and_can_be_chosen(client, monkeypatch):
     assert client.get("/api/ollama/status").json()["context"] == context
 
 
-def test_local_ai_is_optional(client, monkeypatch):
+def test_local_ai_is_no_longer_offered(client, monkeypatch):
     async def models():
         return ["qwen2.5:7b"]
     monkeypatch.setattr(main.ollama_provider, "list_models", models)
-    config = client.get("/api/config").json()
-    assert config["local"]["enabled"] and config["local"]["available"]  # pas de choix : Ollama est là, elle compte
-    client.put("/api/settings", json={"local_ai": False})
-    config = client.get("/api/config").json()
-    assert not config["local"]["enabled"] and not config["local"]["available"]
-    client.put("/api/settings", json={"local_ai": True})
-    assert client.get("/api/config").json()["local"]["available"]
-
-    async def nothing():
-        return None
-    monkeypatch.setattr(main.ollama_provider, "list_models", nothing)
-    main.store.save_settings(local_ai=None)
-    assert not client.get("/api/config").json()["local"]["enabled"]  # nouvelle installation sans Ollama : discrète
+    for choice in (None, True, False):  # même avec Ollama installé, ou l'ancien réglage coché : tout passe par Claude
+        main.store.save_settings(local_ai=choice)
+        config = client.get("/api/config").json()
+        assert not config["local"]["enabled"] and not config["local"]["available"]
+        assert config["default_provider"] == "app"

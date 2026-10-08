@@ -434,7 +434,7 @@
         <h2>Réponses écrites à corriger</h2>
         <p class="muted" id="exam-grading-text"></p>
         <div class="actions" id="exam-grading-choice">
-          <button class="primary" type="button" id="exam-grade-ai">Corriger avec l'IA</button>
+          <button class="primary" type="button" id="exam-grade-ai" hidden>Corriger avec l'IA</button>
           <button class="ghost" type="button" id="exam-grade-self">Je corrige moi-même</button>
         </div>
         <p class="status" id="exam-grading-status" hidden></p>
@@ -596,7 +596,7 @@
             <li><b>Colle la demande préparée par Pirouette</b> : elle évite à Claude de chercher tes cours.</li>
             <li><b>Enchaîne dans la même conversation</b> (quiz puis flashcards du même chapitre) : le cours n'est lu qu'une fois.</li>
             <li><b>Nouvelle conversation pour un autre cours</b> : une conversation qui s'allonge coûte plus cher à chaque message.</li>
-            <li>Forfait épuisé ? L'<b>IA locale</b> prend le relais, gratuitement. Ton compteur : app Claude › Réglages › Utilisation.</li>
+            <li>Forfait épuisé ? Il se recharge au bout de quelques heures. Ton compteur : app Claude › Réglages › Utilisation.</li>
           </ul>
         </details>
         <p class="muted small-text"><b>Pas besoin que Pirouette soit ouverte :</b> l'app Claude la lance toute seule, en
@@ -611,7 +611,8 @@
         <p class="status" id="claude-app-status" hidden></p>
       </div>
 
-      <div class="card" id="local-ai">
+      <!-- L'IA locale (Ollama) n'est plus proposée : tout passe par l'app Claude -->
+      <div class="card" id="local-ai" hidden>
         <h2>IA locale <small class="muted">(en option)</small></h2>
         <p class="muted small-text">Gratuite et hors ligne : l'IA tourne directement sur ton ordinateur, grâce à l'app Ollama.
           Pas indispensable : l'app Claude suffit pour créer quiz et flashcards.</p>
@@ -787,8 +788,7 @@
           </summary>
           <div class="fold-body">
             <div class="fold-tools">
-              <p class="muted small-text tree-hint">Tout part de ce fichier : Pirouette le découpe en chapitres, puis en tire tes quiz et tes flashcards.
-                Ton cours a avancé ? « Nouvelle version » : seuls les passages nouveaux ont besoin de nouvelles questions.</p>
+              <p class="muted small-text tree-hint">Ton cours a avancé ? « Nouvelle version » : seuls les passages nouveaux auront de nouvelles questions.</p>
             </div>
             <p id="upload-status" class="status" hidden></p>
             <ul id="file-list" class="file-list source-list"></ul>
@@ -806,8 +806,7 @@
           <p><strong id="split-offer-title">Ce cours est d'un seul bloc.</strong>
             <span class="muted">Le découper en chapitres permet de créer quiz et flashcards chapitre par chapitre.</span></p>
           <div class="split-actions">
-            <button class="primary small" type="button" id="split-ai">Découper avec l'IA</button>
-            <button class="ghost small" type="button" id="split-app" title="Claude découpe le cours, puis crée quiz et flashcards chapitre par chapitre">Avec l'app Claude (+ quiz et cartes)</button>
+            <button class="primary small" type="button" id="split-app" title="Claude découpe le cours, puis crée quiz et flashcards chapitre par chapitre">Avec l'app Claude (+ quiz et cartes)</button>
             <button class="ghost small" type="button" id="split-auto" title="Sans IA : les titres évidents (« Chapitre 2 », « II. »…)">Découpage rapide</button>
             <button class="link-button" type="button" id="split-keep">Garder en un seul bloc</button>
           </div>
@@ -984,7 +983,7 @@
               <small id="app-status" class="muted">Avec ton abonnement Claude</small>
             </span>
           </label>
-          <label class="engine">
+          <label class="engine" hidden>
             <input type="radio" name="provider" value="local">
             <span>
               <strong>Local (Ollama)</strong>
@@ -1017,12 +1016,12 @@
             <li><b>Colle la demande préparée par Pirouette</b> : elle évite à Claude de chercher tes cours.</li>
             <li><b>Enchaîne dans la même conversation</b> (quiz puis flashcards du même chapitre) : le cours n'est lu qu'une fois.</li>
             <li><b>Nouvelle conversation pour un autre cours</b> : une conversation qui s'allonge coûte plus cher à chaque message.</li>
-            <li>Forfait épuisé ? L'<b>IA locale</b> prend le relais, gratuitement. Ton compteur : app Claude › Réglages › Utilisation.</li>
+            <li>Forfait épuisé ? Il se recharge au bout de quelques heures. Ton compteur : app Claude › Réglages › Utilisation.</li>
           </ul>
           </details>
         </div>
         <div class="grid">
-          <div class="field" id="local-model-field">
+          <div class="field" id="local-model-field" hidden>
             <label for="local-model">Modèle local</label>
             <select id="local-model"></select>
           </div>
@@ -1302,7 +1301,7 @@
   <dialog class="report-dialog prepare-dialog prepare" id="prepare-panel" aria-label="Tout préparer">
     <h2>Tout préparer pour ce cours ?</h2>
     <p class="muted" id="prepare-text"></p>
-    <div class="filters prepare-engine" role="radiogroup" aria-label="Avec quelle IA">
+    <div class="filters prepare-engine" role="radiogroup" aria-label="Avec quelle IA" hidden>
       <button type="button" role="radio" data-prepare-engine="local">IA locale (sur ton Mac)</button>
       <button type="button" role="radio" data-prepare-engine="app">L'app Claude</button>
     </div>

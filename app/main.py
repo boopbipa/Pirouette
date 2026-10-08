@@ -377,21 +377,12 @@ async def ollama_pull(body: PullIn) -> StreamingResponse:
 
 @app.get("/api/config")
 async def config() -> dict:
-    # L'IA locale est en option : désactivée dans les Réglages, Pirouette ne la cherche même pas. Sans choix
-    # (nouvelle installation), elle compte si Ollama est déjà là, sinon elle reste discrète (rien à installer).
-    choice = store.get_settings().get("local_ai")
-    ollama_models = await ollama_provider.list_models() if choice is not False else None
-    enabled = bool(choice) or (choice is None and bool(ollama_models))
+    # L'IA locale (Ollama) n'est plus proposée : tout passe par l'app Claude. Pirouette ne la cherche même plus.
     return {
-        "default_provider": os.getenv("QUIZZ_DEFAULT_PROVIDER", "local") if CLAUDE_ENABLED else "local",
+        "default_provider": "app",
         "claude_app": _claude_app_view().get("installed", False),
-        "local": {
-            "enabled": enabled,
-            "running": ollama_models is not None,
-            "available": enabled and bool(ollama_models),
-            "models": ollama_models or [],
-            "default_model": ollama_provider.choose_model(None, ollama_models or []),
-        },
+        "local": {"enabled": False, "running": False, "available": False, "models": [],
+                  "default_model": ollama_provider.choose_model(None, [])},
         "claude": {
             "enabled": CLAUDE_ENABLED,
             "available": CLAUDE_ENABLED and claude_provider.is_configured(),

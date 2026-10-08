@@ -656,9 +656,6 @@ $("#quiz-size").addEventListener("change", async (e) => {
 function renderLocalChoice() {
   api("/api/config").then((config) => {
     state.config = config;
-    $("#local-ai-on").checked = config.local.enabled;
-    $("#local-ai-body").hidden = !config.local.enabled;
-    if (config.local.enabled) refreshLocalAi();
   }).catch(() => {});
 }
 $("#local-ai-on").addEventListener("change", async (e) => {
@@ -1410,6 +1407,8 @@ async function renderTiles(course) {
   const focus = focusFile(course);
   const shown = data.chapters.filter((ch) => !focus || fileOf(ch) === focus).length;
   $("#fold-chapitres-count").textContent = shown ? `· ${shown}` : "";
+  // « Tout préparer » seulement s'il reste un chapitre sans quiz ou sans flashcards
+  $("#prepare-open").hidden = !data.chapters.some((ch) => (!focus || fileOf(ch) === focus) && (!ch.questions || !ch.cards));
   $("#chapter-list").innerHTML = data.chapters.map((ch, i) => {
     // Plusieurs fichiers : seulement les chapitres du cours affiché
     if (focus && fileOf(ch) !== focus) return "";
@@ -1419,7 +1418,7 @@ async function renderTiles(course) {
     return `${header}<li class="chapter-item">
       <span class="chapter-name"><strong>${escapeHtml(ch.single ? "Tout le cours" : ch.title)}</strong><small class="muted">${contents}</small></span>
       <span class="chapter-actions">
-        <button class="primary small" type="button" data-chapter-create="${i}">Créer</button>
+        ${ch.questions || ch.cards ? "" : `<button class="primary small" type="button" data-chapter-create="${i}">Créer</button>`}
         <button class="icon more-btn" type="button" data-chapter-more="${i}" aria-label="Plus d'actions">•••</button>
       </span></li>`;
   }).join("") || `<li class="empty muted">Ajoute un fichier pour voir ses chapitres.</li>`;
@@ -1459,7 +1458,7 @@ $("#chapter-list").addEventListener("click", (e) => {
   const items = button.dataset.chapterCreate !== undefined
     ? [["quiz", "Un quiz"], ["cartes", "Des flashcards"]]
     : [["see-quiz", "Voir les questions", !ch.questions], ["see-cards", "Voir les cartes", !ch.cards],
-       ["export", "Exporter le quiz", !ch.quizzes.length]];
+       ["export", "Exporter le quiz", !ch.quizzes.length], ["quiz", "Créer un quiz"], ["cartes", "Créer des flashcards"]];
   openChapterMenu(button, items.map(([action, label, off]) => `<button type="button" role="menuitem" data-chapter-action="${action}"
     data-i="${i}" ${off ? "disabled" : ""}><strong>${label}</strong></button>`).join(""));
 });
@@ -1535,17 +1534,8 @@ function renderSplitOffer(course = state.course) {
   const show = Boolean(f && f.chapters_by === "none" && !chaptersRunning(f.id));
   $("#split-offer").hidden = !show;
   if (show) $("#split-offer-title").textContent = `« ${baseName(f.name)} » est d'un seul bloc.`;
-  // IA locale désactivée : le découpage passe par l'app Claude (bouton principal)
-  const noLocal = state.config?.local?.enabled === false;
-  $("#split-ai").hidden = noLocal;
-  $("#split-app").classList.toggle("primary", noLocal);
-  $("#split-app").classList.toggle("ghost", !noLocal);
 }
 const splitTarget = () => focusFile() || state.course.files[0];
-$("#split-ai").addEventListener("click", async () => {
-  await detectChapters([splitTarget().id]);
-  renderSplitOffer();
-});
 // L'app Claude découpe elle-même le cours, puis crée quiz et flashcards : la fenêtre « Tout préparer », côté app Claude
 $("#split-app").addEventListener("click", () => {
   openPrepare();
@@ -1559,7 +1549,7 @@ $("#split-auto").addEventListener("click", async () => {
   status.hidden = false;
   status.className = found ? "status ok" : "status ko";
   status.textContent = found ? `${plural(found, "chapitre repéré", "chapitres repérés")}.`
-    : "Aucun titre de chapitre évident : essaie « Découper avec l'IA », ou garde le cours en un seul bloc.";
+    : "Aucun titre de chapitre évident : essaie « Avec l'app Claude », ou garde le cours en un seul bloc.";
 });
 $("#split-keep").addEventListener("click", async () => {
   await api(`/api/courses/${state.course.id}/files/${splitTarget().id}/chapters?keep=true`, { method: "DELETE" });
@@ -1632,15 +1622,12 @@ function renderFiles(course) {
     <li class="file-item source-file">
       ${ICON_FILE}
       <div class="file-main">
-        <strong>${escapeHtml(f.name)}</strong>
         <small class="muted">${found} · ${f.revisions > 1 ? `version ${f.revisions}, ` : ""}mis à jour ${formatDate(f.updated_at)} · ${formatSize(f.size)}</small>
         ${f.definitions ? `<small class="muted"><button class="link-button inline" data-show-defs="${f.id}">${
           plural(f.definitions, "définition repérée", "définitions repérées")}</button></small>` : ""}
       </div>
       <div class="file-actions">
         <button class="ghost small" type="button" data-replace-file="${f.id}" title="Dépose la version à jour : les chapitres sont redécoupés, tes quiz et cartes gardés">Nouvelle version</button>
-        <button class="ghost small" type="button" data-detect-file="${f.id}" ${chaptersRunning(f.id) ? "disabled" : ""} title="${
-          f.chapters_by === "ai" ? "Relancer l'IA pour repérer les chapitres" : "Repérer les chapitres avec l'IA"}">${chapters.length ? "Redécouper" : "Découper"}</button>
         ${chapters.length ? `<button class="ghost small" type="button" data-clear-chapters="${f.id}" title="Le fichier redevient un seul bloc ; quiz et cartes déjà créés sont gardés">Effacer les chapitres</button>` : ""}
         <button class="icon" data-remove-file="${f.id}" aria-label="Retirer ${escapeHtml(f.name)}" title="Retirer du cours">✕</button>
       </div>
@@ -2195,7 +2182,8 @@ async function loadConfig({ keepSelection = false } = {}) {
   const claudeOn = config.claude.enabled;
   // Deux choix : l'app Claude (par défaut) et l'IA locale ; Claude par clé API seulement s'il est activé.
   document.querySelector("input[name=provider][value=claude]").closest(".engine").hidden = !claudeOn;
-  $("#engine-title").textContent = "Moteur IA";
+  $("#engines").hidden = !claudeOn;  // un seul choix (l'app Claude) : rien à choisir
+  $("#engine-title").textContent = claudeOn ? "Moteur IA" : "Avec l'app Claude";
   $("#engine-note").hidden = true;
   $("#engine-note").innerHTML = config.local.available
     ? `Sur ton Mac, hors ligne et gratuite · ${config.local.models.length} modèle(s)`
@@ -2222,7 +2210,7 @@ async function loadConfig({ keepSelection = false } = {}) {
   // Dernier moteur choisi (ou celui par défaut).
   let saved = null;
   try { saved = localStorage.getItem("pirouette.engine"); } catch {}
-  const provider = ["local", "claude", "app"].includes(saved) && (saved !== "claude" || claudeOn) ? saved : "app";
+  const provider = ["claude", "app"].includes(saved) && (saved !== "claude" || claudeOn) ? saved : "app";
   document.querySelector(`input[name=provider][value=${provider}]`).checked = true;
   api("/api/claude-app").then((info) => {
     $("#app-status").innerHTML = info.installed ? "Avec ton abonnement Claude · branchée"
@@ -2236,7 +2224,6 @@ document.querySelectorAll("input[name=provider]").forEach((r) => r.addEventListe
 function updateProviderUi() {
   const provider = selectedProvider();
   try { localStorage.setItem("pirouette.engine", provider); } catch {}
-  $("#local-model-field").hidden = provider !== "local";
   // L'app Claude : Pirouette ne peut pas la piloter ; on prépare la demande à y coller.
   const viaApp = provider === "app";
   $("#app-request").hidden = !viaApp;
@@ -3810,7 +3797,7 @@ function retroItem(s) {
       state.reviewScope.single ? "" : ` <small class="muted">· ${escapeHtml(u.course)}</small>`}</span>
       <span class="retro-actions">${u.quiz_id
         ? `<button class="${u.quiz_done ? "ghost" : "primary"} small" data-open-quiz="${u.quiz_id}">${u.quiz_done ? "Refaire le quiz" : "Quiz"}</button>`
-        : `<button class="ghost small" data-retro-make="${u.course_id}" data-key="${u.key}" data-title="${escapeHtml(u.title)}">Créer le quiz</button>`}
+        : ""}
         <button class="ghost small" data-retro-cards="${u.course_id}" data-title="${escapeHtml(u.title)}">Cartes</button></span></div>`).join("");
   } else if (s.kind === "blanc") {
     body = `<div class="retro-unit"><span>${escapeHtml(s.course)}</span><span class="retro-actions">
@@ -4299,7 +4286,7 @@ const WELCOME = [
           <span class="w-check">✓ Chaque question vérifiée dans ton cours</span></div>`,
     title: "Des quiz faits par Claude",
     text: "Branche l'app Claude (Réglages), puis sur un chapitre : <b>Créer</b> → <b>Copier la demande</b> → colle-la dans Claude. Il lit le chapitre et range le quiz dans Pirouette.",
-    tips: ["Un chapitre à la fois, une conversation par cours", "Quiz puis flashcards dans la même conversation", "Forfait épuisé ? L'IA locale prend le relais"] },
+    tips: ["Un chapitre à la fois, une conversation par cours", "Quiz puis flashcards dans la même conversation"] },
   { art: `<div class="w-cards"><div class="w-mini silver"><div>◇ NOUVELLE<em>L'ADN ?</em><span>001</span></div></div>
           <div class="w-mini gold"><div>◆◆ EN COURS<em>La mitochondrie ?</em><span>002</span></div></div>
           <div class="w-mini holo"><div>★ ACQUISE<em>Le neurone ?</em><span>003</span></div></div></div>`,
@@ -4313,6 +4300,10 @@ const WELCOME = [
 ];
 // Les nouveautés de chaque version (le carton « Quoi de neuf » ne s'affiche que si la version en a)
 const WHATS_NEW = {
+  "0.54.0": [
+    ["✦", "Tout passe par l'app Claude", "L'IA locale n'est plus proposée : moins de boutons, une seule façon de créer quiz et cartes"],
+    ["≡", "Page du cours allégée", "« Créer » seulement sur les chapitres vides (sinon dans « … »), « Tout préparer » seulement s'il reste à faire"],
+  ],
   "0.53.0": [
     ["📚", "Défi sur tout un cours", "Dans Défis : un quiz ou tout un cours, de 5 à 20 questions"],
     ["⏱", "Défis chronométrés", "2, 5, 10 ou 15 minutes pour tout le défi ; à zéro, les questions sans réponse comptent fausses"],
@@ -5317,10 +5308,10 @@ async function submitExam(timeUp) {
   $("#exam-run").hidden = true;
   if (!written) return showExamResult();
   $("#exam-grading-text").textContent = `${timeUp ? "Temps écoulé. " : ""}${plural(written, "réponse écrite", "réponses écrites")} à corriger (flashcards et réponses courtes). `
-    + "L'IA juge l'idée, pas la formulation ; tu pourras contester chaque verdict. Ou corrige toi-même en comparant avec la réponse attendue.";
-  $("#exam-grading-choice").hidden = false;
-  $("#exam-grading-status").hidden = $("#exam-manual").hidden = $("#exam-manual-done").hidden = true;
+    + "Compare chacune avec la réponse attendue.";
+  $("#exam-grading-status").hidden = true;
   $("#exam-grading").hidden = false;
+  showManualGrading();
   pageScroll().scrollTo(0, 0);
 }
 
@@ -5483,10 +5474,9 @@ document.addEventListener("keydown", (e) => {
 // ---------- Explique-moi : l'IA réexplique à partir du passage du cours ----------
 const explainPayloads = new Map();
 let explainCounter = 0;
-function explainButton(payload) {
-  const id = String(++explainCounter);
-  explainPayloads.set(id, payload);
-  return `<button class="link-button explain-btn" type="button" data-explain="${id}">Explique-moi</button>`;
+// (désactivé : passait par l'IA locale, qui n'est plus proposée)
+function explainButton() {
+  return "";
 }
 
 document.addEventListener("click", async (e) => {
@@ -5897,23 +5887,12 @@ function openPrepare(course = state.course) {
     : `Pirouette peut tout créer maintenant pour ce cours${which} :`;
   showError("#prepare-error", "");
   $("#prepare-status").hidden = true;
-  setPrepareLocal(state.config);
+  setPrepareLocal();
   if (!$("#prepare-panel").open) $("#prepare-panel").showModal();
-  // L'IA locale a pu être installée ou fermée entre-temps : on revérifie à chaque ouverture
-  api("/api/config").then((config) => { state.config = config; setPrepareLocal(config); }).catch(() => {});
 }
-// IA locale absente ou sans modèle : son bouton est grisé, on passe par l'app Claude et on dit quoi faire
-function setPrepareLocal(config) {
-  const ready = config?.local?.available !== false;
-  const local = document.querySelector("[data-prepare-engine=local]");
-  local.hidden = config?.local?.enabled === false;  // IA locale désactivée dans les Réglages : seulement l'app Claude
-  local.disabled = !ready;
-  local.title = ready ? "" : "IA locale pas encore prête sur ce Mac";
-  $("#prepare-local-off").hidden = ready || local.hidden;
-  if (!ready) $("#prepare-local-off").innerHTML = `IA locale indisponible. ${localProblem(config)}
-    <button class="link-button" type="button" data-local-tuto>Suivre le tuto pas à pas</button>`;
-  if (!state.prepareEngine || !ready) state.prepareEngine = ready ? "local" : "app";
-  setPrepareEngine(state.prepareEngine);
+// L'IA locale n'est plus proposée : « Tout préparer » passe par l'app Claude (une demande à copier)
+function setPrepareLocal() {
+  setPrepareEngine("app");
 }
 // Avec quelle IA : l'IA locale crée tout en arrière-plan ; l'app Claude reçoit une demande à copier-coller
 function setPrepareEngine(engine) {
