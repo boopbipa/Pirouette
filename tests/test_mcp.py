@@ -170,3 +170,22 @@ def test_claude_splits_an_unsplit_file(tmp_path):
     again, error = _call(store, "pirouette_decouper", cours=cid, fichier=fid,
                          chapitres=[{"titre": "A", "debut": "Chapitre 1 : Le neurone"}, {"titre": "B", "debut": "Chapitre 2 : La myéline"}])
     assert error and "déjà découpé" in again
+
+
+def test_claude_for_windows_reads_its_msix_copy(tmp_path, monkeypatch):
+    # L'app Claude « MSIX » lit sa copie dans Packages\Claude_…\LocalCache : Pirouette écrit là aussi
+    monkeypatch.setattr(claude_desktop.sys, "platform", "win32")
+    monkeypatch.setenv("APPDATA", str(tmp_path / "Roaming"))
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path / "Local"))
+    (tmp_path / "Local" / "Packages" / "Claude_pzs8sxrjxfjjc" / "LocalCache").mkdir(parents=True)
+    (tmp_path / "Local" / "Packages" / "Microsoft.Autre_123" / "LocalCache").mkdir(parents=True)
+    paths = claude_desktop.config_paths()
+    assert [p.parts[-5] if "Packages" in p.parts else "classique" for p in paths] == ["Claude_pzs8sxrjxfjjc", "classique"]
+    # Branchée par une ancienne version (seulement le fichier classique) : relancer Pirouette complète la copie MSIX
+    claude_desktop.install(paths[1])
+    assert claude_desktop.needs_refresh()
+    claude_desktop.install()
+    assert not claude_desktop.needs_refresh()
+    assert all(json.loads(p.read_text())["mcpServers"]["pirouette"]["args"][-1] == "--mcp" for p in paths)
+    assert '"pirouette"' in claude_desktop.snippet() and "\\\\" not in claude_desktop.snippet()
+    assert not claude_desktop.uninstall()["installed"]

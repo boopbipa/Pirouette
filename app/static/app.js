@@ -559,7 +559,24 @@ function renderClaudeApp(info) {
       ? "<b>Branchée.</b> Il n'y a plus qu'à demander à Claude, dans n'importe quelle conversation."
       : info.claude_found ? "Pas encore branchée."
         : `L'app Claude n'est pas encore installée sur ce Mac : <a href="https://claude.ai/download" target="_blank" rel="noopener">claude.ai/download</a>.`;
+  // Branchement à la main : le texte à coller, et les fichiers où le coller (sous Windows, la copie « MSIX » d'abord)
+  $("#claude-manual").hidden = !info.supported || !info.snippet;
+  if (!info.snippet) return;
+  $("#claude-manual-snippet").textContent = info.snippet;
+  const configs = info.configs || [];
+  $("#claude-manual-files").innerHTML = configs.map((path, i) => `<span class="manual-file">
+      <code>${escapeHtml(path)}</code>
+      <button class="ghost small" type="button" data-claude-reveal="${i}">Ouvrir le dossier</button></span>`).join("")
+    + (configs.length > 1 ? `<small class="muted">Plusieurs fichiers : colle le texte dans chacun.</small>` : "");
 }
+$("#claude-manual-copy").addEventListener("click", async () => {
+  await copyText($("#claude-manual-snippet").textContent);
+  setStatus("#claude-app-status", "Texte copié : colle-le dans le fichier de l'app Claude.", true);
+});
+document.addEventListener("click", (e) => {
+  const reveal = e.target.closest("[data-claude-reveal]");
+  if (reveal) api(`/api/claude-app/reveal?index=${reveal.dataset.claudeReveal}`, { method: "POST" }).catch((err) => setStatus("#claude-app-status", err.message, false));
+});
 async function loadClaudeApp() {
   renderClaudeApp(await api("/api/claude-app").catch(() => ({ supported: false })));
 }
@@ -4300,6 +4317,10 @@ const WELCOME = [
 ];
 // Les nouveautés de chaque version (le carton « Quoi de neuf » ne s'affiche que si la version en a)
 const WHATS_NEW = {
+  "0.54.1": [
+    ["🔌", "App Claude sous Windows", "Le branchement marche aussi avec l'app Claude récente pour Windows (elle lisait un autre fichier)"],
+    ["✎", "Brancher à la main", "Réglages → App Claude : le texte à coller et le fichier où le coller, si jamais"],
+  ],
   "0.54.0": [
     ["✦", "Tout passe par l'app Claude", "L'IA locale n'est plus proposée : moins de boutons, une seule façon de créer quiz et cartes"],
     ["≡", "Page du cours allégée", "« Créer » seulement sur les chapitres vides (sinon dans « … »), « Tout préparer » seulement s'il reste à faire"],

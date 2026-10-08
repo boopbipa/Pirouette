@@ -246,7 +246,8 @@ async def save_settings(body: SettingsIn) -> dict:
 
 def _claude_app_view() -> dict:
     supported = sys.platform in ("darwin", "win32") and os.getenv("PIROUETTE_DESKTOP") == "1"
-    return claude_desktop.status() | {"supported": supported}
+    return claude_desktop.status() | {"supported": supported, "snippet": claude_desktop.snippet(),
+                                      "configs": [str(p) for p in claude_desktop.config_paths()]}
 
 
 def reveal(path: Path, select: bool = False) -> None:
@@ -274,6 +275,20 @@ async def claude_app_install() -> dict:
     except (OSError, ValueError) as exc:
         raise HTTPException(400, str(exc)) from exc
     return _claude_app_view()
+
+
+@app.post("/api/claude-app/reveal")
+async def claude_app_reveal(index: int = 0) -> dict:
+    """Branchement à la main : ouvre le dossier d'un fichier de configuration de l'app Claude (créé s'il manque)."""
+    paths = claude_desktop.config_paths()
+    if not 0 <= index < len(paths):
+        raise HTTPException(404, "Fichier inconnu")
+    try:
+        paths[index].parent.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    reveal(paths[index] if paths[index].exists() else paths[index].parent, select=paths[index].exists())
+    return {"ok": True}
 
 
 @app.delete("/api/claude-app")

@@ -155,13 +155,12 @@ def remind() -> None:
 
 
 def refresh_claude_link() -> None:
-    """Branchée à l'app Claude, Pirouette a pu être déplacée (autre dossier) : on remet le bon chemin."""
+    """Branchée à l'app Claude, Pirouette a pu être déplacée (autre dossier) : on remet le bon chemin partout."""
     from app import claude_desktop
 
     try:
-        entry = claude_desktop._read(claude_desktop.config_path()).get("mcpServers", {}).get(claude_desktop.NAME)
-        program = claude_desktop.command()
-        if entry and [entry.get("command"), *entry.get("args", [])] != program:
+        # (et sous Windows, la copie de l'app Claude « MSIX » qui manquait aux versions d'avant la 0.54.1)
+        if claude_desktop.needs_refresh():
             claude_desktop.install()
     except (OSError, ValueError):
         pass

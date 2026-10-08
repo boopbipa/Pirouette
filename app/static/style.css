@@ -1707,3 +1707,10 @@ html, body { height: 100%; overflow: hidden; }
 .quiz-head-pills { display: inline-flex; gap: 8px; align-items: center; }
 .quiz-timer { font-variant-numeric: tabular-nums; }
 .quiz-timer.urgent { background: var(--ko-soft); color: var(--ko); }
+
+/* Réglages → app Claude : branchement à la main (texte à coller, fichiers où le coller) */
+html.windows [data-mac-only], html:not(.windows) [data-win-only] { display: none; }
+.manual-steps { padding-left: 1.2em; display: grid; gap: 10px; margin: 10px 0; }
+.manual-snippet { white-space: pre; overflow-x: auto; font-size: 12px; margin: 6px 0; }
+.manual-file { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 6px; }
+.manual-file code { word-break: break-all; font-size: 12px; }

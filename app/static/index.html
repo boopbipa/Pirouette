@@ -609,6 +609,27 @@
           <button class="ghost small danger" type="button" id="claude-app-remove" hidden>Débrancher</button>
         </div>
         <p class="status" id="claude-app-status" hidden></p>
+        <!-- Branchement à la main, si « pirouette » n'apparaît pas dans l'app Claude (Réglages → Développeur) -->
+        <details class="claude-tips-box manual-link" id="claude-manual" hidden>
+          <summary>Ça ne marche pas ? Brancher à la main</summary>
+          <ol class="small-text manual-steps">
+            <li><b>Quitte complètement l'app Claude</b> : <span data-win-only>clic droit sur son icône près de l'horloge →
+              Quitter</span><span data-mac-only>⌘Q</span>.</li>
+            <li><b>Copie ce texte :</b>
+              <pre class="app-request-text manual-snippet" id="claude-manual-snippet"></pre>
+              <button class="primary small" type="button" id="claude-manual-copy">Copier le texte</button></li>
+            <li><b>Ouvre le fichier de l'app Claude</b> <code>claude_desktop_config.json</code> avec le
+              <span data-win-only>Bloc-notes</span><span data-mac-only>TextEdit</span> (crée-le s'il n'existe pas) et
+              colle le texte à la place de son contenu. S'il contenait déjà des <code>"mcpServers"</code>, ajoute
+              seulement le bloc <code>"pirouette"</code> à l'intérieur.
+              <span id="claude-manual-files"></span></li>
+            <li><b>Rouvre l'app Claude</b>, puis Réglages → Développeur : « pirouette » doit apparaître avec l'état
+              <i>running</i>.</li>
+          </ol>
+          <p class="small-text muted" data-win-only>Sous Windows, l'app Claude récente ne lit pas le fichier ouvert par son
+            bouton « Modifier la configuration » mais une copie cachée (dans <code>AppData\Local\Packages\Claude_…</code>) :
+            c'est ce fichier-là qui compte. Pirouette l'a écrit pour toi en cliquant sur « Brancher l'app Claude ».</p>
+        </details>
       </div>
 
       <!-- L'IA locale (Ollama) n'est plus proposée : tout passe par l'app Claude -->

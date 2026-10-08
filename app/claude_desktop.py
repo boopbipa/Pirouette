@@ -3,6 +3,10 @@
 L'app Claude lit la liste de ses outils locaux dans ~/Library/Application Support/Claude/claude_desktop_config.json
 (clé « mcpServers »). Pirouette y ajoute (ou en retire) sa ligne, sans toucher aux autres outils. Il faut ensuite
 quitter et rouvrir l'app Claude pour qu'elle en tienne compte.
+
+Sous Windows, l'app Claude installée en « MSIX » (l'installateur actuel) ne lit pas %APPDATA%\\Claude : Windows lui
+donne une copie à part, dans %LOCALAPPDATA%\\Packages\\Claude_…\\LocalCache\\Roaming\\Claude. Pirouette écrit donc
+partout où l'app Claude peut lire (le Mac n'a qu'un seul fichier, inchangé).
 """
 
 from __future__ import annotations
@@ -15,10 +19,27 @@ from pathlib import Path
 NAME = "pirouette"
 
 
+FILE = "claude_desktop_config.json"
+
+
+def config_paths() -> list[Path]:
+    """Les fichiers de configuration que l'app Claude peut lire. Le premier est celui qu'on montre."""
+    if sys.platform != "win32":
+        return [Path.home() / "Library" / "Application Support" / "Claude" / FILE]
+    # Windows : les copies des installations MSIX (Packages\Claude_xxxx, Packages\Anthropic.ClaudeDesktop_xxxx)
+    # d'abord (ce sont celles que l'app lit), puis l'emplacement classique %APPDATA%\Claude
+    packages = Path(os.getenv("LOCALAPPDATA", Path.home() / "AppData" / "Local")) / "Packages"
+    msix = []
+    try:
+        msix = sorted(d / "LocalCache" / "Roaming" / "Claude" / FILE for d in packages.iterdir()
+                      if d.is_dir() and "claude" in d.name.lower() and (d / "LocalCache").is_dir())
+    except OSError:
+        pass
+    return [*msix, Path(os.getenv("APPDATA", Path.home())) / "Claude" / FILE]
+
+
 def config_path() -> Path:
-    if sys.platform == "win32":  # app Claude pour Windows : %APPDATA%\Claude
-        return Path(os.getenv("APPDATA", Path.home())) / "Claude" / "claude_desktop_config.json"
-    return Path.home() / "Library" / "Application Support" / "Claude" / "claude_desktop_config.json"
+    return config_paths()[0]
 
 
 def command() -> list[str]:
@@ -38,29 +59,61 @@ def _read(path: Path) -> dict:
     return data if isinstance(data, dict) else {}
 
 
-def status(path: Path | None = None) -> dict:
-    path = path or config_path()
+def _entry(path: Path) -> dict | None:
     try:
-        entry = _read(path).get("mcpServers", {}).get(NAME)
+        return _read(path).get("mcpServers", {}).get(NAME)
     except ValueError:
-        entry = None
-    return {"installed": bool(entry), "claude_found": path.parent.exists(), "config": str(path)}
+        return None
 
 
-def install(path: Path | None = None) -> dict:
-    path = path or config_path()
+def status(path: Path | None = None) -> dict:
+    paths = [path] if path else config_paths()
+    return {"installed": any(_entry(p) for p in paths), "claude_found": any(p.parent.exists() for p in paths),
+            "config": str(paths[0])}
+
+
+def _install_one(path: Path) -> None:
     data = _read(path)
     program = command()
     data.setdefault("mcpServers", {})[NAME] = {"command": program[0], "args": program[1:]}
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+
+def install(path: Path | None = None) -> dict:
+    paths = [path] if path else config_paths()
+    errors = []
+    for p in paths:
+        try:
+            _install_one(p)
+        except ValueError as exc:  # fichier illisible : on n'y touche pas
+            errors.append(exc)
+    if len(errors) == len(paths):
+        raise errors[0]
     return status(path)
 
 
+def snippet() -> str:
+    """Le texte à coller soi-même dans le fichier de configuration de l'app Claude (branchement à la main)."""
+    program = command()
+    return json.dumps({"mcpServers": {NAME: {"command": program[0].replace("\\", "/"), "args": program[1:]}}},
+                      ensure_ascii=False, indent=2)
+
+
+def needs_refresh() -> bool:
+    """Déjà branchée quelque part, mais un fichier n'a pas (ou plus) le bon chemin vers Pirouette : à remettre."""
+    entries = [_entry(p) for p in config_paths()]
+    program = command()
+    return any(entries) and any(not e or [e.get("command"), *e.get("args", [])] != program for e in entries)
+
+
 def uninstall(path: Path | None = None) -> dict:
-    path = path or config_path()
-    data = _read(path)
-    if NAME in data.get("mcpServers", {}):
-        del data["mcpServers"][NAME]
-        path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    for p in [path] if path else config_paths():
+        try:
+            data = _read(p)
+        except ValueError:
+            continue
+        if NAME in data.get("mcpServers", {}):
+            del data["mcpServers"][NAME]
+            p.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     return status(path)
