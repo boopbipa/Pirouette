@@ -140,6 +140,14 @@ jobs:
           $app = Start-Process -FilePath "$env:LOCALAPPDATA\Programs\Pirouette\Pirouette.exe" -PassThru
           Start-Sleep -Seconds 30
           if ($app.HasExited) { throw "Pirouette s'est fermée au démarrage (code $($app.ExitCode))" }
+          # Une erreur au démarrage laisse aussi le programme ouvert, mais sur une boîte d'erreur : on vérifie que la
+          # fenêtre affichée est bien celle de Pirouette.
+          $app.Refresh()
+          if ($app.MainWindowTitle -ne 'Pirouette') {
+            $log = "$env:APPDATA\Pirouette\pirouette.log"
+            if (Test-Path $log) { Get-Content $log }
+            throw "La fenêtre affichée n'est pas celle de Pirouette : « $($app.MainWindowTitle) »"
+          }
           Write-Host "✓ La fenêtre Pirouette est ouverte"
           Stop-Process -Id $app.Id -Force
 

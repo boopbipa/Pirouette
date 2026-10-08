@@ -46,6 +46,19 @@ def std_stream(which: str):
     return os.fdopen(fd, "rb" if which == "stdin" else "wb", buffering=0 if which != "stdin" else -1)
 
 
+def quiet_streams(data: Path) -> None:
+    """L'app Windows n'a pas de console : sys.stdout et sys.stderr valent None, et uvicorn plantait en préparant ses
+    messages (« 'NoneType' object has no attribute 'isatty' »). On les envoie dans un journal, utile en cas de souci."""
+    if sys.stdout is not None and sys.stderr is not None:
+        return
+    try:
+        log = open(data / "pirouette.log", "w", encoding="utf-8", buffering=1)
+    except OSError:
+        log = open(os.devnull, "w", encoding="utf-8")
+    sys.stdout = sys.stdout or log
+    sys.stderr = sys.stderr or log
+
+
 def free_port() -> int:
     with socket.socket() as sock:
         sock.bind(("127.0.0.1", 0))
@@ -194,6 +207,8 @@ def main() -> None:
         return remind()
     if "--mcp" in sys.argv:
         return serve_claude()
+    if "--server-only" not in sys.argv:  # (le mode serveur seul écrit son adresse sur la vraie sortie standard)
+        quiet_streams(Path(os.environ["QUIZZ_DATA_DIR"]))
     port = free_port()
     server = start_server(port)
     url = f"http://127.0.0.1:{port}/"
