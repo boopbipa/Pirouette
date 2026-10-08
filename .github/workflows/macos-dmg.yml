@@ -162,8 +162,9 @@ jobs:
     needs: [dmg, windows]
     # Le Mac est publié même si la version Windows a échoué (elle rejoindra la version suivante)
     if: ${{ always() && needs.dmg.result == 'success' }}
-    # Sur Mac aussi : les machines Linux de GitHub ont parfois été introuvables (publication annulée)
-    runs-on: macos-latest
+    # Même machine que la version Apple Silicon : les étiquettes « ubuntu-latest » puis « macos-latest » sont restées
+    # des heures sans machine disponible (publication annulée), alors que macos-14 en trouve tout de suite
+    runs-on: macos-14
     permissions:
       contents: write
     steps:
