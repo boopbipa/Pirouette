@@ -152,8 +152,6 @@ jobs:
           Stop-Process -Id $app.Id -Force
 
       - name: Test de la mise à jour (installateur téléchargé, Pirouette quittée → installée puis rouverte)
-        # (nouveau test : en cas d'échec, l'installateur Windows est quand même publié ; le résultat se lit dans le run)
-        continue-on-error: true
         shell: pwsh
         run: |
           # Comme après « Télécharger la mise à jour » : l'installateur attend dans Pirouette-maj

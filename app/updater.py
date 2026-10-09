@@ -193,7 +193,9 @@ def start_windows_install(setup: Path) -> None:
     command = ["powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-WindowStyle", "Hidden", "-File", str(script)]
     base = getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0) | getattr(subprocess, "CREATE_NO_WINDOW", 0)
     breakaway = getattr(subprocess, "CREATE_BREAKAWAY_FROM_JOB", 0)
-    for flags in (base | breakaway, base):  # sortir du « job » de Pirouette si Windows le permet
+    # Sortir du « job » de Pirouette si Windows le permet (souvent refusé : sans, ça marche aussi). Pas de
+    # DETACHED_PROCESS : avec, le script ne démarrait jamais depuis l'app (la mise à jour était reproposée en boucle).
+    for flags in (base | breakaway, base):
         try:
             process = subprocess.Popen(command, creationflags=flags, close_fds=True, stdin=subprocess.DEVNULL,
                                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
