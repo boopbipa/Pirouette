@@ -76,9 +76,11 @@ jobs:
             exit 1
           fi
 
+      # Fichiers gardés 1 jour seulement : juste le temps de la publication (le stockage GitHub gratuit est limité)
       - uses: actions/upload-artifact@v4
         with:
           name: Pirouette-${{ matrix.label }}
+          retention-days: 1
           path: dist/*.dmg
           if-no-files-found: error
 
@@ -86,6 +88,7 @@ jobs:
         if: always()
         with:
           name: capture-${{ matrix.label }}
+          retention-days: 1
           path: fenetre.png
           if-no-files-found: ignore
 
@@ -191,6 +194,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: Pirouette-Windows
+          retention-days: 1
           path: dist/*-Windows-Setup.exe
           if-no-files-found: error
 
