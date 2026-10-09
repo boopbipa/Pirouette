@@ -19,6 +19,7 @@ import platform
 import re
 import shutil
 import subprocess
+import time
 import sys
 import tempfile
 from pathlib import Path
@@ -176,20 +177,31 @@ Stop-Transcript | Out-Null
 """
 
 
+def _note(setup: Path, line: str) -> None:
+    """Journal côté Pirouette (update.log, à côté de l'installateur) : pour comprendre une mise à jour qui coince."""
+    try:
+        with setup.with_name("update.log").open("a", encoding="utf-8") as out:
+            out.write(f"{time.strftime('%Y-%m-%d %H:%M:%S')} {line}\n")
+    except OSError:
+        pass
+
+
 def start_windows_install(setup: Path) -> None:
     """Lance à part (il survit à la fermeture de Pirouette) le script qui installera la nouvelle version."""
     script = setup.with_name("installer.ps1")
     script.write_text(windows_script(setup, os.getpid(), Path(sys.executable)), encoding="utf-8-sig")
-    flags = getattr(subprocess, "DETACHED_PROCESS", 0) | getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0) \
-        | getattr(subprocess, "CREATE_NO_WINDOW", 0) | getattr(subprocess, "CREATE_BREAKAWAY_FROM_JOB", 0)
-    try:
-        subprocess.Popen(["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-WindowStyle", "Hidden",
-                          "-File", str(script)], creationflags=flags, close_fds=True,
-                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    except OSError:  # (lancée dans un « job » qui interdit d'en sortir : sans cette option)
-        subprocess.Popen(["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-WindowStyle", "Hidden",
-                          "-File", str(script)], creationflags=flags & ~getattr(subprocess, "CREATE_BREAKAWAY_FROM_JOB", 0),
-                         close_fds=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    command = ["powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-WindowStyle", "Hidden", "-File", str(script)]
+    base = getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0) | getattr(subprocess, "CREATE_NO_WINDOW", 0)
+    breakaway = getattr(subprocess, "CREATE_BREAKAWAY_FROM_JOB", 0)
+    for flags in (base | breakaway, base):  # sortir du « job » de Pirouette si Windows le permet
+        try:
+            process = subprocess.Popen(command, creationflags=flags, close_fds=True, stdin=subprocess.DEVNULL,
+                                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            _note(setup, f"script lancé (pid {process.pid}, attend Pirouette {os.getpid()})")
+            return
+        except OSError as exc:
+            _note(setup, f"lancement du script impossible ({flags:#x}) : {exc!r}")
+    raise RuntimeError("Le programme d'installation n'a pas pu être lancé.")
 
 
 def resume_pending() -> None:

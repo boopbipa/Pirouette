@@ -172,6 +172,12 @@ jobs:
           # Le journal du script, lisible dans le résumé du run (annotations)
           $journal = (Get-Content "$maj\installer.log" -ErrorAction SilentlyContinue | Where-Object { $_ -match '\S' -and $_ -notmatch '^\*+$|^(Windows PowerShell|Heure|Start time|Username|RunAs|Configuration|Machine|Host Application|Process ID|PSVersion|PSEdition|PSCompatible|BuildVersion|CLRVersion|WSManStack|PSRemoting|Serialization|End time|Fin de)' }) -join ' | '
           Write-Host "::notice title=Mise à jour Windows (journal)::$journal"
+          $fichiers = (Get-ChildItem $maj -Name) -join ', '
+          $maj_log = (Get-Content "$maj\update.log" -ErrorAction SilentlyContinue) -join ' | '
+          $app_log = (Get-Content "$env:APPDATA\Pirouette\pirouette.log" -Tail 20 -ErrorAction SilentlyContinue) -join ' | '
+          Write-Host "::notice title=Mise à jour Windows (fichiers)::$fichiers"
+          Write-Host "::notice title=Mise à jour Windows (update.log)::$maj_log"
+          Write-Host "::notice title=Mise à jour Windows (pirouette.log)::$app_log"
           if (Test-Path "$maj\Pirouette-Setup.exe") {
             $setup = (Get-Content "$maj\setup.log" -Tail 15 -ErrorAction SilentlyContinue) -join ' | '
             Write-Host "::error title=Mise à jour Windows::l'installateur attend toujours. setup.log : $setup"

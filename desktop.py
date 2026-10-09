@@ -226,7 +226,10 @@ def main() -> None:
     from app import backup, updater
     from app.main import store
 
-    updater.resume_pending()  # une mise à jour téléchargée attend encore : elle s'installera à la fermeture
+    try:
+        updater.resume_pending()  # une mise à jour téléchargée attend encore : elle s'installera à la fermeture
+    except Exception as exc:  # une mise à jour qui coince ne doit pas empêcher Pirouette de s'ouvrir
+        print(f"Mise à jour en attente : {exc!r}", file=sys.stderr)
     refresh_claude_link()
     try:
         store.merge_chapter_quizzes()  # des quiz sur les mêmes chapitres : un seul, sans questions en double
