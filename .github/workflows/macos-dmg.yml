@@ -169,14 +169,18 @@ jobs:
           if (-not $app.HasExited) { Stop-Process -Id $app.Id -Force }
           $deadline = (Get-Date).AddSeconds(150)
           while ((Test-Path "$maj\Pirouette-Setup.exe") -and (Get-Date) -lt $deadline) { Start-Sleep -Seconds 3 }
-          Write-Host "--- installer.log ---"; Get-Content "$maj\installer.log" -ErrorAction SilentlyContinue
+          # Le journal du script, lisible dans le résumé du run (annotations)
+          $journal = (Get-Content "$maj\installer.log" -ErrorAction SilentlyContinue | Where-Object { $_ -match '\S' -and $_ -notmatch '^\*+$|^(Windows PowerShell|Heure|Start time|Username|RunAs|Configuration|Machine|Host Application|Process ID|PSVersion|PSEdition|PSCompatible|BuildVersion|CLRVersion|WSManStack|PSRemoting|Serialization|End time|Fin de)' }) -join ' | '
+          Write-Host "::notice title=Mise à jour Windows (journal)::$journal"
           if (Test-Path "$maj\Pirouette-Setup.exe") {
-            Get-Content "$maj\setup.log" -Tail 40 -ErrorAction SilentlyContinue
+            $setup = (Get-Content "$maj\setup.log" -Tail 15 -ErrorAction SilentlyContinue) -join ' | '
+            Write-Host "::error title=Mise à jour Windows::l'installateur attend toujours. setup.log : $setup"
             throw "La mise à jour ne s'est pas installée (l'installateur attend toujours)"
           }
           Start-Sleep -Seconds 10
           $again = Get-Process -Name Pirouette -ErrorAction SilentlyContinue
-          if (-not $again) { throw "Mise à jour installée, mais Pirouette ne s'est pas rouverte" }
+          if (-not $again) { Write-Host "::error title=Mise à jour Windows::installée, mais Pirouette ne s'est pas rouverte"; throw "Pirouette ne s'est pas rouverte" }
+          Write-Host "::notice title=Mise à jour Windows::installée puis Pirouette rouverte"
           Write-Host "✓ Mise à jour installée et Pirouette rouverte"
           $again | Stop-Process -Force
 
