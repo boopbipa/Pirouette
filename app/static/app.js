@@ -4387,6 +4387,9 @@ const WELCOME = [
 ];
 // Les nouveautés de chaque version (le carton « Quoi de neuf » ne s'affiche que si la version en a)
 const WHATS_NEW = {
+  "0.55.1": [
+    ["⟳", "Mises à jour sous Windows", "Quitter Pirouette installe vraiment la nouvelle version, puis la rouvre ; si ça coince, l'installateur s'ouvre"],
+  ],
   "0.55.0": [
     ["＋", "Nouveau cours plus simple", "Range ton fichier dans un cours qui existe déjà, ou crée-en un ; le dernier semestre choisi est proposé d'office"],
     ["⇄", "Déplacer un fichier", "Dans « Modifier » : vers un autre cours, avec ses quiz et flashcards si tu veux"],

@@ -146,30 +146,50 @@ def start_swap(bundle: Path, new_app: Path) -> None:
                      stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 
-def windows_script(setup: Path, pid: int) -> str:
+def windows_script(setup: Path, pid: int, app: Path) -> str:
     """PowerShell : attend que la fenêtre de Pirouette soit fermée (cette Pirouette, puis toute autre ouverte entre-temps),
-    arrête les Pirouette sans fenêtre (outils de l'app Claude, rappel), installe sans rien demander, puis s'efface."""
+    arrête les Pirouette sans fenêtre (outils de l'app Claude, rappel), installe sans rien demander, puis rouvre Pirouette.
+    Si l'installation silencieuse échoue, l'installateur s'ouvre normalement (au lieu d'être effacé en silence, ce qui
+    faisait reproposer la même mise à jour en boucle). Tout est noté dans installer.log, à côté de l'installateur."""
     q = lambda p: "'" + str(p).replace("'", "''") + "'"  # noqa: E731
-    return f"""$ErrorActionPreference = 'SilentlyContinue'
-Wait-Process -Id {pid}
-function Fenetres {{ Get-CimInstance Win32_Process -Filter "Name='Pirouette.exe'" | Where-Object {{ $_.CommandLine -notmatch '--mcp|--remind|--server-only' }} }}
-while (Fenetres) {{ Start-Sleep -Seconds 1 }}
-if (-not (Test-Path {q(setup)})) {{ exit }}
-Get-CimInstance Win32_Process -Filter "Name='Pirouette.exe'" | ForEach-Object {{ Stop-Process -Id $_.ProcessId -Force }}
-Start-Process -FilePath {q(setup)} -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART' -Wait
-Remove-Item {q(setup)} -Force
+    log, inno = setup.with_name("installer.log"), setup.with_name("setup.log")
+    return f"""$ErrorActionPreference = 'Continue'
+Start-Transcript -Path {q(log)} -Force | Out-Null
+Write-Output "Attente de la fermeture de Pirouette ({pid})"
+Wait-Process -Id {pid} -ErrorAction SilentlyContinue
+function Fenetres {{ @(Get-CimInstance Win32_Process -Filter "Name='Pirouette.exe'" | Where-Object {{ "$($_.CommandLine)" -notmatch '--mcp|--remind|--server-only' }}) }}
+while ((Fenetres).Count -gt 0) {{ Start-Sleep -Seconds 1 }}
+if (-not (Test-Path {q(setup)})) {{ Write-Output "Plus d'installateur : rien à faire"; Stop-Transcript | Out-Null; exit }}
+Write-Output "Pirouette fermée : arrêt des Pirouette sans fenêtre"
+Get-CimInstance Win32_Process -Filter "Name='Pirouette.exe'" | ForEach-Object {{ Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }}
+Start-Sleep -Seconds 2
+$p = Start-Process -FilePath {q(setup)} -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART','/NOCANCEL','/NORESTARTAPPLICATIONS',('/LOG="' + {q(inno)} + '"') -Wait -PassThru
+Write-Output "Installateur terminé (code $($p.ExitCode))"
+if ($p.ExitCode -eq 0) {{
+  Remove-Item {q(setup)} -Force -ErrorAction SilentlyContinue
+  Start-Process -FilePath {q(app)}
+}} else {{
+  Write-Output "Échec de l'installation silencieuse : ouverture de l'installateur"
+  Start-Process -FilePath {q(setup)}
+}}
+Stop-Transcript | Out-Null
 """
 
 
 def start_windows_install(setup: Path) -> None:
     """Lance à part (il survit à la fermeture de Pirouette) le script qui installera la nouvelle version."""
     script = setup.with_name("installer.ps1")
-    script.write_text(windows_script(setup, os.getpid()), encoding="utf-8")
+    script.write_text(windows_script(setup, os.getpid(), Path(sys.executable)), encoding="utf-8-sig")
     flags = getattr(subprocess, "DETACHED_PROCESS", 0) | getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0) \
-        | getattr(subprocess, "CREATE_NO_WINDOW", 0)
-    subprocess.Popen(["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-WindowStyle", "Hidden",
-                      "-File", str(script)], creationflags=flags, close_fds=True,
-                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        | getattr(subprocess, "CREATE_NO_WINDOW", 0) | getattr(subprocess, "CREATE_BREAKAWAY_FROM_JOB", 0)
+    try:
+        subprocess.Popen(["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-WindowStyle", "Hidden",
+                          "-File", str(script)], creationflags=flags, close_fds=True,
+                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    except OSError:  # (lancée dans un « job » qui interdit d'en sortir : sans cette option)
+        subprocess.Popen(["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-WindowStyle", "Hidden",
+                          "-File", str(script)], creationflags=flags & ~getattr(subprocess, "CREATE_BREAKAWAY_FROM_JOB", 0),
+                         close_fds=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 
 def resume_pending() -> None:
