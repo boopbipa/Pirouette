@@ -160,8 +160,13 @@
 
     <!-- Réviser : d'abord quoi réviser, puis la révision du jour, les points faibles et le suivi -->
     <section id="view-review" class="view" hidden>
-      <h1>Réviser</h1>
-      <p class="muted">Choisis ce que tu veux réviser.</p>
+      <div class="page-head">
+        <h1>Réviser</h1>
+        <div class="head-actions"><button class="primary" type="button" id="pick-open">Choisir des cours…</button></div>
+      </div>
+      <!-- Sélections enregistrées (plusieurs cours ou fichiers, de matières différentes) : un clic pour réviser -->
+      <div class="review-sets" id="review-sets" hidden></div>
+      <p class="muted">Ou choisis un cours, ou tout un semestre :</p>
       <div class="review-pick" id="review-pick"></div>
       <!-- La date des partiels, en bas de Réviser -->
       <p class="exam-countdown exam-bottom" id="review-home-exam" hidden></p>
@@ -1254,6 +1259,31 @@
         <button class="primary" type="submit">Enregistrer</button>
         <button class="ghost" type="button" id="exam-clear">Retirer la date</button>
         <button class="ghost" type="button" id="exam-cancel">Annuler</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Réviser → « Choisir des cours… » : des cours entiers ou certains fichiers, de matières différentes -->
+  <dialog id="pick-dialog" class="report-dialog pick-dialog">
+    <form id="pick-form" method="dialog">
+      <h2>Que veux-tu réviser ?</h2>
+      <p class="muted small-text">Coche des cours entiers ou seulement certains fichiers.</p>
+      <div class="pick-list" id="pick-list"></div>
+      <div class="pick-save">
+        <label class="option-row"><input type="checkbox" id="pick-save"> Enregistrer cette sélection</label>
+        <input type="text" id="pick-name" maxlength="60" placeholder="ex. Partiel Psycha" hidden>
+      </div>
+      <p class="status" id="pick-status" hidden></p>
+      <div class="pick-foot">
+        <div class="filters pick-modes" role="radiogroup" aria-label="Quoi réviser">
+          <button type="button" role="radio" data-pick-mode="today" class="active">À revoir</button>
+          <button type="button" role="radio" data-pick-mode="cards">Flashcards</button>
+          <button type="button" role="radio" data-pick-mode="quiz">Quiz</button>
+          <button type="button" role="radio" data-pick-mode="all">Tout</button>
+        </div>
+        <span class="pick-go"><small class="muted" id="pick-count"></small>
+          <button class="ghost" type="button" id="pick-cancel">Annuler</button>
+          <button class="primary" type="button" id="pick-go">Réviser →</button></span>
       </div>
     </form>
   </dialog>

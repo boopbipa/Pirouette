@@ -1412,7 +1412,15 @@ SESSION_QUESTIONS = 10
 
 @app.get("/api/session")
 async def session(mode: str = "today", course: str = "", folder: str = "", filter: str = "review",
-                  questions: bool = True, minutes: int = 15, chapter: str = "", file: str = "") -> dict:
+                  questions: bool = True, minutes: int = 15, chapter: str = "", file: str = "", pick: str = "") -> dict:
+    if pick:  # une sélection de cours et de fichiers, de matières différentes (Réviser → « Choisir »)
+        ids, keep = _pick(pick)
+        result = _session(mode, "", "", filter, questions, minutes, chapter, ids=ids, keep=keep)
+        if mode == "quiz":
+            size = int(store.get_settings().get("quiz_size", 10)) or SESSION_QUESTIONS
+            items = random.sample(result["items"], min(size, len(result["items"])))
+            return result | {"items": items, "cards": 0, "questions": len(items)}
+        return result
     result = _session(mode, course, folder, filter, questions, minutes, chapter)
     if mode == "quiz":
         # Quelques questions au hasard dans tous les quiz (du cours choisi, de la matière…), le tirage après le filtre
@@ -1435,19 +1443,126 @@ async def session(mode: str = "today", course: str = "", folder: str = "", filte
                      "questions": sum(i["kind"] == "question" for i in keep)}
 
 
-def _session(mode: str, course: str, folder: str, filter: str, questions: bool, minutes: int, chapter: str) -> dict:
+def _parse_pick(pick: str) -> dict[str, set[str] | None]:
+    """« cours1:*;cours2:fichierA,fichierB » → {cours1: None (tout le cours), cours2: {fichierA, fichierB}}."""
+    chosen: dict[str, set[str] | None] = {}
+    for part in filter(None, pick.split(";")):
+        course_id, _, files = part.partition(":")
+        course_id = course_id.strip()
+        if not course_id:
+            continue
+        wanted = {f.strip() for f in files.split(",") if f.strip()}
+        chosen[course_id] = None if not wanted or "*" in wanted else wanted
+    return chosen
+
+
+def _pick(pick: str):
+    """Les cours d'une sélection et un filtre : garder une carte ou une question si elle vient d'un fichier choisi."""
+    chosen = {cid: files for cid, files in _parse_pick(pick).items() if (store.courses_dir / cid / "course.json").exists()}
+    if not chosen:
+        raise HTTPException(400, "Choisis au moins un cours.")
+    courses = {cid: store.get_course(cid) for cid in chosen}
+    quizzes = {q["id"]: q for q in store.list_quizzes() if q.get("course_id") in chosen}
+
+    def keep(item: dict) -> bool:
+        cid = item.get("course_id")
+        if cid not in chosen:
+            return False
+        files = chosen[cid]
+        if files is None:
+            return True
+        source = item["card"] if item["kind"] == "card" else quizzes.get(item.get("quiz_id"), {})
+        return _file_of(courses[cid], source) in files
+    return list(chosen), keep
+
+
+@app.get("/api/review/catalog")
+async def review_catalog() -> dict:
+    """Pour la fenêtre « Que veux-tu réviser ? » : chaque cours (hors semestres archivés) et ses fichiers, avec
+    leurs cartes, leurs questions et ce qui est à revoir aujourd'hui."""
+    ids = store.active_course_ids()
+    folders = {f["id"]: f for f in store.list_folders()}
+    due = {e["card"]["id"] for e in store.today_cards(ids)}
+    quizzes = store.list_quizzes()
+    out = []
+    for course in store.list_courses():
+        if course["id"] not in ids:
+            continue
+        files = course.get("files") or []
+        counts = {f["id"]: {"cards": 0, "due": 0, "questions": 0} for f in files}
+        for card in (store.get_doc(course["id"], "cards") or {}).get("cards", []):
+            fid = _file_of(course, card)
+            if fid in counts:
+                counts[fid]["cards"] += 1
+                counts[fid]["due"] += card["id"] in due
+        for quiz in quizzes:
+            if quiz.get("course_id") == course["id"]:
+                fid = _file_of(course, quiz)
+                if fid in counts:
+                    counts[fid]["questions"] += quiz["count"]
+        folder = folders.get(course.get("folder_id"))
+        out.append({"id": course["id"], "name": course["name"], "folder_id": folder and folder["id"],
+                    "folder": folder and folder["name"],
+                    "files": [{"id": f["id"], "name": f.get("title") or re.sub(r"\s+", " ", re.sub(r"_+", " ", Path(f["name"]).stem)).strip(),
+                               **counts[f["id"]]} for f in files]})
+    order = {f["id"]: i for i, f in enumerate(store.list_folders())}
+    out.sort(key=lambda c: (order.get(c["folder_id"], len(order)), c["name"].lower()))
+    return {"courses": out}
+
+
+class ReviewSetIn(BaseModel):
+    name: str
+    pick: str
+
+
+@app.get("/api/review/sets")
+async def review_sets() -> list[dict]:
+    """Les sélections enregistrées, avec ce qui est à revoir aujourd'hui dans chacune."""
+    sets = store.get_settings().get("review_sets") or []
+    out = []
+    for item in sets:
+        try:
+            ids, keep = _pick(item["pick"])
+        except HTTPException:
+            continue  # tous ses cours ont été supprimés
+        due = sum(1 for e in store.today_cards(ids) if keep(_card_item(e)))
+        out.append(item | {"due": due})
+    return out
+
+
+@app.post("/api/review/sets")
+async def add_review_set(body: ReviewSetIn) -> list[dict]:
+    name = " ".join(body.name.split())[:60]
+    if not name:
+        raise HTTPException(400, "Donne un nom à ta sélection.")
+    _pick(body.pick)
+    sets = [s for s in store.get_settings().get("review_sets") or [] if s["name"].lower() != name.lower()]
+    sets.append({"id": uuid.uuid4().hex[:8], "name": name, "pick": body.pick})
+    store.save_settings(review_sets=sets)
+    return await review_sets()
+
+
+@app.delete("/api/review/sets/{set_id}")
+async def delete_review_set(set_id: str) -> list[dict]:
+    store.save_settings(review_sets=[s for s in store.get_settings().get("review_sets") or [] if s["id"] != set_id])
+    return await review_sets()
+
+
+def _session(mode: str, course: str, folder: str, filter: str, questions: bool, minutes: int, chapter: str,
+             ids: list[str] | None = None, keep=None) -> dict:
     """Une séance de révision : `today` (cartes du jour + questions de quiz à reposer), `weak` (points faibles),
     `plan` (séance du plan : les cartes les plus difficiles choisies en priorité, à la taille choisie), `chapter` (les cartes
     d'un chapitre, pour le rétroplanning) ou `cards` (les cartes d'un cours)."""
-    ids = _scope(course, folder)
+    ids = ids if ids is not None else _scope(course, folder)
+    keep = keep or (lambda item: True)  # une sélection de fichiers (Réviser → « Choisir ») : seulement leurs cartes et questions
     if mode == "plan":
         max_cards, max_questions = plans.session_size(minutes if minutes in plans.MINUTES else 15)
         hard = store.weak_cards(ids)[:max_cards // 3]
         seen = {e["card"]["id"] for e in hard}
-        cards = [_card_item(e) for e in hard + [e for e in store.today_cards(ids) if e["card"]["id"] not in seen]]
+        cards = [i for i in (_card_item(e) for e in hard + [e for e in store.today_cards(ids) if e["card"]["id"] not in seen]) if keep(i)]
         chosen = store.weak_questions(ids)[:max_questions]
         chosen += store.review_questions(ids)[:max_questions - len(chosen)]
-        asked = [_question_item(e) for e in chosen] if questions else []
+        asked = [i for i in (_question_item(e) for e in chosen) if keep(i)] if questions else []
         cards, asked = _daily_pick(cards, asked, max_cards + len(asked), n_questions=len(asked))
         return {"mode": mode, "items": _interleave(cards, asked), "cards": len(cards), "questions": len(asked)}
     if mode == "chapter":
@@ -1456,6 +1571,7 @@ def _session(mode: str, course: str, folder: str, filter: str, questions: bool, 
         single = bool(course) and len(_units(store.get_course(course), "")) == 1
         cards = [_card_item({"course": c, "card": card}) for c, deck in store._decks(ids) for card in deck
                  if single or _same_title(chapter, card.get("scope") or [])]
+        cards = [i for i in cards if keep(i)]
         random.shuffle(cards)
         asked = []
         if questions:
@@ -1464,24 +1580,25 @@ def _session(mode: str, course: str, folder: str, filter: str, questions: bool, 
                     quiz = store.get_quiz(summary["id"])
                     asked += [_question_item({"quiz": quiz, "index": i, "stat": (quiz.get("stats") or {}).get(str(i))})
                               for i in range(len(quiz["questions"]))]
+            asked = [i for i in asked if keep(i)]
             random.shuffle(asked)
         return {"mode": mode, "items": _interleave(cards, asked), "cards": len(cards), "questions": len(asked)}
     # Mode Flashcards de Réviser : un paquet (du jour, points faibles, tout) peut se limiter à un chapitre
     in_chapter = (lambda e: _same_title(chapter, e["card"].get("scope") or [])) if chapter else (lambda e: True)
     if mode == "today":
-        cards = [_card_item(e) for e in store.today_cards(ids) if in_chapter(e)]
-        chosen = store.weak_questions(ids)[:SESSION_QUESTIONS]
-        chosen += store.review_questions(ids)[:SESSION_QUESTIONS - len(chosen)]
-        asked = [_question_item(e) for e in chosen] if questions else []
+        cards = [i for i in (_card_item(e) for e in store.today_cards(ids) if in_chapter(e)) if keep(i)]
+        weak = [i for i in (_question_item(e) for e in store.weak_questions(ids)) if keep(i)][:SESSION_QUESTIONS]
+        later = [i for i in (_question_item(e) for e in store.review_questions(ids)) if keep(i)]
+        asked = (weak + later[:SESSION_QUESTIONS - len(weak)]) if questions else []
         cards, asked = _daily_pick(cards, asked, _daily_size())
     elif mode == "weak":
-        cards = [_card_item(e) for e in store.weak_cards(ids) if in_chapter(e)][:30]
-        asked = [_question_item(e) for e in store.weak_questions(ids)[:20]] if questions else []
+        cards = [i for i in (_card_item(e) for e in store.weak_cards(ids) if in_chapter(e)) if keep(i)][:30]
+        asked = [i for i in (_question_item(e) for e in store.weak_questions(ids)) if keep(i)][:20] if questions else []
         random.shuffle(cards)
         random.shuffle(asked)
     elif mode == "all":
         # Tout réviser : toutes les cartes et toutes les questions des quiz, mélangées
-        cards = [_card_item({"course": c, "card": card}) for c, deck in store._decks(ids) for card in deck]
+        cards = [i for i in (_card_item({"course": c, "card": card}) for c, deck in store._decks(ids) for card in deck) if keep(i)]
         random.shuffle(cards)
         asked = []
         if questions:
@@ -1490,6 +1607,7 @@ def _session(mode: str, course: str, folder: str, filter: str, questions: bool, 
                     quiz = store.get_quiz(summary["id"])
                     asked += [_question_item({"quiz": quiz, "index": i, "stat": (quiz.get("stats") or {}).get(str(i))})
                               for i in range(len(quiz["questions"]))]
+            asked = [i for i in asked if keep(i)]
             random.shuffle(asked)
     elif mode == "quiz":
         # Toutes les questions des quiz (un chapitre si `chapter`) ; le tirage se fait dans session()
@@ -1499,11 +1617,13 @@ def _session(mode: str, course: str, folder: str, filter: str, questions: bool, 
                 quiz = store.get_quiz(summary["id"])
                 asked += [_question_item({"quiz": quiz, "index": i, "stat": (quiz.get("stats") or {}).get(str(i))})
                           for i in range(len(quiz["questions"]))]
+        asked = [i for i in asked if keep(i)]
     elif mode == "cards":
         tests = {"review": lambda c: c["status"] != "known", "known": lambda c: c["status"] == "known"}
         test = tests.get(filter, lambda c: True)
         cards = [_card_item({"course": c, "card": card}) for c, deck in store._decks(ids) for card in deck
                  if test(card) and in_chapter({"card": card})]
+        cards = [i for i in cards if keep(i)]
         random.shuffle(cards)
         asked = []
     else:

@@ -1726,3 +1726,24 @@ html.windows [data-mac-only], html:not(.windows) [data-win-only] { display: none
 .source-name .rename-file { width: 28px; height: 28px; margin-left: 4px; opacity: .55; }
 .source-name .rename-file:hover { opacity: 1; }
 .source-name .rename-file svg { width: 14px; height: 14px; }
+
+/* Réviser : sélections enregistrées et fenêtre « Que veux-tu réviser ? » */
+.review-sets { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 12px; margin: 4px 0 22px; }
+.review-set { display: grid; gap: 8px; align-content: start; text-align: left; background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 14px 16px; box-shadow: var(--shadow); font: inherit; color: var(--text); }
+.review-set-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.review-set-head .icon { opacity: .5; } .review-set-head .icon:hover { opacity: 1; }
+.review-set-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+.review-set.new { border-style: dashed; box-shadow: none; background: transparent; cursor: pointer; place-content: center; text-align: center; min-height: 110px; }
+.review-set.new:hover { border-color: var(--accent); color: var(--accent); }
+.pick-dialog { width: min(600px, calc(100vw - 32px)); }
+.pick-list { max-height: min(52vh, 460px); overflow-y: auto; margin: 10px -4px; padding: 0 4px; }
+.pick-sem { font-size: 12px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); font-weight: 600; margin: 14px 0 8px; }
+.pick-course { border: 1px solid var(--border); border-radius: 12px; padding: 10px 12px; margin-bottom: 8px; background: var(--surface); }
+.pick-row { display: flex; align-items: center; gap: 10px; cursor: pointer; }
+.pick-row small { margin-left: auto; white-space: nowrap; }
+.pick-row input { accent-color: var(--accent); width: 17px; height: 17px; flex: none; }
+.pick-files { display: grid; gap: 7px; padding: 9px 0 2px 27px; font-size: 14px; }
+.pick-save { display: grid; gap: 8px; margin: 6px 0; }
+.pick-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; border-top: 1px solid var(--border); padding-top: 14px; margin-top: 8px; }
+.pick-go { display: flex; align-items: center; gap: 8px; margin-left: auto; }

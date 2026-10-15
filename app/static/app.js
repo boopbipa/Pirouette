@@ -3507,7 +3507,156 @@ async function openReview() {
         archived.map((f) => group(f, courses.filter((c) => c.folder_id === f.id))).join("")}</details>` : "");
   setCrumbs();
   show("review");
+  renderReviewSets();
 }
+
+// ---------- Réviser une sélection : des cours entiers ou certains fichiers, de matières différentes ----------
+// Une sélection s'écrit « cours:* » (tout le cours) ou « cours:fichierA,fichierB », séparés par « ; ».
+const PICK_MODES = { today: "À revoir aujourd'hui", cards: "Flashcards", quiz: "Quiz", all: "Tout réviser" };
+async function renderReviewSets() {
+  const sets = await api("/api/review/sets").catch(() => []);
+  const box = $("#review-sets");
+  box.hidden = !sets.length;
+  box.innerHTML = sets.map((set) => `
+    <div class="review-set">
+      <span class="review-set-head"><b>${escapeHtml(set.name)}</b>
+        <button class="icon" type="button" data-set-delete="${set.id}" title="Supprimer cette sélection" aria-label="Supprimer cette sélection">${ICON_TRASH}</button></span>
+      <small class="muted">${set.due ? `<b>${set.due}</b> à revoir aujourd'hui` : "À jour aujourd'hui"}</small>
+      <span class="review-set-actions">
+        <button class="primary small" type="button" data-set-start="${set.id}">Réviser →</button>
+        <button class="ghost small" type="button" data-set-edit="${set.id}">Modifier</button></span>
+    </div>`).join("") + `<button class="review-set new" type="button" id="pick-new"><b>+ Nouvelle sélection</b><small class="muted">Choisir des cours et des fichiers</small></button>`;
+  state.reviewSets = sets;
+}
+$("#review-sets").addEventListener("click", async (e) => {
+  const start = e.target.closest("[data-set-start]")?.dataset.setStart;
+  const edit = e.target.closest("[data-set-edit]")?.dataset.setEdit;
+  const del = e.target.closest("[data-set-delete]")?.dataset.setDelete;
+  const set = (state.reviewSets || []).find((x) => x.id === (start || edit || del));
+  if (start && set) return startSession({ mode: "today", pick: set.pick }, { title: set.name, back: "#/reviser" });
+  if (edit && set) return openPick(set);
+  if (del && set) {
+    if (!await askConfirm(`Supprimer la sélection « ${set.name} » ? Tes cours ne changent pas.`)) return;
+    await api(`/api/review/sets/${del}`, { method: "DELETE" });
+    return renderReviewSets();
+  }
+  if (e.target.closest("#pick-new")) openPick();
+});
+$("#pick-open").addEventListener("click", () => openPick());
+
+const pickState = { catalog: [], mode: "today" };
+async function openPick(set = null) {
+  const { courses } = await api("/api/review/catalog");
+  pickState.catalog = courses;
+  // Cases cochées : celles de la sélection modifiée, sinon rien
+  const chosen = {};
+  for (const part of (set?.pick || "").split(";").filter(Boolean)) {
+    const [cid, files = "*"] = part.split(":");
+    chosen[cid] = files === "*" ? "*" : new Set(files.split(","));
+  }
+  const groups = [];
+  for (const c of courses) {
+    const key = c.folder || "Sans semestre";
+    let g = groups.find((x) => x.key === key);
+    if (!g) groups.push(g = { key, list: [] });
+    g.list.push(c);
+  }
+  const counts = (x) => [x.cards ? plural(x.cards, "carte", "cartes") : "", x.questions ? `${x.questions} q.` : ""].filter(Boolean).join(" · ") || "vide";
+  const total = (c) => c.files.reduce((t, f) => ({ cards: t.cards + f.cards, questions: t.questions + f.questions }), { cards: 0, questions: 0 });
+  $("#pick-list").innerHTML = courses.length ? groups.map((g) => `
+    <p class="pick-sem">${escapeHtml(g.key)}</p>
+    ${g.list.map((c) => {
+      const all = chosen[c.id] === "*";
+      const some = (f) => all || (chosen[c.id] instanceof Set && chosen[c.id].has(f.id));
+      return `<div class="pick-course" data-pick-course="${c.id}">
+        <label class="pick-row"><input type="checkbox" data-pick-all="${c.id}" ${all ? "checked" : ""}><b>${escapeHtml(c.name)}</b>
+          <small class="muted">${c.files.length > 1 ? `${c.files.length} fichiers · ` : ""}${counts(total(c))}</small></label>
+        ${c.files.length > 1 ? `<div class="pick-files">${c.files.map((f) => `
+          <label class="pick-row"><input type="checkbox" data-pick-file="${f.id}" ${some(f) ? "checked" : ""}>${escapeHtml(f.name)}
+            <small class="muted">${counts(f)}</small></label>`).join("")}</div>` : ""}
+      </div>`;
+    }).join("")}`).join("") : `<p class="muted">Pas encore de cours.</p>`;
+  $("#pick-save").checked = Boolean(set);
+  $("#pick-name").hidden = !set;
+  $("#pick-name").value = set?.name || "";
+  $("#pick-status").hidden = true;
+  setPickMode(pickState.mode);
+  syncPick();
+  $("#pick-dialog").showModal();
+}
+// La case d'un cours suit ses fichiers (toutes cochées, aucune, ou entre les deux)
+function syncPick() {
+  let cards = 0, questions = 0, due = 0;
+  document.querySelectorAll("#pick-list [data-pick-course]").forEach((box) => {
+    const course = pickState.catalog.find((c) => c.id === box.dataset.pickCourse);
+    const files = [...box.querySelectorAll("[data-pick-file]")];
+    const all = box.querySelector("[data-pick-all]");
+    if (files.length) {
+      const on = files.filter((x) => x.checked).length;
+      all.checked = on === files.length;
+      all.indeterminate = on > 0 && on < files.length;
+    }
+    for (const f of course.files) {
+      const input = box.querySelector(`[data-pick-file="${f.id}"]`);
+      if (input ? input.checked : all.checked) { cards += f.cards; questions += f.questions; due += f.due; }
+    }
+  });
+  const mode = pickState.mode;
+  $("#pick-count").textContent = mode === "today" ? plural(due, "carte à revoir", "cartes à revoir")
+    : mode === "cards" ? plural(cards, "carte", "cartes") : mode === "quiz" ? plural(questions, "question", "questions")
+      : `${plural(cards, "carte", "cartes")} · ${plural(questions, "question", "questions")}`;
+  $("#pick-go").disabled = !pickValue();
+}
+function pickValue() {
+  return [...document.querySelectorAll("#pick-list [data-pick-course]")].map((box) => {
+    const files = [...box.querySelectorAll("[data-pick-file]")];
+    const all = box.querySelector("[data-pick-all]").checked;
+    if (all) return `${box.dataset.pickCourse}:*`;
+    const on = files.filter((x) => x.checked).map((x) => x.dataset.pickFile);
+    return on.length ? `${box.dataset.pickCourse}:${on.join(",")}` : "";
+  }).filter(Boolean).join(";");
+}
+function setPickMode(mode) {
+  pickState.mode = mode;
+  document.querySelectorAll("[data-pick-mode]").forEach((b) => {
+    b.classList.toggle("active", b.dataset.pickMode === mode);
+    b.setAttribute("aria-checked", String(b.dataset.pickMode === mode));
+  });
+}
+$("#pick-list").addEventListener("change", (e) => {
+  const all = e.target.closest("[data-pick-all]");
+  if (all) all.closest("[data-pick-course]").querySelectorAll("[data-pick-file]").forEach((x) => { x.checked = all.checked; });
+  syncPick();
+});
+document.querySelector(".pick-modes").addEventListener("click", (e) => {
+  const b = e.target.closest("[data-pick-mode]");
+  if (b) { setPickMode(b.dataset.pickMode); syncPick(); }
+});
+$("#pick-save").addEventListener("change", () => {
+  $("#pick-name").hidden = !$("#pick-save").checked;
+  if ($("#pick-save").checked) $("#pick-name").focus();
+});
+$("#pick-cancel").addEventListener("click", () => $("#pick-dialog").close());
+$("#pick-go").addEventListener("click", async () => {
+  const pick = pickValue();
+  if (!pick) return;
+  let title = "Ma sélection";
+  if ($("#pick-save").checked) {
+    const name = $("#pick-name").value.trim();
+    if (!name) { setStatus("#pick-status", "Donne un nom à ta sélection pour l'enregistrer.", false); return $("#pick-name").focus(); }
+    try {
+      await api("/api/review/sets", jsonBody("POST", { name, pick }));
+    } catch (err) {
+      return setStatus("#pick-status", err.message, false);
+    }
+    title = name;
+    renderReviewSets();
+  }
+  const mode = pickState.mode;
+  $("#pick-dialog").close();
+  startSession({ mode, pick, ...(mode === "cards" ? { filter: "all" } : {}) },
+    { title: mode === "today" ? title : `${PICK_MODES[mode]} · ${title}`, back: "#/reviser" });
+});
 // Un semestre replié ou ouvert dans Réviser l'est aussi dans Mes cours (même préférence)
 $("#review-pick").addEventListener("toggle", (e) => {
   const folder = e.target.closest?.("details.revise-folder");
@@ -4411,6 +4560,10 @@ const WELCOME = [
 ];
 // Les nouveautés de chaque version (le carton « Quoi de neuf » ne s'affiche que si la version en a)
 const WHATS_NEW = {
+  "0.56.0": [
+    ["☑", "Réviser plusieurs cours d'un coup", "Réviser → « Choisir des cours… » : des cours entiers ou certains fichiers, de matières différentes"],
+    ["★", "Sélections enregistrées", "Donne un nom à ta sélection (« Partiel Psycha ») : elle t'attend en haut de Réviser"],
+  ],
   "0.55.2": [
     ["✎", "Renommer un cours", "Le crayon à côté de son titre (ou double-clic sur l'onglet) ; sans renommer, plus de « .pages » ni de « _ »"],
   ],
