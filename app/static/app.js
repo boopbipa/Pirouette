@@ -1480,6 +1480,27 @@ document.addEventListener("click", async (e) => {
     return $("#replace-input").click();
   }
 });
+// Renommer un cours (fichier) : le crayon à côté de son titre, ou double-clic sur son onglet
+async function renameFile(id) {
+  const file = state.course.files.find((f) => f.id === id);
+  if (!file) return;
+  const title = await askText("Nom du cours", fileLabel(file), baseName(file.name));
+  if (title === null || title === undefined) return;
+  await api(`/api/courses/${state.course.id}/files/${id}/title`, jsonBody("PUT", { title: title.trim() }));
+  await refreshCourse();
+}
+document.addEventListener("click", (e) => {
+  const button = e.target.closest("[data-rename-file]");
+  if (!button) return;
+  e.preventDefault();  // dans le titre repliable « Modifier » : on renomme sans déplier
+  e.stopPropagation();
+  renameFile(button.dataset.renameFile);
+}, true);
+document.addEventListener("dblclick", (e) => {
+  const tab = e.target.closest("[data-file-focus]");
+  if (tab) renameFile(tab.dataset.fileFocus);
+});
+
 // Déplacer un fichier vers un autre cours (ou un nouveau), avec ou sans ses quiz et ses flashcards
 document.addEventListener("click", async (e) => {
   const id = e.target.closest("[data-move-file]")?.dataset.moveFile;
@@ -1488,10 +1509,10 @@ document.addEventListener("click", async (e) => {
   const [courses, items] = await Promise.all([api("/api/courses"),
     api(`/api/courses/${state.course.id}/files/${id}/items`).catch(() => ({ quizzes: 0, cards: 0 }))]);
   state.moving = id;
-  $("#move-file-title").textContent = `Déplacer « ${baseName(file.name)} »`;
+  $("#move-file-title").textContent = `Déplacer « ${fileLabel(file)} »`;
   $("#move-file-target").innerHTML = courses.filter((c) => c.id !== state.course.id)
     .map((c) => `<option value="${c.id}">${escapeHtml(c.name)}</option>`).join("")
-    + `<option value="">Un nouveau cours « ${escapeHtml(baseName(file.name))} »</option>`;
+    + `<option value="">Un nouveau cours « ${escapeHtml(fileLabel(file))} »</option>`;
   const what = [items.quizzes === 1 ? "son quiz" : items.quizzes ? `ses ${items.quizzes} quiz` : "",
     items.cards === 1 ? "sa flashcard" : items.cards ? `ses ${items.cards} flashcards` : ""].filter(Boolean);
   $("#move-file-items").checked = true;
@@ -1605,6 +1626,8 @@ function ownerFile(scope, sources = [], files = state.course.files) {
 }
 const inFocus = (scope, sources) => { const f = focusFile(); return !f || ownerFile(scope, sources)?.id === f.id; };
 const baseName = (name) => name.replace(/\.[^.]+$/, "");
+// Le nom affiché d'un fichier (cours) : celui choisi (« Renommer »), sinon le nom du fichier sans .pages / .pdf ni « _ »
+const fileLabel = (f) => f.title || baseName(f.name).replace(/_+/g, " ").replace(/\s+/g, " ").trim() || f.name;
 // Les chapitres du cours affiché (tous s'il n'y a qu'un fichier)
 const focusUnits = (course = state.course) => {
   const f = focusFile(course);
@@ -1615,7 +1638,7 @@ function renderSplitOffer(course = state.course) {
   const f = focusFile(course) || course?.files[0];
   const show = Boolean(f && f.chapters_by === "none" && !chaptersRunning(f.id));
   $("#split-offer").hidden = !show;
-  if (show) $("#split-offer-title").textContent = `« ${baseName(f.name)} » est d'un seul bloc.`;
+  if (show) $("#split-offer-title").textContent = `« ${fileLabel(f)} » est d'un seul bloc.`;
 }
 const splitTarget = () => focusFile() || state.course.files[0];
 // L'app Claude découpe elle-même le cours, puis crée quiz et flashcards : la fenêtre « Tout préparer », côté app Claude
@@ -1690,10 +1713,11 @@ function renderFiles(course) {
   $("#course-tabs").hidden = !focus;
   $("#course-tree").classList.toggle("tabbed", Boolean(focus));
   $("#course-tabs").innerHTML = focus ? course.files.map((f) => `<button type="button" role="tab" class="course-tab${f === focus ? " active" : ""}"
-      data-file-focus="${f.id}" aria-selected="${f === focus}" title="${escapeHtml(f.name)}">${ICON_FILE}<span>${escapeHtml(baseName(f.name))}</span></button>`).join("")
+      data-file-focus="${f.id}" aria-selected="${f === focus}" title="${escapeHtml(f.name)}">${ICON_FILE}<span>${escapeHtml(fileLabel(f))}</span></button>`).join("")
     + `<label class="course-tab add" for="file-input" title="Ajouter un autre cours à la matière">+</label>` : "";
   const shown = focus ? [focus] : course.files;
-  $("#source-names").innerHTML = shown.map((f) => `<span class="source-name">${ICON_FILE}<strong>${escapeHtml(f.name)}</strong></span>`).join("")
+  $("#source-names").innerHTML = shown.map((f) => `<span class="source-name">${ICON_FILE}<strong>${escapeHtml(fileLabel(f))}</strong>
+      <button class="icon rename-file" type="button" data-rename-file="${f.id}" title="Renommer ce cours" aria-label="Renommer ce cours">${ICON_EDIT}</button></span>`).join("")
     || `<span class="muted">Aucun fichier</span>`;
   $("#file-list").innerHTML = course.files.length ? shown.map((f) => {
     const chapters = f.chapters || [];
@@ -2099,7 +2123,7 @@ function renderChapterPicker(course) {
             <span>${escapeHtml(c.title)}</span><small class="muted">${formatWords(c.chars)}</small></label></li>`).join("")}</ul>`
       : `<p class="chapter-note muted">Pas de chapitres repérés : le fichier est pris en entier.</p>`;
     return `<div class="chapter-group">
-      <div class="chapter-file"><label><input type="checkbox" data-chapter-file="${f.id}"> ${escapeHtml(f.name)}</label></div>
+      <div class="chapter-file"><label><input type="checkbox" data-chapter-file="${f.id}"> ${escapeHtml(fileLabel(f))}</label></div>
       ${body}</div>`;
   }).join("");
   syncFileBoxes();
@@ -3576,7 +3600,7 @@ async function renderScopeMain() {
     : (today.cards || today.questions ? `${$("#today-summary").innerHTML} à revoir · le mélange conseillé` : "Tout est à jour pour aujourd'hui");
   $("#hero-start").disabled = planned ? false : $("#start-today").disabled;
   $("#hero-start").textContent = planned && plan.status.done_today ? "Refaire une séance" : "Commencer →";
-  $("#hero-all").title = `Toutes les cartes et toutes les questions ${state.reviewFile ? `du cours « ${baseName(state.reviewFile.name)} »`
+  $("#hero-all").title = `Toutes les cartes et toutes les questions ${state.reviewFile ? `du cours « ${fileLabel(state.reviewFile)} »`
     : scope.single ? "de la matière" : "de ce choix"}, mélangées`;
   if (state.reviewFile) {
     // Un seul cours de la matière : sa révision du jour (cartes à revoir et questions à reposer de ce cours)
@@ -3584,8 +3608,8 @@ async function renderScopeMain() {
       questions: mixQuestions() ? "1" : "0" })}`).catch(() => ({ cards: 0, questions: 0 }));
     const n = peek.cards + peek.questions;
     $("#hero-summary").innerHTML = n ? `<b>${peek.cards}</b> carte${peek.cards > 1 ? "s" : ""}${peek.questions
-      ? ` · <b>${peek.questions}</b> question${peek.questions > 1 ? "s" : ""} de quiz` : ""} à revoir dans « ${escapeHtml(baseName(state.reviewFile.name))} »`
-      : `Tout est à jour dans « ${escapeHtml(baseName(state.reviewFile.name))} »`;
+      ? ` · <b>${peek.questions}</b> question${peek.questions > 1 ? "s" : ""} de quiz` : ""} à revoir dans « ${escapeHtml(fileLabel(state.reviewFile))} »`
+      : `Tout est à jour dans « ${escapeHtml(fileLabel(state.reviewFile))} »`;
     $("#hero-start").disabled = !n;
     $("#hero-start").textContent = "Commencer →";
   }
@@ -3683,7 +3707,7 @@ function renderScopeQuizzes() {
   $("#quiz-mix").hidden = total <= size;
   $("#quiz-mix-title").textContent = `${size} questions au hasard`;
   $("#quiz-mix-text").textContent = `Piochées dans ${all.length > 1 ? `les ${all.length} quiz` : "le quiz"} de `
-    + `${state.reviewFile ? `« ${baseName(state.reviewFile.name)} »` : "la matière"} (${total} questions), tous chapitres confondus.`;
+    + `${state.reviewFile ? `« ${fileLabel(state.reviewFile)} »` : "la matière"} (${total} questions), tous chapitres confondus.`;
   $("#scope-quizzes").innerHTML = all.length ? all.map((q) => quizItem(q, null, null, { play: true })).join("")
     : `<li class="empty muted">Pas encore de quiz : crée-les depuis la page du cours (Mes cours).</li>`;
 }
@@ -3692,7 +3716,7 @@ function renderScopeQuizzes() {
 $("#quiz-mix-start").addEventListener("click", () => {
   const f = state.reviewFile;
   startSession({ mode: "quiz", ...reviewScope(), questions: "1", ...(f ? { file: f.id } : {}) },
-    { title: `Quiz au hasard · ${f ? baseName(f.name) : state.reviewScope.name}`, back: state.reviewScope.hash });
+    { title: `Quiz au hasard · ${f ? fileLabel(f) : state.reviewScope.name}`, back: state.reviewScope.hash });
 });
 
 // Le bandeau « Révision du jour » : son bouton lance la séance (celle du plan s'il y en a un) ; ailleurs, il montre ses réglages
@@ -3700,7 +3724,7 @@ $("#hero-start").addEventListener("click", (e) => {
   e.stopPropagation();
   const f = state.reviewFile;
   if (f) return startSession({ mode: "today", ...reviewScope(), file: f.id },
-    { title: `Révision du jour · ${baseName(f.name)}`, back: state.reviewScope.hash });
+    { title: `Révision du jour · ${fileLabel(f)}`, back: state.reviewScope.hash });
   if (state.scopePlan?.plan) $("#plan-start").click();
   else $("#start-today").click();
 });
@@ -3710,7 +3734,7 @@ $("#hero-all").addEventListener("click", (e) => {
   e.stopPropagation();
   const f = state.reviewFile;
   startSession({ mode: "all", ...reviewScope(), questions: "1", ...(f ? { file: f.id } : {}) },
-    { title: f ? `Tout le cours · ${baseName(f.name)}` : `Tout réviser · ${state.reviewScope.name}`, back: state.reviewScope.hash });
+    { title: f ? `Tout le cours · ${fileLabel(f)}` : `Tout réviser · ${state.reviewScope.name}`, back: state.reviewScope.hash });
 });
 // Choix du cours (matière à plusieurs fichiers) : tout le Réviser suit (révision du jour, flashcards, quiz)
 $("#review-files").addEventListener("click", (e) => {
@@ -3731,7 +3755,7 @@ function renderReviewFiles() {
   try { id = localStorage.getItem(`pirouette.reviewFile.${state.reviewScope.params.course}`) || ""; } catch {}
   state.reviewFile = files.find((f) => f.id === id) || null;
   box.innerHTML = `<button type="button" class="${state.reviewFile ? "" : "active"}" data-review-file="">Toute la matière</button>`
-    + files.map((f) => `<button type="button" class="${state.reviewFile === f ? "active" : ""}" data-review-file="${f.id}">${escapeHtml(baseName(f.name))}</button>`).join("");
+    + files.map((f) => `<button type="button" class="${state.reviewFile === f ? "active" : ""}" data-review-file="${f.id}">${escapeHtml(fileLabel(f))}</button>`).join("");
 }
 $("#today-hero").addEventListener("keydown", (e) => {
   if ((e.key === "Enter" || e.key === " ") && e.target.id === "today-hero") { e.preventDefault(); setScopeMode("jour"); }
@@ -4387,6 +4411,9 @@ const WELCOME = [
 ];
 // Les nouveautés de chaque version (le carton « Quoi de neuf » ne s'affiche que si la version en a)
 const WHATS_NEW = {
+  "0.55.2": [
+    ["✎", "Renommer un cours", "Le crayon à côté de son titre (ou double-clic sur l'onglet) ; sans renommer, plus de « .pages » ni de « _ »"],
+  ],
   "0.55.1": [
     ["⟳", "Mises à jour sous Windows", "Quitter Pirouette installe vraiment la nouvelle version, puis la rouvre ; si ça coince, l'installateur s'ouvre"],
   ],
@@ -6002,7 +6029,7 @@ function setPrepareEngine(engine) {
   });
   const app = engine === "app";
   const unsplit = unsplitFiles();
-  if (unsplit.length && app) $("#prepare-text").textContent = `« ${baseName(unsplit[0].name)} » n'est pas encore découpé : `
+  if (unsplit.length && app) $("#prepare-text").textContent = `« ${fileLabel(unsplit[0])} » n'est pas encore découpé : `
     + "Claude le découpe d'abord en chapitres, puis crée tout chapitre par chapitre :";
   else if (unsplit.length) $("#prepare-text").textContent = "Pirouette peut tout créer maintenant pour ce cours, d'un seul bloc "
     + "(découpe-le d'abord pour avoir un quiz par chapitre) :";

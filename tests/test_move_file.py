@@ -49,3 +49,13 @@ def test_move_file_alone_into_a_new_course(tmp_path, monkeypatch):
     new = store.get_course(done["course_id"])
     assert new["name"] == "CM1" and new["folder_id"] == folder["id"] and done["quizzes"] == done["cards"] == 0
     assert store.get_quiz(freud["id"])["course_id"] == psy["id"]  # quiz et cartes restent dans le cours de départ
+
+
+def test_rename_file_keeps_its_real_name(tmp_path, monkeypatch):
+    store, client, psy, _, _, files, _, _ = _setup(tmp_path, monkeypatch)
+    fid = files["CM1.txt"]
+    course = client.put(f"/api/courses/{psy['id']}/files/{fid}/title", json={"title": "  Cours  magistral 1 "}).json()
+    entry = next(f for f in course["files"] if f["id"] == fid)
+    assert entry["title"] == "Cours magistral 1" and entry["name"] == "CM1.txt"  # une nouvelle version la reconnaît
+    course = client.put(f"/api/courses/{psy['id']}/files/{fid}/title", json={"title": ""}).json()
+    assert "title" not in next(f for f in course["files"] if f["id"] == fid)

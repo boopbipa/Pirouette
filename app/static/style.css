@@ -1721,3 +1721,8 @@ html.windows [data-mac-only], html:not(.windows) [data-win-only] { display: none
   border-radius: 14px; background: transparent; color: var(--muted); font: inherit; font-size: 14px; cursor: pointer; }
 .add-folder-row:hover { color: var(--accent); border-color: var(--accent); }
 .pack-link { margin: 14px 0 0; text-align: center; }
+
+/* Renommer un cours (fichier) : petit crayon à côté de son titre */
+.source-name .rename-file { width: 28px; height: 28px; margin-left: 4px; opacity: .55; }
+.source-name .rename-file:hover { opacity: 1; }
+.source-name .rename-file svg { width: 14px; height: 14px; }

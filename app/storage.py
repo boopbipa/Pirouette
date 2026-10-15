@@ -504,6 +504,21 @@ class Store:
         self._save_course(course)
         return course
 
+    def rename_file(self, course_id: str, file_id: str, title: str) -> dict:
+        """Nom affiché d'un fichier (onglet, titre) ; son vrai nom ne change pas (il sert à reconnaître une nouvelle
+        version et l'origine des quiz et des cartes). Vide : on revient au nom du fichier, sans l'extension."""
+        course = self.get_course(course_id)
+        entry = next((f for f in course["files"] if f["id"] == _check_id(file_id, 8)), None)
+        if entry is None:
+            raise NotFound(file_id)
+        title = " ".join(title.split())[:120]
+        if title:
+            entry["title"] = title
+        else:
+            entry.pop("title", None)
+        self._save_course(course)
+        return course
+
     def move_file(self, course_id: str, file_id: str, target_id: str) -> dict:
         """Déplace un fichier (et ses chapitres) vers un autre cours. Les quiz et cartes se déplacent à part."""
         if course_id == target_id:

@@ -697,6 +697,15 @@ async def delete_file(course_id: str, file_id: str) -> dict:
     return store.remove_file(course_id, file_id)
 
 
+class FileTitleIn(BaseModel):
+    title: str
+
+
+@app.put("/api/courses/{course_id}/files/{file_id}/title")
+async def rename_file(course_id: str, file_id: str, body: FileTitleIn) -> dict:
+    return store.rename_file(course_id, file_id, body.title)
+
+
 class MoveFileIn(BaseModel):
     target_id: str | None = None   # cours de destination (None : un nouveau cours, du nom du fichier)
     with_items: bool = True        # avec ses quiz et ses flashcards
