@@ -509,6 +509,7 @@ const isDesktop = () => Boolean(window.pywebview?.api);
 async function openSettings() {
   const settings = await api("/api/settings");
   state.course = null;
+  renderThemeChoice(settings.theme || "auto");
   $("#settings-name").value = settings.name;
   const claude = settings.claude;
   $("#settings-key-state").innerHTML = claude.configured
@@ -890,7 +891,8 @@ function derivePalette(hex) {
 function paletteCss(p) {
   if (!p) return "";
   return `:root{--accent:${p.accent};--accent-ink:${p.ink};--accent-soft:${p.soft}}`
-    + `@media (prefers-color-scheme: dark){:root{--accent:${p.d_accent};--accent-ink:${p.d_ink};--accent-soft:${p.d_soft}}}`;
+    + `@media (prefers-color-scheme: dark){:root:not([data-theme=light]){--accent:${p.d_accent};--accent-ink:${p.d_ink};--accent-soft:${p.d_soft}}}`
+    + `:root[data-theme=dark]{--accent:${p.d_accent};--accent-ink:${p.d_ink};--accent-soft:${p.d_soft}}`;
 }
 
 const picker = { h: 0, s: 0, v: 1, saved: DEFAULT_ACCENT, ready: false };
@@ -4596,6 +4598,9 @@ const WELCOME = [
 ];
 // Les nouveautés de chaque version (le carton « Quoi de neuf » ne s'affiche que si la version en a)
 const WHATS_NEW = {
+  "0.58.0": [
+    ["◐", "Clair ou sombre", "Réglages → « Clair ou sombre » : automatique comme ton ordinateur, ou toujours clair, ou toujours sombre"],
+  ],
   "0.57.2": [
     ["🩺", "Diagnostic plus complet", "Il dit aussi quelle app Claude est ouverte, et ce que contiennent ses dossiers"],
   ],
@@ -6933,4 +6938,24 @@ $("#take-go").addEventListener("click", async () => {
   } catch (err) {
     setStatus("#take-status", err.message, false);
   }
+});
+
+
+// ---------- Clair ou sombre : automatique (comme l'ordinateur), ou choisi ----------
+function applyTheme(theme) {
+  if (theme === "light" || theme === "dark") document.documentElement.dataset.theme = theme;
+  else delete document.documentElement.dataset.theme;
+}
+function renderThemeChoice(theme) {
+  document.querySelectorAll("[data-theme-choice]").forEach((b) => {
+    b.classList.toggle("active", b.dataset.themeChoice === theme);
+    b.setAttribute("aria-checked", String(b.dataset.themeChoice === theme));
+  });
+}
+document.querySelector(".theme-choice").addEventListener("click", async (e) => {
+  const theme = e.target.closest("[data-theme-choice]")?.dataset.themeChoice;
+  if (!theme) return;
+  applyTheme(theme);  // tout de suite, sans attendre
+  renderThemeChoice(theme);
+  await api("/api/settings", jsonBody("PUT", { theme })).catch(() => {});
 });

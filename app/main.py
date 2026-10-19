@@ -85,8 +85,9 @@ def appearance_css(palette: dict | None) -> str:
         return ""
     p = palette
     return (f":root{{--accent:{p['accent']};--accent-ink:{p['ink']};--accent-soft:{p['soft']}}}"
-            f"@media (prefers-color-scheme: dark){{:root{{--accent:{p['d_accent']};"
-            f"--accent-ink:{p['d_ink']};--accent-soft:{p['d_soft']}}}}}")
+            f"@media (prefers-color-scheme: dark){{:root:not([data-theme=light]){{--accent:{p['d_accent']};"
+            f"--accent-ink:{p['d_ink']};--accent-soft:{p['d_soft']}}}}}"
+            f":root[data-theme=dark]{{--accent:{p['d_accent']};--accent-ink:{p['d_ink']};--accent-soft:{p['d_soft']}}}")
 
 
 @app.get("/")
@@ -94,6 +95,9 @@ async def index() -> HTMLResponse:
     # La couleur choisie est insérée directement dans la page : pas de « flash » de la couleur par défaut.
     html = (ROOT / "static" / "index.html").read_text(encoding="utf-8")
     html = html.replace("/*APPEARANCE*/", appearance_css(store.get_settings().get("appearance")))
+    theme = store.get_settings().get("theme")
+    if theme in ("light", "dark"):  # clair ou sombre choisi dans Réglages (sinon : comme l'ordinateur)
+        html = html.replace('<html lang="fr">', f'<html lang="fr" data-theme="{theme}">', 1)
     return HTMLResponse(html, headers={"Cache-Control": "no-store"})
 
 
@@ -137,6 +141,7 @@ class SettingsIn(BaseModel):
     local_ai: bool | None = None        # IA locale (Ollama) en option : activée ou non dans les Réglages
     shortcuts: dict[str, str] | None = None  # touches du clavier choisies (action → touche) ; {} = par défaut
     keys_instant: bool | None = None    # au clavier, valider dès qu'on choisit une réponse
+    theme: str | None = None            # « auto » (comme l'ordinateur), « light » (clair) ou « dark » (sombre)
     welcome_seen: str | None = None     # cartons de bienvenue vus (« 1 ») / dernière version dont on a vu les nouveautés
     backup_mode: str | None = None      # sauvegarde automatique : "open" (à l'ouverture), "week", "off"
 
@@ -165,6 +170,7 @@ def _settings_view() -> dict:
         "local_ai": store.get_settings().get("local_ai"),
         "shortcuts": store.get_settings().get("shortcuts") or {},
         "keys_instant": bool(store.get_settings().get("keys_instant", False)),
+        "theme": store.get_settings().get("theme", "auto"),
         "welcome_seen": store.get_settings().get("welcome_seen") or "",
         "news_seen": store.get_settings().get("news_seen") or "",
         "data_dir": str(store.root.resolve()),
@@ -218,6 +224,10 @@ async def save_settings(body: SettingsIn) -> dict:
         store.save_settings(shortcuts=clean)
     if body.keys_instant is not None:
         store.save_settings(keys_instant=body.keys_instant)
+    if body.theme is not None:
+        if body.theme not in ("auto", "light", "dark"):
+            raise HTTPException(400, "Thème inconnu.")
+        store.save_settings(theme=None if body.theme == "auto" else body.theme)
     if body.welcome_seen is not None:
         # « 1 » : les cartons de bienvenue ont été vus ; une version (« 0.39.0 ») : ses nouveautés ont été vues
         if body.welcome_seen == "1":
