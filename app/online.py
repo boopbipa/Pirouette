@@ -477,6 +477,9 @@ def _french(message: str) -> str:
         return "Les comptes ne sont pas encore ouverts sur le service en ligne (réglage Supabase à activer)."
     if "rate limit" in lowered or "security purposes" in lowered:
         return "Trop de demandes d'un coup : patiente quelques minutes avant de réessayer."
+    if "could not find the table" in lowered and any(t in lowered for t in ("room", "messages")):
+        return ("La messagerie n'est pas encore activée sur le service en ligne : la mise à jour « Messages » "
+                "(docs/supabase-messages.sql) doit être collée une fois dans Supabase → SQL Editor.")
     if "duplicate key" in lowered and "pseudo" in lowered:
         return "Ce pseudo est déjà pris."
     return message
