@@ -4598,6 +4598,10 @@ const WELCOME = [
 ];
 // Les nouveautés de chaque version (le carton « Quoi de neuf » ne s'affiche que si la version en a)
 const WHATS_NEW = {
+  "0.58.2": [
+    ["⟳", "Mises à jour en un clic sous Windows", "« Mettre à jour et redémarrer » : Pirouette se ferme, s'installe et se rouvre toute seule"],
+    ["🔔", "Recherche régulière", "Pirouette regarde s'il y a une nouvelle version au lancement, puis toutes les 3 heures"],
+  ],
   "0.58.1": [
     ["🔌", "App Claude 2026 sous Windows", "Pirouette s'inscrit aussi dans le nouveau dossier de l'app Claude (AppData\\Local\\Claude)"],
   ],
@@ -5962,7 +5966,8 @@ async function checkUpdate({ quiet = false } = {}) {
   state.update = info;
   state.desktop = Boolean(info.desktop);
   if (info.ready) {
-    if (!quiet) setStatus("#update-status", "La mise à jour est prête : quitte Pirouette puis rouvre-la.", true);
+    if (!quiet) setStatus("#update-status", RESTARTS_ITSELF ? "La mise à jour est prête : clique sur « Redémarrer maintenant »."
+      : "La mise à jour est prête : quitte Pirouette puis rouvre-la.", true);
     return showUpdateReady({ popup: !quiet });
   }
   if (!quiet) {
@@ -5978,7 +5983,7 @@ function showUpdateToast(info) {
   if (dismissed === info.latest && $("#view-settings").hidden) return;
   $("#update-text").innerHTML = `<b>Pirouette ${escapeHtml(info.latest)}</b> est disponible.`
     + (info.can_install ? " Tes cours et tes cartes sont gardés." : "");
-  $("#update-go").textContent = info.can_install ? "Mettre à jour" : "Télécharger";
+  $("#update-go").textContent = info.can_install ? (RESTARTS_ITSELF ? "Mettre à jour et redémarrer" : "Mettre à jour") : "Télécharger";
   $("#update-go").disabled = false;
   $("#update-go").hidden = false;
   $("#update-later").hidden = false;
@@ -5995,24 +6000,33 @@ $("#update-later").addEventListener("click", () => {
 // Quitter Pirouette (pour que la mise à jour s'installe). Le serveur de l'app arrête le programme lui-même :
 // fermer la fenêtre depuis l'interface pouvait laisser l'app bloquée (il fallait forcer à quitter).
 function quitApp() {
-  $("#update-text").textContent = "Pirouette se ferme…";
+  $("#update-text").textContent = RESTARTS_ITSELF ? "Pirouette se ferme, s'installe et revient dans quelques secondes…" : "Pirouette se ferme…";
   fetch("/api/quit", { method: "POST" }).catch(() => {});
   setTimeout(() => window.pywebview?.api?.quit?.(), 300);
 }
 
 // La nouvelle version est téléchargée : on ne relance pas l'app nous-mêmes (source de bugs). Une fenêtre invite
 // à quitter puis rouvrir ; « Plus tard » laisse un rappel discret en bas de l'écran.
+// Sous Windows, Pirouette se rouvre d'elle-même une fois la mise à jour installée : un seul clic, « Redémarrer ».
+const RESTARTS_ITSELF = ON_WINDOWS;
 function showUpdateReady({ popup = true } = {}) {
-  $("#update-text").innerHTML = "<b>La mise à jour est prête.</b> Quitte Pirouette (⌘Q) puis rouvre-la.";
+  $("#update-text").innerHTML = RESTARTS_ITSELF
+    ? "<b>La mise à jour est prête.</b> Pirouette se ferme quelques secondes, s'installe et se rouvre toute seule."
+    : "<b>La mise à jour est prête.</b> Quitte Pirouette (⌘Q) puis rouvre-la.";
   $("#update-progress").hidden = true;
   $("#update-go").hidden = !state.desktop;
   $("#update-go").disabled = false;
-  $("#update-go").textContent = "Quitter Pirouette";
+  $("#update-go").textContent = RESTARTS_ITSELF ? "Redémarrer maintenant" : "Quitter Pirouette";
   $("#update-later").hidden = false;
   $("#update-later").textContent = "Plus tard";
   $("#update-toast").hidden = popup;
   if (!popup) return;
-  $("#update-dialog-text b").textContent = state.update?.latest || "";
+  $("#update-dialog-text").innerHTML = RESTARTS_ITSELF
+    ? `Pirouette <b>${escapeHtml(state.update?.latest || "")}</b> est téléchargée. Clique sur « Redémarrer maintenant » : Pirouette se ferme, `
+      + "installe la nouvelle version et se rouvre toute seule (une quinzaine de secondes). Tes cours et tes cartes sont gardés."
+    : `Pirouette <b>${escapeHtml(state.update?.latest || "")}</b> est téléchargée. Quitte l'app puis rouvre-la : la nouvelle version s'installe `
+      + "pendant qu'elle est fermée. Tes cours et tes cartes sont gardés. Si tu utilises Pirouette dans l'app Claude, quitte et rouvre aussi l'app Claude ensuite.";
+  $("#update-dialog-quit").textContent = RESTARTS_ITSELF ? "Redémarrer maintenant" : "Quitter Pirouette";
   $("#update-dialog-quit").hidden = !state.desktop;
   if (!$("#update-dialog").open) $("#update-dialog").showModal();
 }
@@ -6045,6 +6059,7 @@ $("#update-go").addEventListener("click", async () => {
       if (event.type === "error") throw new Error(event.message);
       if (event.type === "done") {
         info.ready = true;
+        if (RESTARTS_ITSELF && state.desktop) return quitApp();  // un seul clic : installée puis rouverte
         return showUpdateReady();
       }
     }
@@ -6058,6 +6073,7 @@ $("#update-go").addEventListener("click", async () => {
 
 $("#update-check").addEventListener("click", () => checkUpdate());
 setTimeout(() => checkUpdate({ quiet: true }), 2500);
+setInterval(() => { if (!state.update?.ready) checkUpdate({ quiet: true }); }, 3 * 60 * 60 * 1000);
 api("/api/settings").then((settings) => { state.desktop = Boolean(settings.desktop); }).catch(() => {});
 
 // Menu « Mise à jour » de la barre des menus du Mac (voir desktop.py) : il appelle window.pirouetteMenu(…).
