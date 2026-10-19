@@ -46,7 +46,12 @@ jobs:
           python -m pip install -r requirements-desktop.txt pytest
 
       - name: Tests
-        run: python -m pytest -q
+        # Un test raté s'affiche aussi dans le résumé du run (annotations), avec sa dernière ligne d'erreur
+        run: |
+          python -m pytest -q -rf -p no:cacheprovider > pytest.txt 2>&1 && status=0 || status=$?
+          tail -40 pytest.txt
+          grep -E '^(FAILED|ERROR) ' pytest.txt | head -10 | while read -r line; do echo "::error title=Test raté::$line"; done
+          exit $status
 
       - name: Service en ligne (défis entre amis)
         env:
