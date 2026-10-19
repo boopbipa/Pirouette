@@ -295,6 +295,164 @@ class Online:
             "score": score, "total": total, "seconds": seconds},
             headers={"Prefer": "resolution=ignore-duplicates"})
 
+    # ---------- Messages : conversations à deux et groupes de révision ----------
+    # Une conversation (« room ») a des membres ; une conversation à deux est une room « direct ». Les messages
+    # peuvent porter un quiz, des flashcards, un cours entier, un défi ou un résultat (`kind`) : `meta` (petit) sert
+    # à l'aperçu, `payload` (le contenu) n'est lu qu'au moment de faire le quiz ou de l'ajouter à ses cours.
+    def _me(self) -> str:
+        me = self._session().get("user_id")
+        if not me:
+            raise OnlineError("Connecte-toi d'abord (onglet Défis).")
+        return me
+
+    async def _rows(self, table: str, **params) -> list[dict]:
+        return (await self._call("GET", f"/rest/v1/{table}", params=params)).json()
+
+    async def rooms(self) -> list[dict]:
+        """Mes conversations, la plus récente d'abord : membres, dernier message, messages non lus."""
+        me = self._me()
+        mine = await self._rows("room_members", user_id=f"eq.{me}", select="room_id,last_read")
+        if not mine:
+            return []
+        ids = ",".join(m["room_id"] for m in mine)
+        rooms = await self._rows("rooms", id=f"in.({ids})", select="id,kind,name,pinned,created_by,created_at")
+        members = await self._rows("room_members", room_id=f"in.({ids})", select="room_id,user_id")
+        pseudos = await self._pseudos({m["user_id"] for m in members})
+        recent = await self._rows("messages", room_id=f"in.({ids})", select="id,room_id,sender,body,kind,title,created_at",
+                                  order="created_at.desc", limit="400")
+        read = {m["room_id"]: m["last_read"] for m in mine}
+        out = []
+        for room in rooms:
+            rid = room["id"]
+            people = [{"id": m["user_id"], "pseudo": pseudos.get(m["user_id"], "?")}
+                      for m in members if m["room_id"] == rid]
+            msgs = [m for m in recent if m["room_id"] == rid]
+            last = msgs[0] if msgs else None
+            others = [p for p in people if p["id"] != me]
+            out.append({
+                "id": rid, "kind": room["kind"], "pinned": room.get("pinned"), "created_by": room.get("created_by"),
+                "name": room.get("name") or ", ".join(p["pseudo"] for p in others) or "Moi",
+                "members": people, "others": others,
+                "unread": sum(1 for m in msgs if m["sender"] != me and _after(m["created_at"], read.get(rid))),
+                "last": last and {"text": _preview(last), "mine": last["sender"] == me,
+                                  "pseudo": pseudos.get(last["sender"], "?"), "at": last["created_at"]},
+                "at": (last or room)["created_at"]})
+        return sorted(out, key=lambda r: r["at"] or "", reverse=True)
+
+    async def _pseudos(self, ids: set[str]) -> dict[str, str]:
+        if not ids:
+            return {}
+        rows = await self._rows("profiles", id=f"in.({','.join(sorted(ids))})", select="id,pseudo")
+        return {r["id"]: r["pseudo"] for r in rows}
+
+    async def direct(self, friend_id: str) -> dict:
+        """La conversation à deux avec un ami (créée la première fois)."""
+        me = self._me()
+        for room in await self.rooms():
+            if room["kind"] == "direct" and [p["id"] for p in room["others"]] == [friend_id]:
+                return room
+        friends = {f["id"] for f in (await self.friends())["friends"]}
+        if friend_id not in friends:
+            raise OnlineError("Tu ne peux écrire qu'à tes amis : ajoute-le d'abord avec son code ami.")
+        return await self._new_room("direct", None, [friend_id])
+
+    async def group(self, name: str, member_ids: list[str]) -> dict:
+        """Un groupe de révision, avec certains de mes amis."""
+        name = " ".join(str(name).split())[:60]
+        if len(name) < 2:
+            raise OnlineError("Donne un nom au groupe.")
+        return await self._new_room("group", name, member_ids)
+
+    async def _new_room(self, kind: str, name: str | None, member_ids: list[str]) -> dict:
+        me = self._me()
+        room = (await self._call("POST", "/rest/v1/rooms", json={"kind": kind, "name": name, "created_by": me},
+                                 headers={"Prefer": "return=representation"})).json()[0]
+        # D'abord moi (je crée la conversation), puis mes amis (seul un membre peut ajouter ses amis)
+        await self._call("POST", "/rest/v1/room_members", json={"room_id": room["id"], "user_id": me})
+        await self.add_members(room["id"], member_ids)
+        return {"id": room["id"], "kind": kind, "name": name}
+
+    async def add_members(self, room_id: str, member_ids: list[str]) -> None:
+        me = self._me()
+        rows = [{"room_id": room_id, "user_id": uid} for uid in dict.fromkeys(member_ids) if uid and uid != me]
+        if rows:
+            await self._call("POST", "/rest/v1/room_members", json=rows,
+                             headers={"Prefer": "resolution=ignore-duplicates"})
+
+    async def leave(self, room_id: str) -> None:
+        await self._call("DELETE", "/rest/v1/room_members", params={"room_id": f"eq.{room_id}", "user_id": f"eq.{self._me()}"})
+
+    async def update_room(self, room_id: str, name: str | None = None, pinned: str | None = None,
+                          unpin: bool = False) -> None:
+        body = {}
+        if name is not None:
+            body["name"] = " ".join(name.split())[:60] or None
+        if pinned or unpin:
+            body["pinned"] = pinned or None
+        if body:
+            await self._call("PATCH", "/rest/v1/rooms", json=body, params={"id": f"eq.{room_id}"})
+
+    async def messages(self, room_id: str, after: str = "") -> dict:
+        """Les messages d'une conversation (les nouveaux seulement avec `after`), et on la marque comme lue."""
+        me = self._me()
+        params = {"room_id": f"eq.{room_id}", "select": "id,sender,body,kind,title,meta,created_at",
+                  "order": "created_at.asc", "limit": "500"}
+        if after:
+            params["created_at"] = f"gt.{after}"
+        rows = await self._rows("messages", **params)
+        pseudos = await self._pseudos({r["sender"] for r in rows})
+        for row in rows:
+            row["mine"] = row["sender"] == me
+            row["pseudo"] = pseudos.get(row["sender"], "?")
+        if rows:
+            await self._call("PATCH", "/rest/v1/room_members", json={"last_read": rows[-1]["created_at"]},
+                             params={"room_id": f"eq.{room_id}", "user_id": f"eq.{me}"})
+        return {"messages": rows}
+
+    async def send(self, room_id: str, body: str = "", kind: str = "text", title: str = "",
+                   meta: dict | None = None, payload: dict | None = None) -> dict:
+        body = str(body or "").strip()[:2000]
+        if kind == "text" and not body:
+            raise OnlineError("Message vide.")
+        row = {"room_id": room_id, "sender": self._me(), "body": body or None, "kind": kind,
+               "title": (title or "")[:160] or None, "meta": meta, "payload": payload}
+        if payload is not None and len(json.dumps(payload)) > 1_500_000:
+            raise OnlineError("C'est trop gros à envoyer d'un coup : envoie plutôt un chapitre ou un quiz.")
+        rows = (await self._call("POST", "/rest/v1/messages", json=row, headers={"Prefer": "return=representation"})).json()
+        return rows[0] if rows else row
+
+    async def payload(self, message_id: str) -> dict:
+        rows = await self._rows("messages", id=f"eq.{message_id}", select="id,kind,title,meta,payload,room_id")
+        if not rows:
+            raise OnlineError("Ce message n'existe plus.")
+        return rows[0]
+
+    async def unread(self) -> int:
+        try:
+            return sum(r["unread"] for r in await self.rooms())
+        except OnlineError:
+            return 0
+
+
+def _after(stamp: str | None, reference: str | None) -> bool:
+    """`stamp` est-il plus récent que `reference` (dates ISO de Supabase) ?"""
+    if not stamp:
+        return False
+    if not reference:
+        return True
+    try:
+        from datetime import datetime
+        return datetime.fromisoformat(stamp.replace("Z", "+00:00")) > datetime.fromisoformat(reference.replace("Z", "+00:00"))
+    except ValueError:
+        return stamp > reference
+
+
+def _preview(message: dict) -> str:
+    labels = {"quiz": "📝 Quiz", "cards": "🃏 Flashcards", "course": "📚 Cours", "challenge": "⚔️ Défi", "result": "🏁 Résultat"}
+    if message.get("kind") in labels:
+        return f"{labels[message['kind']]} : {message.get('title') or ''}".strip(" :")
+    return (message.get("body") or "")[:120]
+
 
 def _log(folder: Path, line: str) -> None:
     """Journal des refus du service en ligne (pour comprendre un problème), dans le dossier des données."""

@@ -96,6 +96,7 @@ async function route() {
     else if (match) await openCourse(match[1], match[3]);
     else if (hash.startsWith("#/reglages")) await openSettings();
     else if (hash.startsWith("#/defis")) await openOnline();
+    else if (hash.startsWith("#/messages")) await openMessages(hash.split("/")[2] || "");
     else if (hash.match(/^#\/reviser\/(tout|dossier|cours)/)) await openReviewScope(...hash.slice(10).split("/"));
     else if (hash.startsWith("#/reviser")) await openReview();
     else if (hash.startsWith("#/nouveau-cours")) {
@@ -3413,6 +3414,7 @@ function sessionCrumbs(back, title) {
     return [{ label: "Réviser", href: "#/reviser" }, { label: state.reviewScope.name, href: back }, { label: title }];
   }
   if (back === "#/defis") return [{ label: "Défis", href: "#/defis" }, { label: title }];
+  if (back.startsWith("#/messages")) return [{ label: "Messages", href: back }, { label: title }];
   return [back === "#/" ? { label: "Accueil", href: "#/" } : { label: "Réviser", href: "#/reviser" }, { label: title }];
 }
 $("#session-done-back").addEventListener("click", (e) => { state.sessionBack = state.session?.back; leaveSession(e); });
@@ -4273,6 +4275,7 @@ function startQuiz(quiz, questions, { back = state.quizBack } = {}) {
     : quiz.course_id ? [COURSES_CRUMB, { label: quiz.course_name || "Cours", href: `#/cours/${quiz.course_id}/quiz` }, { label: quiz.title }]
     : [COURSES_CRUMB, { label: quiz.title }]);
   $("#back-course-btn").textContent = state.quizBack === "#/defis" ? "Retour aux défis"
+    : state.quizBack?.startsWith("#/messages") ? "Retour aux messages"
     : state.quizBack ? "Retour à Réviser" : quiz.course_id ? "Retour au cours" : "Mes cours";
   show("quiz");
   renderQuestion();
@@ -4560,6 +4563,10 @@ const WELCOME = [
 ];
 // Les nouveautés de chaque version (le carton « Quoi de neuf » ne s'affiche que si la version en a)
 const WHATS_NEW = {
+  "0.57.0": [
+    ["💬", "Messages", "Écris à tes amis, crée des groupes de révision, et envoie-leur tes quiz, flashcards, cours ou défis"],
+    ["🏁", "Scores partagés", "Quand un ami fait le quiz que tu lui as envoyé, son score s'affiche dans la conversation"],
+  ],
   "0.56.1": [
     ["⇩", "Windows sans installation", "Ordinateur d'établissement qui bloque l'installateur : une version à dézipper, Pirouette-Windows-Portable.zip"],
   ],
@@ -4934,7 +4941,7 @@ function validateShort(q) {
 
 // Chaque réponse compte pour le suivi et les points faibles (même si on ne va pas au bout du quiz).
 function saveAnswer(q, correct) {
-  if (state.quiz.online) return;  // défi entre amis : pas de statistiques sur un quiz de l'ordinateur
+  if (state.quiz.online || state.quiz.shared) return;  // défi ou quiz reçu : pas de statistiques sur un quiz de l'ordinateur
   const index = state.quiz.questions.indexOf(q);
   const replaces = q.replaces;
   delete q.replaces;
@@ -5037,6 +5044,16 @@ function showResults() {
     return;
   }
   $("#retry-btn").hidden = false;
+  if (state.quiz.shared) {
+    // Quiz reçu dans Messages : le score part dans la conversation (une fois), rien n'est gardé sur l'ordinateur
+    const shared = state.quiz.shared;
+    if (!shared.posted && state.fullRun) {
+      shared.posted = true;
+      api(`/api/online/rooms/${shared.room}/messages`, jsonBody("POST", { kind: "result", title: shared.title, score: good,
+        total: state.results.length, seconds: Math.round((Date.now() - state.quiz.started) / 1000) })).catch(() => {});
+    }
+    return;
+  }
   if (state.fullRun && state.results.length) {
     api(`/api/quizzes/${state.quiz.id}/attempts`, jsonBody("POST", { score: good, total: state.results.length })).catch(() => {});
   }
@@ -5217,7 +5234,7 @@ function formatDay(iso) {
   return day.toLocaleDateString("fr-FR", { day: "numeric", month: "short" });
 }
 
-route();
+setTimeout(route);  // une fois tout le script chargé (les dernières parties, comme Messages, en ont besoin)
 
 // ---------- Menus déroulants aux couleurs de l'app ----------
 // Chaque <select> est doublé d'un bouton et d'une liste stylés ; le <select> (caché) garde la valeur, les
@@ -6348,8 +6365,11 @@ pageScroll().addEventListener("scroll", () => {
 
 // ---------- Défis entre amis (en ligne, voir app/online.py) ----------
 // Onglet Défis : visible seulement quand le service en ligne est branché dans cette version
-api("/api/online").then((me) => { document.querySelector("[data-nav=defis]").hidden = !me.configured; })
-  .catch(() => { document.querySelector("[data-nav=defis]").hidden = true; });
+api("/api/online").then((me) => {
+  document.querySelector("[data-nav=defis]").hidden = !me.configured;
+  document.querySelector("[data-nav=messages]").hidden = !me.configured;
+  if (me.connected && me.profile) refreshMessagesBadge();
+}).catch(() => { document.querySelector("[data-nav=defis]").hidden = true; });
 async function openOnline() {
   state.course = null;
   setCrumbs();
@@ -6490,16 +6510,19 @@ $("#online-challenges").addEventListener("click", async (e) => {
   const play = e.target.closest("[data-play-challenge]");
   if (!play) return;
   try {
-    const c = await api(`/api/online/challenges/${play.dataset.playChallenge}`);
-    if (c.time_limit && !await askConfirm(`Ce défi se joue en ${Math.round(c.time_limit / 60)} min chrono, en une seule fois. Prêt ?`,
-      { ok: "C'est parti" })) return;
-    const quiz = { id: null, online: c.id, started: Date.now(), title: `Défi · ${c.title}`, questions: c.questions,
-                   course_name: c.subject || "", timeLimit: c.time_limit || null };
-    startQuiz(quiz, shuffle(c.questions), { back: "#/defis" });
+    await playChallenge(play.dataset.playChallenge, "#/defis");
   } catch (err) {
     setStatus("#online-challenge-status", err.message, false);
   }
 });
+async function playChallenge(id, back) {
+  const c = await api(`/api/online/challenges/${id}`);
+  if (c.time_limit && !await askConfirm(`Ce défi se joue en ${Math.round(c.time_limit / 60)} min chrono, en une seule fois. Prêt ?`,
+    { ok: "C'est parti" })) return;
+  const quiz = { id: null, online: c.id, started: Date.now(), title: `Défi · ${c.title}`, questions: c.questions,
+                 course_name: c.subject || "", timeLimit: c.time_limit || null };
+  startQuiz(quiz, shuffle(c.questions), { back });
+}
 
 async function renderFriends() {
   let data;
@@ -6536,4 +6559,339 @@ $("#online-friends").addEventListener("click", async (e) => {
     await api(`/api/online/friends/${remove.dataset.removeFriend}`, { method: "DELETE" }).catch(() => {});
   }
   if (accept || remove) { renderFriends(); renderChallenges(); }
+});
+
+
+// ---------- Messages entre amis : conversations à deux et groupes (voir app/online.py) ----------
+// Les nouveaux messages arrivent en quelques secondes tant que la conversation est ouverte ; ailleurs, une pastille
+// sur l'onglet Messages dit combien il y en a.
+const msg = { rooms: [], room: null, last: "", timer: null, friends: [], me: null };
+const MSG_KINDS = { quiz: "Quiz", cards: "Flashcards", course: "Cours", challenge: "Défi", result: "Résultat" };
+const avatarColor = (text) => ["#B4532A", "#2F7D4F", "#5B6CB5", "#8A6D3B", "#9C4F8F", "#3E7F8C"][
+  [...String(text)].reduce((n, c) => n + c.charCodeAt(0), 0) % 6];
+const avatar = (name) => `<span class="msg-avatar" style="background:${avatarColor(name)}">${escapeHtml((name || "?").slice(0, 2).toUpperCase())}</span>`;
+const msgTime = (at) => {
+  const d = new Date(at);
+  const today = new Date().toDateString() === d.toDateString();
+  return today ? d.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })
+    : d.toLocaleDateString("fr-FR", { day: "numeric", month: "short" });
+};
+
+async function refreshMessagesBadge() {
+  const { unread } = await api("/api/online/unread").catch(() => ({ unread: 0 }));
+  $("#messages-badge").hidden = !unread;
+  $("#messages-badge").textContent = unread > 99 ? "99+" : unread;
+}
+setInterval(() => { if (!document.querySelector("[data-nav=messages]").hidden && $("#view-messages").hidden) refreshMessagesBadge(); }, 30000);
+
+async function openMessages(roomId = "") {
+  show("messages");
+  clearInterval(msg.timer);
+  const me = await api("/api/online").catch(() => ({}));
+  msg.me = me.profile;
+  const ready = me.connected && me.profile;
+  $("#msg-off").hidden = Boolean(ready);
+  $("#msg-app").hidden = !ready;
+  if (!ready) return;
+  await loadRooms();
+  if (roomId) await openRoom(roomId);
+  else { msg.room = null; $("#msg-room").hidden = true; $("#msg-empty").hidden = false; $("#msg-app").classList.remove("in-room"); }
+  // Tant que la page est ouverte : nouveaux messages toutes les 4 s, liste des conversations toutes les 12 s
+  let tick = 0;
+  msg.timer = setInterval(async () => {
+    if ($("#view-messages").hidden) return clearInterval(msg.timer);
+    if (msg.room) await pullMessages().catch(() => {});
+    if (++tick % 3 === 0) await loadRooms().catch(() => {});
+  }, 4000);
+}
+
+async function loadRooms() {
+  try {
+    msg.rooms = await api("/api/online/rooms");
+  } catch (err) {
+    return setStatus("#msg-status", err.message, false);
+  }
+  const unread = msg.rooms.reduce((n, r) => n + (r.id === msg.room?.id ? 0 : r.unread), 0);
+  $("#messages-badge").hidden = !unread;
+  $("#messages-badge").textContent = unread;
+  $("#msg-rooms").innerHTML = msg.rooms.length ? msg.rooms.map((r) => `
+    <li><a class="msg-room-item${r.id === msg.room?.id ? " on" : ""}" href="#/messages/${r.id}">
+      ${avatar(r.name)}
+      <span class="msg-room-text"><b>${escapeHtml(r.name)}${r.kind === "group" ? ` <small class="muted">· ${r.members.length}</small>` : ""}</b>
+        <small class="muted">${r.last ? `${r.kind === "group" && !r.last.mine ? `${escapeHtml(r.last.pseudo)} : ` : r.last.mine ? "Toi : " : ""}${escapeHtml(r.last.text)}` : "Pas encore de message"}</small></span>
+      ${r.unread && r.id !== msg.room?.id ? `<span class="badge">${r.unread}</span>` : ""}
+    </a></li>`).join("")
+    : `<li class="muted small-text msg-none">Pas encore de conversation : clique sur ＋ pour écrire à un ami ou créer un groupe.</li>`;
+}
+
+async function openRoom(roomId) {
+  const room = msg.rooms.find((r) => r.id === roomId);
+  if (!room) { $("#msg-room").hidden = true; $("#msg-empty").hidden = false; return; }
+  msg.room = room;
+  msg.last = "";
+  $("#msg-app").classList.add("in-room");
+  $("#msg-empty").hidden = true;
+  $("#msg-room").hidden = false;
+  $("#msg-head-avatar").outerHTML = `<span id="msg-head-avatar">${avatar(room.name)}</span>`;
+  $("#msg-head-name").textContent = room.name;
+  $("#msg-head-sub").textContent = room.kind === "group" ? ` · ${room.members.map((m) => m.pseudo).join(", ")}` : "";
+  $("#msg-room-menu").hidden = room.kind !== "group";
+  $("#msg-list").innerHTML = "";
+  await pullMessages();
+  loadRooms();
+  $("#msg-input").focus();
+}
+
+async function pullMessages() {
+  const room = msg.room;
+  const { messages } = await api(`/api/online/rooms/${room.id}/messages${msg.last ? `?after=${encodeURIComponent(msg.last)}` : ""}`);
+  if (msg.room !== room || !messages.length) return renderPinned();
+  const list = $("#msg-list");
+  const atBottom = list.scrollHeight - list.scrollTop - list.clientHeight < 80;
+  msg.last = messages[messages.length - 1].created_at;
+  msg.byId = { ...(msg.byId || {}), ...Object.fromEntries(messages.map((m) => [m.id, m])) };
+  list.insertAdjacentHTML("beforeend", messages.map(messageHtml).join(""));
+  if (atBottom || messages.some((m) => m.mine)) list.scrollTop = list.scrollHeight;
+  renderPinned();
+}
+
+function messageHtml(m) {
+  const group = msg.room?.kind === "group";
+  const who = group && !m.mine ? `<p class="msg-who">${escapeHtml(m.pseudo)}</p>` : "";
+  if (m.kind === "text") {
+    return `<div class="msg-line ${m.mine ? "me" : "them"}">${who}<div class="msg-bubble">${escapeHtml(m.body || "")}</div>
+      <small class="msg-at">${msgTime(m.created_at)}</small></div>`;
+  }
+  const meta = m.meta || {};
+  if (m.kind === "result") {
+    const time = meta.seconds != null ? ` · ${Math.floor(meta.seconds / 60)} min ${String(meta.seconds % 60).padStart(2, "0")}` : "";
+    return `<div class="msg-line ${m.mine ? "me" : "them"}"><div class="msg-card result">
+      <span class="msg-kind">Résultat</span><b>${m.mine ? "Tu as" : `${escapeHtml(m.pseudo)} a`} fait « ${escapeHtml(m.title || "le quiz")} »</b>
+      <span class="msg-score">${meta.score} / ${meta.total}${time}</span></div><small class="msg-at">${msgTime(m.created_at)}</small></div>`;
+  }
+  const details = m.kind === "quiz" ? `${plural(meta.count || 0, "question", "questions")}${meta.course ? ` · ${escapeHtml(meta.course)}` : ""}`
+    : m.kind === "challenge" ? `${plural(meta.count || 0, "question", "questions")}${meta.time_limit ? ` · ⏱ ${Math.round(meta.time_limit / 60)} min` : ""}`
+      : [meta.quizzes ? plural(meta.quizzes, "quiz", "quiz") : "", meta.cards ? plural(meta.cards, "flashcard", "flashcards") : ""].filter(Boolean).join(" · ");
+  const actions = [];
+  if (m.kind === "quiz") actions.push(`<button class="primary small" type="button" data-msg-play="${m.id}">Faire le quiz</button>`);
+  if (m.kind === "challenge") actions.push(`<button class="primary small" type="button" data-msg-challenge="${meta.challenge_id}">Faire le défi</button>`,
+    `<a class="button ghost small" href="#/defis">Classement</a>`);
+  if (["quiz", "cards", "course"].includes(m.kind) && !m.mine) actions.push(`<button class="${m.kind === "quiz" ? "ghost" : "primary"} small" type="button" data-msg-take="${m.id}">Ajouter à mes cours</button>`);
+  if (group) actions.push(`<button class="icon msg-pin" type="button" data-msg-pin="${m.id}" title="Épingler en haut du groupe" aria-label="Épingler">📌</button>`);
+  return `<div class="msg-line ${m.mine ? "me" : "them"}">${who}<div class="msg-card ${m.kind}">
+    <span class="msg-kind">${MSG_KINDS[m.kind] || ""}</span><b>${escapeHtml(m.title || "")}</b>
+    <small class="muted">${details}</small>${m.body ? `<p class="msg-note">« ${escapeHtml(m.body)} »</p>` : ""}
+    <span class="msg-actions">${actions.join("")}</span></div><small class="msg-at">${msgTime(m.created_at)}</small></div>`;
+}
+
+function renderPinned() {
+  const pin = msg.room?.kind === "group" && msg.room.pinned ? msg.byId?.[msg.room.pinned] : null;
+  $("#msg-pinned").hidden = !pin;
+  if (!pin) return;
+  $("#msg-pinned").innerHTML = `📌 <b>Épinglé :</b> ${escapeHtml(MSG_KINDS[pin.kind] || "Message")} · ${escapeHtml(pin.title || pin.body || "")}
+    ${pin.kind === "quiz" ? `<button class="ghost small" type="button" data-msg-play="${pin.id}">Faire le quiz</button>` : ""}
+    ${["quiz", "cards", "course"].includes(pin.kind) && !pin.mine ? `<button class="ghost small" type="button" data-msg-take="${pin.id}">Ajouter à mes cours</button>` : ""}
+    <button class="icon" type="button" data-msg-unpin title="Désépingler" aria-label="Désépingler">✕</button>`;
+}
+
+$("#msg-compose").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const text = $("#msg-input").value.trim();
+  if (!text || !msg.room) return;
+  $("#msg-input").value = "";
+  try {
+    await api(`/api/online/rooms/${msg.room.id}/messages`, jsonBody("POST", { text }));
+    await pullMessages();
+    loadRooms();
+  } catch (err) {
+    $("#msg-input").value = text;
+    setStatus("#msg-status", err.message, false);
+  }
+});
+$("#msg-back").addEventListener("click", () => { location.hash = "#/messages"; });
+
+// Actions sur les messages : faire le quiz, le défi, ajouter à mes cours, épingler
+$("#view-messages").addEventListener("click", async (e) => {
+  const play = e.target.closest("[data-msg-play]")?.dataset.msgPlay;
+  const challenge = e.target.closest("[data-msg-challenge]")?.dataset.msgChallenge;
+  const take = e.target.closest("[data-msg-take]")?.dataset.msgTake;
+  const pin = e.target.closest("[data-msg-pin]")?.dataset.msgPin;
+  try {
+    if (play) {
+      const m = await api(`/api/online/messages/${play}`);
+      const questions = (m.payload?.questions || []).map((q) => ({ ...q }));
+      if (!questions.length) return setStatus("#msg-status", "Ce quiz est vide.", false);
+      const quiz = { id: null, shared: { room: msg.room.id, title: m.title }, started: Date.now(), title: m.title || "Quiz reçu",
+                     questions, course_name: m.payload?.course_name || "" };
+      return startQuiz(quiz, shuffle(questions), { back: `#/messages/${msg.room.id}` });
+    }
+    if (challenge) return await playChallenge(challenge, `#/messages/${msg.room.id}`);
+    if (take) return openTake(take);
+    if (pin) {
+      await api(`/api/online/rooms/${msg.room.id}`, jsonBody("PUT", { pinned: pin }));
+      msg.room.pinned = pin;
+      return renderPinned();
+    }
+    if (e.target.closest("[data-msg-unpin]")) {
+      await api(`/api/online/rooms/${msg.room.id}`, jsonBody("PUT", { unpin: true }));
+      msg.room.pinned = null;
+      return renderPinned();
+    }
+  } catch (err) {
+    setStatus("#msg-status", err.message, false);
+  }
+});
+
+// Menu du groupe : ajouter des amis, renommer, quitter
+$("#msg-room-menu").addEventListener("click", () => { $("#msg-room-pop").hidden = !$("#msg-room-pop").hidden; });
+$("#msg-room-pop").addEventListener("click", async (e) => {
+  const action = e.target.closest("[data-room-action]")?.dataset.roomAction;
+  if (!action) return;
+  $("#msg-room-pop").hidden = true;
+  const room = msg.room;
+  try {
+    if (action === "rename") {
+      const name = await askText("Nom du groupe", room.name);
+      if (!name) return;
+      await api(`/api/online/rooms/${room.id}`, jsonBody("PUT", { name }));
+      $("#msg-head-name").textContent = room.name = name;
+      return loadRooms();
+    }
+    if (action === "leave") {
+      if (!await askConfirm(`Quitter le groupe « ${room.name} » ? Tu ne verras plus ses messages.`)) return;
+      await api(`/api/online/rooms/${room.id}`, { method: "DELETE" });
+      location.hash = "#/messages";
+      return;
+    }
+    if (action === "add") return openRoomDialog(room);
+  } catch (err) {
+    setStatus("#msg-status", err.message, false);
+  }
+});
+
+// Nouvelle conversation : un ami coché → conversation à deux ; plusieurs → groupe (avec un nom)
+$("#msg-new").addEventListener("click", () => openRoomDialog());
+async function openRoomDialog(addTo = null) {
+  let friends = [];
+  try {
+    friends = (await api("/api/online/friends")).friends;
+  } catch (err) {
+    return setStatus("#msg-status", err.message, false);
+  }
+  const inside = new Set((addTo?.members || []).map((m) => m.id));
+  const choices = friends.filter((f) => !inside.has(f.id));
+  msg.addTo = addTo;
+  $("#room-dialog-title").textContent = addTo ? `Ajouter à « ${addTo.name} »` : "Nouvelle conversation";
+  $("#room-dialog-help").textContent = addTo ? "Coche les amis à ajouter au groupe."
+    : "Coche un ami pour lui écrire, ou plusieurs pour créer un groupe de révision.";
+  $("#room-friends").innerHTML = choices.length ? choices.map((f) => `
+    <label class="pick-row room-friend"><input type="checkbox" value="${f.id}">${avatar(f.pseudo)}<b>${escapeHtml(f.pseudo)}</b></label>`).join("")
+    : `<p class="muted">${friends.length ? "Tous tes amis sont déjà dans ce groupe." : "Pas encore d'amis : ajoute-les avec leur code ami dans l'onglet Défis."}</p>`;
+  $("#room-name").value = "";
+  $("#room-status").hidden = true;
+  syncRoomDialog();
+  $("#room-dialog").showModal();
+}
+function syncRoomDialog() {
+  const n = $("#room-friends").querySelectorAll("input:checked").length;
+  $("#room-name-field").hidden = Boolean(msg.addTo) || n < 2;
+  $("#room-go").textContent = msg.addTo ? "Ajouter" : n > 1 ? "Créer le groupe" : "Écrire";
+  $("#room-go").disabled = !n;
+}
+$("#room-friends").addEventListener("change", syncRoomDialog);
+$("#room-cancel").addEventListener("click", () => $("#room-dialog").close());
+$("#room-go").addEventListener("click", async () => {
+  const ids = [...$("#room-friends").querySelectorAll("input:checked")].map((x) => x.value);
+  if (!ids.length) return;
+  try {
+    if (msg.addTo) {
+      await api(`/api/online/rooms/${msg.addTo.id}`, jsonBody("PUT", { add: ids }));
+      $("#room-dialog").close();
+      await loadRooms();
+      return openRoom(msg.addTo.id);
+    }
+    const name = $("#room-name").value.trim();
+    if (ids.length > 1 && !name) return setStatus("#room-status", "Donne un nom au groupe.", false);
+    const room = await api("/api/online/rooms", jsonBody("POST", ids.length > 1 ? { name, members: ids } : { friend_id: ids[0] }));
+    $("#room-dialog").close();
+    await loadRooms();
+    location.hash = `#/messages/${room.id}`;
+  } catch (err) {
+    setStatus("#room-status", err.message, false);
+  }
+});
+
+// Envoyer un quiz, des flashcards, un cours entier ou un défi
+$("#msg-attach").addEventListener("click", () => { $("#msg-attach-pop").hidden = !$("#msg-attach-pop").hidden; });
+document.addEventListener("click", (e) => {
+  if (!e.target.closest("#msg-attach, #msg-attach-pop")) $("#msg-attach-pop").hidden = true;
+  if (!e.target.closest("#msg-room-menu, #msg-room-pop")) $("#msg-room-pop").hidden = true;
+});
+$("#msg-attach-pop").addEventListener("click", async (e) => {
+  const kind = e.target.closest("[data-attach]")?.dataset.attach;
+  if (!kind) return;
+  $("#msg-attach-pop").hidden = true;
+  const [quizzes, courses] = await Promise.all([api("/api/quizzes").catch(() => []), api("/api/courses").catch(() => [])]);
+  const names = Object.fromEntries(courses.map((c) => [c.id, c.name]));
+  const quizOptions = quizzes.filter((q) => q.count).map((q) => `<option value="quiz:${q.id}">${escapeHtml(names[q.course_id] ? `${names[q.course_id]} · ${q.title}` : q.title)} (${q.count})</option>`).join("");
+  // Un cours entier, ou un seul de ses fichiers (onglets) s'il en a plusieurs
+  const courseOptions = courses.map((c) => `<option value="course:${c.id}:">${escapeHtml(c.name)}</option>`
+    + (c.files.length > 1 ? c.files.map((f) => `<option value="course:${c.id}:${f.id}">   ${escapeHtml(c.name)} · ${escapeHtml(fileLabel(f))}</option>`).join("") : "")).join("");
+  msg.shareKind = kind;
+  $("#share-title").textContent = { quiz: "Envoyer un quiz", cards: "Envoyer des flashcards", course: "Envoyer un cours entier", challenge: "Lancer un défi" }[kind];
+  $("#share-source-label").textContent = kind === "quiz" ? "Quel quiz ?" : kind === "challenge" ? "Sur quoi ?" : "Quel cours ?";
+  $("#share-source").innerHTML = kind === "quiz" ? quizOptions || `<option value="">Pas encore de quiz</option>`
+    : kind === "challenge" ? `<optgroup label="Tout un cours">${courses.map((c) => `<option value="course:${c.id}:">${escapeHtml(c.name)}</option>`).join("")}</optgroup><optgroup label="Un quiz">${quizOptions}</optgroup>`
+      : courseOptions || `<option value="">Pas encore de cours</option>`;
+  $("#share-challenge-opts").hidden = kind !== "challenge";
+  $("#share-text").value = "";
+  $("#share-status").hidden = true;
+  $("#share-dialog").showModal();
+});
+$("#share-cancel").addEventListener("click", () => $("#share-dialog").close());
+$("#share-go").addEventListener("click", async () => {
+  const [type, id, file = ""] = $("#share-source").value.split(":");
+  if (!id) return;
+  const kind = msg.shareKind;
+  const body = { kind, text: $("#share-text").value.trim(), ...(type === "quiz" ? { quiz_id: id } : { course_id: id, file_id: file }) };
+  if (kind === "challenge") Object.assign(body, { size: Number($("#share-size").value), time_limit: Number($("#share-time").value) || null });
+  $("#share-go").disabled = true;
+  try {
+    await api(`/api/online/rooms/${msg.room.id}/messages`, jsonBody("POST", body));
+    $("#share-dialog").close();
+    await pullMessages();
+    loadRooms();
+  } catch (err) {
+    setStatus("#share-status", err.message, false);
+  } finally {
+    $("#share-go").disabled = false;
+  }
+});
+
+// Ajouter à mes cours ce qu'on m'a envoyé : dans un de mes cours, ou un nouveau
+async function openTake(messageId) {
+  const m = msg.byId?.[messageId];
+  const courses = await api("/api/courses").catch(() => []);
+  const guess = (m?.meta?.course || m?.title || "").toLowerCase();
+  const best = courses.find((c) => guess && (c.name.toLowerCase() === guess || guess.includes(c.name.toLowerCase())));
+  msg.taking = messageId;
+  $("#take-title").textContent = `Ajouter « ${m?.title || "ce partage"} » à mes cours`;
+  $("#take-course").innerHTML = `<option value="">Un nouveau cours « ${escapeHtml(m?.meta?.course || m?.title || "Cours reçu")} »</option>`
+    + courses.map((c) => `<option value="${c.id}" ${best?.id === c.id ? "selected" : ""}>${escapeHtml(c.name)}</option>`).join("");
+  $("#take-status").hidden = true;
+  $("#take-dialog").showModal();
+}
+$("#take-cancel").addEventListener("click", () => $("#take-dialog").close());
+$("#take-go").addEventListener("click", async () => {
+  const m = msg.byId?.[msg.taking];
+  const course = $("#take-course").value;
+  try {
+    const done = await api(`/api/online/messages/${msg.taking}/import`, jsonBody("POST", course ? { course_id: course }
+      : { new_course: m?.meta?.course || m?.title || "Cours reçu" }));
+    $("#take-dialog").close();
+    const parts = [done.questions ? plural(done.questions, "question", "questions") : "", done.cards ? plural(done.cards, "flashcard", "flashcards") : ""].filter(Boolean);
+    setStatus("#msg-status", parts.length ? `Ajouté à « ${done.course_name} » : ${parts.join(" et ")}.` : `Rien de nouveau : tout était déjà dans « ${done.course_name} ».`, true);
+  } catch (err) {
+    setStatus("#take-status", err.message, false);
+  }
 });

@@ -2412,6 +2412,191 @@ async def online_score(challenge_id: str, body: ChallengeScoreIn) -> dict:
     return {"ok": True}
 
 
+# ---------- Messages entre amis : conversations, groupes, quiz et flashcards envoyés ----------
+
+class RoomIn(BaseModel):
+    friend_id: str = ""            # conversation à deux…
+    name: str = ""                 # …ou groupe : son nom et ses membres
+    members: list[str] = []
+
+
+class RoomEditIn(BaseModel):
+    name: str | None = None
+    pinned: str | None = None
+    unpin: bool = False
+    add: list[str] = []
+
+
+class MessageIn(BaseModel):
+    text: str = ""
+    kind: str = "text"             # text, quiz, cards, course, challenge, result
+    quiz_id: str = ""
+    course_id: str = ""
+    file_id: str = ""              # flashcards / cours : seulement ce fichier de la matière
+    size: int = online.CHALLENGE_SIZE
+    time_limit: int | None = None
+    score: int = 0                 # résultat d'un quiz reçu
+    total: int = 0
+    seconds: int | None = None
+    title: str = ""
+
+
+class ImportIn(BaseModel):
+    course_id: str = ""            # un de mes cours…
+    new_course: str = ""           # …ou un nouveau cours, de ce nom
+
+
+_SHARED_QUESTION = ("type", "kind", "question", "choices", "answer", "explanation", "source", "key_terms")
+_SHARED_CARD = ("front", "back", "source", "scope")
+
+
+def _shared_quiz(quiz: dict) -> dict:
+    return {"title": quiz.get("title") or "Quiz", "course_name": quiz.get("course_name") or "",
+            "scope": quiz.get("scope") or [],
+            "questions": [{k: q.get(k) for k in _SHARED_QUESTION if q.get(k) is not None} for q in quiz.get("questions", [])]}
+
+
+def _shared_cards(course: dict, file_id: str = "") -> list[dict]:
+    cards = (store.get_doc(course["id"], "cards") or {}).get("cards", [])
+    if file_id:
+        cards = [c for c in cards if _file_of(course, c) == file_id]
+    return [{k: c.get(k) for k in _SHARED_CARD if c.get(k)} for c in cards]
+
+
+def _shared_label(course: dict, file_id: str) -> str:
+    f = next((x for x in course["files"] if x["id"] == file_id), None) if file_id else None
+    return (f.get("title") or Path(f["name"]).stem) if f else course["name"]
+
+
+@app.get("/api/online/rooms")
+async def online_rooms() -> list[dict]:
+    return await _online_call(_online().rooms())
+
+
+@app.get("/api/online/unread")
+async def online_unread() -> dict:
+    if not online.configured():
+        return {"unread": 0}
+    return {"unread": await _online().unread()}
+
+
+@app.post("/api/online/rooms")
+async def online_new_room(body: RoomIn) -> dict:
+    if body.friend_id:
+        return await _online_call(_online().direct(body.friend_id))
+    return await _online_call(_online().group(body.name, body.members))
+
+
+@app.put("/api/online/rooms/{room_id}")
+async def online_edit_room(room_id: str, body: RoomEditIn) -> dict:
+    client = _online()
+    await _online_call(client.update_room(room_id, body.name, body.pinned, body.unpin))
+    if body.add:
+        await _online_call(client.add_members(room_id, body.add))
+    return {"ok": True}
+
+
+@app.delete("/api/online/rooms/{room_id}")
+async def online_leave_room(room_id: str) -> dict:
+    await _online_call(_online().leave(room_id))
+    return {"ok": True}
+
+
+@app.get("/api/online/rooms/{room_id}/messages")
+async def online_messages(room_id: str, after: str = "") -> dict:
+    return await _online_call(_online().messages(room_id, after))
+
+
+@app.post("/api/online/rooms/{room_id}/messages")
+async def online_send(room_id: str, body: MessageIn) -> dict:
+    """Un message : du texte, ou un de mes quiz, mes flashcards, tout un cours, un défi, un résultat."""
+    client = _online()
+    if body.kind == "text":
+        return await _online_call(client.send(room_id, body.text))
+    if body.kind == "quiz":
+        quiz = _shared_quiz(store.get_quiz(body.quiz_id))
+        if not quiz["questions"]:
+            raise HTTPException(400, "Ce quiz n'a pas de questions.")
+        return await _online_call(client.send(room_id, body.text, "quiz", quiz["title"],
+                                              {"count": len(quiz["questions"]), "course": quiz["course_name"]}, quiz))
+    if body.kind in ("cards", "course"):
+        course = store.get_course(body.course_id)
+        label = _shared_label(course, body.file_id)
+        cards = _shared_cards(course, body.file_id)
+        quizzes = []
+        if body.kind == "course":
+            quizzes = [_shared_quiz(store.get_quiz(q["id"])) for q in store.list_quizzes(body.course_id)
+                       if not body.file_id or _file_of(course, q) == body.file_id]
+        if not cards and not quizzes:
+            raise HTTPException(400, "Rien à envoyer : ce cours n'a pas encore de flashcards ni de quiz.")
+        meta = {"cards": len(cards), "quizzes": len(quizzes), "questions": sum(len(q["questions"]) for q in quizzes),
+                "course": course["name"]}
+        return await _online_call(client.send(room_id, body.text, body.kind, label, meta,
+                                              {"course_name": label, "cards": cards, "quizzes": quizzes}))
+    if body.kind == "challenge":
+        if body.course_id:
+            course = store.get_course(body.course_id)
+            source = {"title": course["name"], "course_name": course["name"],
+                      "questions": [q for summary in store.list_quizzes(body.course_id)
+                                    for q in store.get_quiz(summary["id"]).get("questions", [])]}
+        else:
+            source = store.get_quiz(body.quiz_id)
+        challenge = await _online_call(client.create_challenge(source, body.size, body.time_limit))
+        meta = {"challenge_id": challenge.get("id"), "count": len(challenge.get("questions") or []),
+                "time_limit": challenge.get("time_limit"), "course": source.get("course_name") or ""}
+        return await _online_call(client.send(room_id, body.text, "challenge", challenge.get("title") or "Défi", meta))
+    if body.kind == "result":
+        meta = {"score": body.score, "total": body.total, "seconds": body.seconds}
+        return await _online_call(client.send(room_id, "", "result", body.title, meta))
+    raise HTTPException(400, "Type de message inconnu.")
+
+
+@app.get("/api/online/messages/{message_id}")
+async def online_message(message_id: str) -> dict:
+    """Le contenu d'un quiz, de flashcards ou d'un cours reçus (pour faire le quiz ou l'ajouter à ses cours)."""
+    return await _online_call(_online().payload(message_id))
+
+
+@app.post("/api/online/messages/{message_id}/import")
+async def online_import(message_id: str, body: ImportIn) -> dict:
+    """Ajoute à mes cours un quiz, des flashcards ou un cours reçus (sans doublon de cartes)."""
+    message = await _online_call(_online().payload(message_id))
+    payload = message.get("payload") or {}
+    if message["kind"] not in ("quiz", "cards", "course") or not payload:
+        raise HTTPException(400, "Rien à ajouter dans ce message.")
+    if body.course_id:
+        course = store.get_course(body.course_id)
+    else:
+        course = store.create_course(" ".join(body.new_course.split())[:120] or payload.get("course_name") or message.get("title") or "Cours reçu")
+    quizzes = [payload] if message["kind"] == "quiz" else payload.get("quizzes") or []
+    added_q = 0
+    for quiz in quizzes:
+        questions = [q for q in quiz.get("questions") or [] if q.get("question")]
+        if not questions:
+            continue
+        store.save_quiz({"course_id": course["id"], "course_name": course["name"], "course_version": course["version"],
+                         "title": str(quiz.get("title") or "Quiz reçu")[:120], "custom_title": True,
+                         "scope": quiz.get("scope") or [], "sources": [], "provider": "partage", "difficulty": "moyen",
+                         "questions": questions})
+        added_q += len(questions)
+    added_c = 0
+    cards = payload.get("cards") or []
+    if cards:
+        deck = store.get_doc(course["id"], "cards") or {"course_id": course["id"], "course_name": course["name"], "cards": []}
+        known = {str(c.get("front", "")).strip().lower() for c in deck["cards"]}
+        for card in cards:
+            front = str(card.get("front", "")).strip()
+            if not front or front.lower() in known:
+                continue
+            known.add(front.lower())
+            deck["cards"].append({"id": uuid.uuid4().hex[:8], "front": front, "back": str(card.get("back", "")),
+                                  "source": card.get("source", ""), "scope": card.get("scope") or [], "status": "new",
+                                  "reviews": 0, "last_reviewed": None, "created_at": datetime.now().isoformat(timespec="seconds")})
+            added_c += 1
+        store.save_doc(course["id"], "cards", deck)
+    return {"course_id": course["id"], "course_name": course["name"], "questions": added_q, "cards": added_c}
+
+
 @app.post("/api/quit")
 async def quit_app() -> dict:
     """Arrête l'app Mac (après une mise à jour). Réponse d'abord, puis arrêt net un instant plus tard : les données
