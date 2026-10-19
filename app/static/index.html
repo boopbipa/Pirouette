@@ -24,8 +24,7 @@
       <a href="#/" data-nav="accueil">Accueil</a>
       <a href="#/cours" data-nav="cours">Mes cours</a>
       <a href="#/reviser" data-nav="reviser">Réviser</a>
-      <a href="#/defis" data-nav="defis">Défis</a>
-      <a href="#/messages" data-nav="messages" hidden>Messages<span class="nav-badge" id="messages-badge" hidden></span></a>
+      <a href="#/social" data-nav="social" hidden>Social<span class="nav-badge" id="messages-badge" hidden></span></a>
       <a href="#/reglages" data-nav="reglages">Réglages</a>
       <button type="button" class="nav-feedback" id="feedback-btn" title="Une idée, un bug ? Écris-moi">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="M4 5h16v11H9l-5 4z"/></svg>Feedback</button>
@@ -90,10 +89,16 @@
 
     <!-- Messages entre amis : conversations à deux et groupes ; on s'y envoie quiz, flashcards, cours et défis -->
     <section id="view-messages" class="view" hidden>
+      <!-- Social : deux sous-onglets, Messages et Défis et amis -->
+      <nav class="filters social-tabs" aria-label="Social">
+        <a href="#/social" data-social-tab="messages">Messages</a>
+        <a href="#/social/defis" data-social-tab="defis">Défis et amis</a>
+      </nav>
       <div class="card" id="msg-off" hidden>
         <h2>Messages</h2>
-        <p class="muted">Pour écrire à tes amis et leur envoyer tes quiz, connecte-toi d'abord dans l'onglet
-          <a href="#/defis">Défis</a> (Google ou un simple pseudo), puis ajoute tes amis avec leur code.</p>
+        <p class="muted">Pour écrire à tes amis et leur envoyer tes quiz, connecte-toi d'abord dans
+          <a href="#/social/defis">Défis et amis</a> (Google ou un simple pseudo), puis ajoute tes amis avec leur code.</p>
+        <a class="button primary" href="#/social/defis">Me connecter</a>
       </div>
       <div class="msg-app" id="msg-app" hidden>
         <aside class="msg-side">
@@ -139,6 +144,11 @@
 
     <!-- Défis entre amis (en ligne) : un compte, des amis, 10 questions à faire chacun -->
     <section id="view-online" class="view" hidden>
+      <!-- Social : deux sous-onglets, Messages et Défis et amis -->
+      <nav class="filters social-tabs" aria-label="Social">
+        <a href="#/social" data-social-tab="messages">Messages</a>
+        <a href="#/social/defis" data-social-tab="defis">Défis et amis</a>
+      </nav>
       <h1>Défis entre amis</h1>
       <p class="muted" id="online-intro">Lance un défi tiré d'un de tes quiz ou de tout un cours (5 à 20 questions, avec ou sans chrono) : tes amis le font aussi, et vous comparez vos scores.
         Seuls ton pseudo, les questions du défi et les scores sont en ligne : tes cours restent sur ton ordinateur.</p>

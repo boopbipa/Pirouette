@@ -89,14 +89,20 @@ async function route() {
   const match = hash.match(/^#\/cours\/([0-9a-f]{12})(?:\/(nouveau\/)?([a-z]+))?/);
   // Lien actif du menu du haut
   const section = !hash || hash === "#/" ? "accueil"
-    : hash.startsWith("#/cours") || hash.startsWith("#/nouveau-cours") ? "cours" : hash.slice(2).split("/")[0];
+    : hash.startsWith("#/cours") || hash.startsWith("#/nouveau-cours") ? "cours"
+      : /^#\/(defis|messages|social)/.test(hash) ? "social" : hash.slice(2).split("/")[0];
+  // Sous-onglet actif de Social
+  const socialTab = /^#\/(defis|social\/defis)/.test(hash) ? "defis" : "messages";
+  document.querySelectorAll("[data-social-tab]").forEach((a) => a.classList.toggle("active", a.dataset.socialTab === socialTab));
   document.querySelectorAll("[data-nav]").forEach((a) => a.classList.toggle("on", a.dataset.nav === section));
   try {
     if (match && match[2]) await openCreate(match[1], match[3] === "quiz" ? "quiz" : "cartes");
     else if (match) await openCourse(match[1], match[3]);
     else if (hash.startsWith("#/reglages")) await openSettings();
-    else if (hash.startsWith("#/defis")) await openOnline();
+    // Social : Messages (#/social, #/social/<conversation>) et Défis et amis (#/social/defis) ; anciens liens gardés
+    else if (hash.startsWith("#/defis") || hash.startsWith("#/social/defis")) await openOnline();
     else if (hash.startsWith("#/messages")) await openMessages(hash.split("/")[2] || "");
+    else if (hash.startsWith("#/social")) await openMessages(hash.split("/")[2] || "");
     else if (hash.match(/^#\/reviser\/(tout|dossier|cours)/)) await openReviewScope(...hash.slice(10).split("/"));
     else if (hash.startsWith("#/reviser")) await openReview();
     else if (hash.startsWith("#/nouveau-cours")) {
@@ -3448,7 +3454,7 @@ function sessionCrumbs(back, title) {
   if (back.startsWith("#/reviser/") && state.reviewScope) {
     return [{ label: "Réviser", href: "#/reviser" }, { label: state.reviewScope.name, href: back }, { label: title }];
   }
-  if (back === "#/defis") return [{ label: "Défis", href: "#/defis" }, { label: title }];
+  if (back === "#/defis") return [{ label: "Social", href: "#/social" }, { label: "Défis", href: "#/social/defis" }, { label: title }];
   if (back.startsWith("#/messages")) return [{ label: "Messages", href: back }, { label: title }];
   return [back === "#/" ? { label: "Accueil", href: "#/" } : { label: "Réviser", href: "#/reviser" }, { label: title }];
 }
@@ -4598,6 +4604,9 @@ const WELCOME = [
 ];
 // Les nouveautés de chaque version (le carton « Quoi de neuf » ne s'affiche que si la version en a)
 const WHATS_NEW = {
+  "0.58.4": [
+    ["👥", "Onglet Social", "Messages, défis et amis réunis dans un seul onglet, en haut de l'app"],
+  ],
   "0.58.3": [
     ["⟳", "Mises à jour sans quitter (Windows)", "La nouvelle version se télécharge seule et s'installe quand tu fermes Pirouette, comme d'habitude"],
   ],
@@ -6453,10 +6462,9 @@ pageScroll().addEventListener("scroll", () => {
 // ---------- Défis entre amis (en ligne, voir app/online.py) ----------
 // Onglet Défis : visible seulement quand le service en ligne est branché dans cette version
 api("/api/online").then((me) => {
-  document.querySelector("[data-nav=defis]").hidden = !me.configured;
-  document.querySelector("[data-nav=messages]").hidden = !me.configured;
+  document.querySelector("[data-nav=social]").hidden = !me.configured;
   if (me.connected && me.profile) refreshMessagesBadge();
-}).catch(() => { document.querySelector("[data-nav=defis]").hidden = true; });
+}).catch(() => { document.querySelector("[data-nav=social]").hidden = true; });
 async function openOnline() {
   state.course = null;
   setCrumbs();
@@ -6669,7 +6677,7 @@ async function refreshMessagesBadge() {
   $("#messages-badge").hidden = !unread;
   $("#messages-badge").textContent = unread > 99 ? "99+" : unread;
 }
-setInterval(() => { if (!document.querySelector("[data-nav=messages]").hidden && $("#view-messages").hidden) refreshMessagesBadge(); }, 30000);
+setInterval(() => { if (!document.querySelector("[data-nav=social]").hidden && $("#view-messages").hidden) refreshMessagesBadge(); }, 30000);
 
 async function openMessages(roomId = "") {
   show("messages");
@@ -6762,7 +6770,7 @@ function messageHtml(m) {
   const actions = [];
   if (m.kind === "quiz") actions.push(`<button class="primary small" type="button" data-msg-play="${m.id}">Faire le quiz</button>`);
   if (m.kind === "challenge") actions.push(`<button class="primary small" type="button" data-msg-challenge="${meta.challenge_id}">Faire le défi</button>`,
-    `<a class="button ghost small" href="#/defis">Classement</a>`);
+    `<a class="button ghost small" href="#/social/defis">Classement</a>`);
   if (["quiz", "cards", "course"].includes(m.kind) && !m.mine) actions.push(`<button class="${m.kind === "quiz" ? "ghost" : "primary"} small" type="button" data-msg-take="${m.id}">Ajouter à mes cours</button>`);
   if (group) actions.push(`<button class="icon msg-pin" type="button" data-msg-pin="${m.id}" title="Épingler en haut du groupe" aria-label="Épingler">📌</button>`);
   return `<div class="msg-line ${m.mine ? "me" : "them"}">${who}<div class="msg-card ${m.kind}">
@@ -6795,7 +6803,7 @@ $("#msg-compose").addEventListener("submit", async (e) => {
     setStatus("#msg-status", err.message, false);
   }
 });
-$("#msg-back").addEventListener("click", () => { location.hash = "#/messages"; });
+$("#msg-back").addEventListener("click", () => { location.hash = "#/social"; });
 
 // Actions sur les messages : faire le quiz, le défi, ajouter à mes cours, épingler
 $("#view-messages").addEventListener("click", async (e) => {
@@ -6847,7 +6855,7 @@ $("#msg-room-pop").addEventListener("click", async (e) => {
     if (action === "leave") {
       if (!await askConfirm(`Quitter le groupe « ${room.name} » ? Tu ne verras plus ses messages.`)) return;
       await api(`/api/online/rooms/${room.id}`, { method: "DELETE" });
-      location.hash = "#/messages";
+      location.hash = "#/social";
       return;
     }
     if (action === "add") return openRoomDialog(room);
