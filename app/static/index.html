@@ -17,6 +17,7 @@
 <body>
   <svg width="0" height="0" style="position:absolute" aria-hidden="true">
     <symbol id="logo" viewBox="0 0 100 100"><path fill="currentColor" d="M17 47 C15 36 15 22 18.5 11.5 C19.5 10 21 10 22.5 11 C29 15.5 36 21 41.5 26.5 C47 25.2 53 25.2 58.5 26.5 C64 21 71 15.5 77.5 11 C79 10 80.5 10 81.5 11.5 C85 22 85 36 83 47 C87 55 87.5 63 84 71 C78 83 65 89 50 89 C35 89 22 83 16 71 C12.5 63 13 55 17 47 Z"/></symbol>
+    <symbol id="chat-cat" viewBox="0 0 100 100"><path fill="currentColor" d="M17 47 C15 36 15 22 18.5 11.5 C19.5 10 21 10 22.5 11 C29 15.5 36 21 41.5 26.5 C47 25.2 53 25.2 58.5 26.5 C64 21 71 15.5 77.5 11 C79 10 80.5 10 81.5 11.5 C85 22 85 36 83 47 C87 55 87.5 63 84 71 C78 83 65 89 50 89 C35 89 22 83 16 71 C12.5 63 13 55 17 47 Z"/><path fill="currentColor" d="M22 72 L10 94 L42 84 Z"/><g fill="var(--accent)"><circle cx="35" cy="60" r="5.5"/><circle cx="50" cy="60" r="5.5"/><circle cx="65" cy="60" r="5.5"/></g></symbol>
   </svg>
   <header class="topbar">
     <a href="#/" class="brand"><span class="app-icon"><svg aria-hidden="true"><use href="#logo"/></svg><span class="beta-badge">bêta</span></span><span class="brand-name">Pirouette</span></a>
@@ -139,8 +140,8 @@
               <option value="15">15 questions</option><option value="20">20 questions</option>
             </select>
             <select class="chip" id="online-time" aria-label="Chrono">
-              <option value="">Sans chrono</option><option value="120">⏱ 2 min</option><option value="300">⏱ 5 min</option>
-              <option value="600">⏱ 10 min</option><option value="900">⏱ 15 min</option>
+              <option value="">Sans chrono</option><option value="120">2 min</option><option value="300">5 min</option>
+              <option value="600">10 min</option><option value="900">15 min</option>
             </select>
             <button class="primary small" type="button" id="online-launch">Défier mes amis</button>
           </div>
@@ -1325,7 +1326,7 @@
         <p class="status" id="chat-panel-status" hidden></p>
       </div>
     </div>
-    <button class="chat-bubble" id="chat-bubble" type="button" aria-label="Messages">💬<span class="nav-badge chat-badge" id="chat-badge" hidden></span></button>
+    <button class="chat-bubble" id="chat-bubble" type="button" aria-label="Messages"><svg aria-hidden="true"><use href="#chat-cat"/></svg><span class="nav-badge chat-badge" id="chat-badge" hidden></span></button>
   </div>
 
   <!-- Un message vient d'arriver : un petit mot cliquable en bas de l'écran -->

@@ -43,6 +43,35 @@ const ICON_ALERT = svgIcon('<path d="M4 5.5A1.5 1.5 0 0 1 5.5 4h13A1.5 1.5 0 0 1
 const ICON_SHARE = svgIcon('<path d="M12 15V4M8 8l4-4 4 4"/><path d="M5 12v6.5A1.5 1.5 0 0 0 6.5 20h11a1.5 1.5 0 0 0 1.5-1.5V12"/>');
 const ICON_FILE = svgIcon('<path d="M14 3H6.5A1.5 1.5 0 0 0 5 4.5v15A1.5 1.5 0 0 0 6.5 21h11a1.5 1.5 0 0 0 1.5-1.5V8z"/><path d="M14 3v5h5M9 13h6M9 17h4"/>');
 const ICON_TRASH = svgIcon('<path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/>');
+// Icônes au trait, comme le reste de l'app : elles remplacent les emojis en couleur (menus, nouveautés, chrono…)
+const ICONS = {
+  msg: '<path d="M5 5h14a1.5 1.5 0 0 1 1.5 1.5v9A1.5 1.5 0 0 1 19 17h-8l-4.5 3.5V17H5a1.5 1.5 0 0 1-1.5-1.5v-9A1.5 1.5 0 0 1 5 5z"/>',
+  book: '<path d="M12 7v13"/><path d="M3.5 5.5A1.5 1.5 0 0 1 5 4h3.5A3.5 3.5 0 0 1 12 7.5 3.5 3.5 0 0 1 15.5 4H19a1.5 1.5 0 0 1 1.5 1.5v11A1.5 1.5 0 0 1 19 18h-4.5a2.5 2.5 0 0 0-2.5 2.5A2.5 2.5 0 0 0 9.5 18H5a1.5 1.5 0 0 1-1.5-1.5z"/>',
+  swords: '<path d="M14.5 17.5 3 6V3h3l11.5 11.5M13 19l6-6M16 16l4 4M19 21l2-2M14.5 6.5 18 3h3v3l-3.5 3.5M5 14l4 4M7 17l-3 3M3 19l2 2"/>',
+  bell: '<path d="M6 9a6 6 0 0 1 12 0c0 6 2.5 8 2.5 8h-17S6 15 6 9"/><path d="M10.3 20.5a2 2 0 0 0 3.4 0"/>',
+  plug: '<path d="M12 21v-4M9 8V3M15 8V3M18 8v4a5 5 0 0 1-5 5h-2a5 5 0 0 1-5-5V8z"/>',
+  pulse: '<path d="M21 12h-4l-3 8-4-16-3 8H3"/>',
+  dice: '<rect x="3.5" y="3.5" width="17" height="17" rx="3"/><path d="M8.5 8.5h.01M12 12h.01M15.5 15.5h.01" stroke-width="2.6"/>',
+  users: '<path d="M15.5 20v-1.5a4 4 0 0 0-4-4h-5a4 4 0 0 0-4 4V20"/><circle cx="9" cy="7.5" r="3.5"/><path d="M21.5 20v-1.5a4 4 0 0 0-3-3.9M15.5 4.1a3.5 3.5 0 0 1 0 6.8"/>',
+  flag: '<path d="M5 21V4M5 15s1-1 4-1 5 2 8 2 3-1 3-1V4s-1 1-3 1-5-2-8-2-4 1-4 1"/>',
+  trophy: '<path d="M8 21h8M12 16.5V21M7 4h10v5a5 5 0 0 1-10 0z"/><path d="M17 5.5h3V7a3 3 0 0 1-3 3M7 5.5H4V7a3 3 0 0 0 3 3"/>',
+  window: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M12 9v11"/>',
+  search: '<circle cx="11" cy="11" r="6.5"/><path d="m20 20-4.4-4.4"/>',
+  shuffle: '<path d="M3 17h2.5a4 4 0 0 0 3.3-1.7l5.4-7.6A4 4 0 0 1 17.5 6H21M18 3l3 3-3 3M3 7h2.5a4 4 0 0 1 3 1.4M21 18h-3.5a4 4 0 0 1-3-1.4M18 15l3 3-3 3"/>',
+  target: '<circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.5"/>',
+  note: '<path d="M14 3H6.5A1.5 1.5 0 0 0 5 4.5v15A1.5 1.5 0 0 0 6.5 21h11a1.5 1.5 0 0 0 1.5-1.5V8z"/><path d="M14 3v5h5M9 13h6M9 17h4"/>',
+  cards: '<rect x="3" y="6" width="12" height="15" rx="2"/><path d="M8 3h11a2 2 0 0 1 2 2v12"/>',
+  scissors: '<circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M20 4 8.1 15.9M14.5 14.5 20 20M8.1 8.1 12 12"/>',
+  timer: '<circle cx="12" cy="13.5" r="7.5"/><path d="M12 10v3.5l2.2 2.2M10 2.5h4"/>',
+  pin: '<path d="M12 16.5V22M9 4h6l-1 5 3.5 3.5v2h-11v-2L10 9z"/>',
+  chip: '<rect x="6" y="6" width="12" height="12" rx="2"/><path d="M9.5 2.5V6M14.5 2.5V6M9.5 18v3.5M14.5 18v3.5M2.5 9.5H6M2.5 14.5H6M18 9.5h3.5M18 14.5h3.5"/>',
+};
+const icon = (name) => svgIcon(ICONS[name]);
+const ICON_TIMER = icon("timer");
+// Les nouveautés gardent leurs emojis dans WHATS_NEW (lisibles dans le code) : on les affiche en icônes au trait
+const NEWS_ICONS = { "💬": "msg", "📚": "book", "⚔️": "swords", "🔔": "bell", "🔌": "plug", "🩺": "pulse", "🎲": "dice", "👥": "users",
+  "🏁": "flag", "🏆": "trophy", "🪟": "window", "🔍": "search", "🔀": "shuffle", "🎯": "target", "📝": "note", "🃏": "cards", "✂": "scissors",
+  "⏱": "timer", "📌": "pin", "🦙": "chip" };
 
 const state = {
   config: null,
@@ -4603,9 +4632,13 @@ const WELCOME = [
 ];
 // Les nouveautés de chaque version (le carton « Quoi de neuf » ne s'affiche que si la version en a)
 const WHATS_NEW = {
+  "0.60.1": [
+    ["🐱", "La bulle aux couleurs de Pirouette", "En bas à droite : la tête du chat qui parle, comme l'icône de l'app"],
+    ["✦", "Icônes plus sobres", "Les emojis en couleur laissent la place à des icônes au trait, dans les menus, les nouveautés et le chrono"],
+  ],
   "0.60.0": [
     ["💬", "La bulle des messages", "En bas à droite, sur toutes les pages : tes conversations et tes amis ; chaque conversation s'ouvre dans une petite fenêtre qu'on réduit ou ferme"],
-    ["⚔️", "L'onglet Défis revient", "Rien que les défis et ton compte ; les amis sont dans la bulle 💬"],
+    ["⚔️", "L'onglet Défis revient", "Rien que les défis et ton compte ; les amis sont dans la bulle des messages"],
   ],
   "0.59.0": [
     ["✎", "Modifier ou supprimer un message", "Sous tes messages : « Modifier » (le texte) et « Supprimer » (il disparaît aussi chez les autres)"],
@@ -4783,7 +4816,7 @@ function showWhatsNew(version) {
   const items = WHATS_NEW[version];
   openWelcome([{ small: true, art: `<span class="w-new">VERSION ${escapeHtml(version.replace(/\.0$/, ""))}</span><div class="w-logo small">${LOGO_SVG}</div>`,
     title: "Quoi de neuf", done: "C'est parti",
-    html: `<ul class="w-whatsnew">${items.map(([icon, title, text]) => `<li><span class="w-ic">${icon}</span><div>${title}<small>${text}</small></div></li>`).join("")}</ul>` }],
+    html: `<ul class="w-whatsnew">${items.map(([icon, title, text]) => `<li><span class="w-ic">${icon === "🐱" ? LOGO_SVG : NEWS_ICONS[icon] ? svgIcon(ICONS[NEWS_ICONS[icon]]) : icon}</span><div>${title}<small>${text}</small></div></li>`).join("")}</ul>` }],
   { onDone: () => api("/api/settings", jsonBody("PUT", { welcome_seen: version })).catch(() => {}) });
 }
 // Tuto de l'IA locale (Réglages) : installer Ollama, télécharger un modèle (ici ou au Terminal), vérifier
@@ -5082,7 +5115,7 @@ function startQuizTimer(quiz) {
   const end = Date.now() + quiz.timeLimit * 1000;
   const tick = () => {
     const left = Math.max(0, Math.round((end - Date.now()) / 1000));
-    timer.textContent = `⏱ ${Math.floor(left / 60)}:${String(left % 60).padStart(2, "0")}`;
+    timer.innerHTML = `${ICON_TIMER} ${Math.floor(left / 60)}:${String(left % 60).padStart(2, "0")}`;
     timer.classList.toggle("urgent", left <= 30);
     if (left > 0 || state.quiz !== quiz) return;
     clearInterval(state.quizTimer);
@@ -6601,7 +6634,7 @@ async function renderChallenges() {
     <li class="challenge">
       <div class="challenge-head">
         <span><strong>${escapeHtml(c.title)}</strong>
-          <small class="muted">${c.mine ? "Ton défi" : `Défi de ${escapeHtml(c.author)}`}${c.subject ? ` · ${escapeHtml(c.subject)}` : ""} · ${c.count} questions${c.time_limit ? ` · ⏱ ${Math.round(c.time_limit / 60)} min` : ""} · ${formatDate(c.created_at)}</small></span>
+          <small class="muted">${c.mine ? "Ton défi" : `Défi de ${escapeHtml(c.author)}`}${c.subject ? ` · ${escapeHtml(c.subject)}` : ""} · ${c.count} questions${c.time_limit ? ` · ${ICON_TIMER} ${Math.round(c.time_limit / 60)} min` : ""} · ${formatDate(c.created_at)}</small></span>
         ${c.done ? `<span class="badge">Fait</span>` : `<button class="primary small" type="button" data-play-challenge="${c.id}">Jouer</button>`}
       </div>
       ${c.done ? `<ol class="leaderboard">${c.scores.map((s) => `<li class="${s.me ? "me" : ""}">
@@ -6770,7 +6803,7 @@ async function checkUnread() {
 }
 function notifyMessage(room) {
   const box = $("#msg-toast");
-  box.innerHTML = `💬 <b>${escapeHtml(room.kind === "group" ? `${room.last.pseudo} · ${room.name}` : room.name)}</b> : ${escapeHtml(room.last.text)}`;
+  box.innerHTML = `${icon("msg")} <b>${escapeHtml(room.kind === "group" ? `${room.last.pseudo} · ${room.name}` : room.name)}</b> : ${escapeHtml(room.last.text)}`;
   box.dataset.room = room.id;
   box.hidden = false;
   clearTimeout(msg.toastTimer);
@@ -6819,10 +6852,10 @@ function openChat(roomId, { min = false, focus = true } = {}) {
           <div class="msg-attach-wrap">
             <button class="msg-plus" type="button" data-win="attach" aria-label="Envoyer un quiz, des flashcards…">+</button>
             <div class="plus-menu msg-attach-pop" role="menu" hidden>
-              <button type="button" role="menuitem" data-attach="quiz"><strong>📝 Envoyer un quiz</strong></button>
-              <button type="button" role="menuitem" data-attach="cards"><strong>🃏 Envoyer des flashcards</strong></button>
-              <button type="button" role="menuitem" data-attach="course"><strong>📚 Envoyer un cours entier</strong><small>ses quiz et ses flashcards</small></button>
-              <button type="button" role="menuitem" data-attach="challenge"><strong>⚔️ Lancer un défi</strong></button>
+              <button type="button" role="menuitem" data-attach="quiz"><strong>${icon("note")} Envoyer un quiz</strong></button>
+              <button type="button" role="menuitem" data-attach="cards"><strong>${icon("cards")} Envoyer des flashcards</strong></button>
+              <button type="button" role="menuitem" data-attach="course"><strong>${icon("book")} Envoyer un cours entier</strong><small>ses quiz et ses flashcards</small></button>
+              <button type="button" role="menuitem" data-attach="challenge"><strong>${icon("swords")} Lancer un défi</strong></button>
             </div>
           </div>
           <input type="text" maxlength="2000" placeholder="Écris un message…" autocomplete="off">
@@ -6905,14 +6938,14 @@ function messageHtml(m, w) {
       <span class="msg-score">${meta.score} / ${meta.total}${time}</span></div>`);
   }
   const details = m.kind === "quiz" ? `${plural(meta.count || 0, "question", "questions")}${meta.course ? ` · ${escapeHtml(meta.course)}` : ""}`
-    : m.kind === "challenge" ? `${plural(meta.count || 0, "question", "questions")}${meta.time_limit ? ` · ⏱ ${Math.round(meta.time_limit / 60)} min` : ""}`
+    : m.kind === "challenge" ? `${plural(meta.count || 0, "question", "questions")}${meta.time_limit ? ` · ${ICON_TIMER} ${Math.round(meta.time_limit / 60)} min` : ""}`
       : [meta.quizzes ? plural(meta.quizzes, "quiz", "quiz") : "", meta.cards ? plural(meta.cards, "flashcard", "flashcards") : ""].filter(Boolean).join(" · ");
   const actions = [];
   if (m.kind === "quiz") actions.push(`<button class="primary small" type="button" data-msg-play="${m.id}">Faire le quiz</button>`);
   if (m.kind === "challenge") actions.push(`<button class="primary small" type="button" data-msg-challenge="${meta.challenge_id}">Faire le défi</button>`,
     `<a class="button ghost small" href="#/defis">Classement</a>`);
   if (["quiz", "cards", "course"].includes(m.kind) && !m.mine) actions.push(`<button class="${m.kind === "quiz" ? "ghost" : "primary"} small" type="button" data-msg-take="${m.id}">Ajouter à mes cours</button>`);
-  if (group) actions.push(`<button class="icon msg-pin" type="button" data-msg-pin="${m.id}" title="Épingler en haut du groupe" aria-label="Épingler">📌</button>`);
+  if (group) actions.push(`<button class="icon msg-pin" type="button" data-msg-pin="${m.id}" title="Épingler en haut du groupe" aria-label="Épingler">${icon("pin")}</button>`);
   return line(`<div class="msg-card ${m.kind}"><span class="msg-kind">${MSG_KINDS[m.kind] || ""}</span><b>${escapeHtml(m.title || "")}</b>
     <small class="muted">${details}</small>${m.body ? `<p class="msg-note">« ${escapeHtml(m.body)} »</p>` : ""}
     <span class="msg-actions">${actions.join("")}</span></div>`);
@@ -6923,7 +6956,7 @@ function renderPinned(w) {
   const pin = w.room.kind === "group" && w.room.pinned ? w.byId[w.room.pinned] : null;
   box.hidden = !pin;
   if (!pin) return;
-  box.innerHTML = `📌 <b>${escapeHtml(MSG_KINDS[pin.kind] || "Épinglé")} :</b> <span>${escapeHtml(pin.title || pin.body || "")}</span>
+  box.innerHTML = `${icon("pin")} <b>${escapeHtml(MSG_KINDS[pin.kind] || "Épinglé")} :</b> <span>${escapeHtml(pin.title || pin.body || "")}</span>
     ${pin.kind === "quiz" ? `<button class="ghost small" type="button" data-msg-play="${pin.id}">Faire le quiz</button>` : ""}
     ${["quiz", "cards", "course"].includes(pin.kind) && !pin.mine ? `<button class="ghost small" type="button" data-msg-take="${pin.id}">Ajouter</button>` : ""}
     <button class="icon" type="button" data-msg-unpin title="Désépingler" aria-label="Désépingler">✕</button>`;
@@ -7040,7 +7073,7 @@ async function openRoomDialog(addTo = null, preselect = "") {
     : "Coche un ami pour lui écrire, ou plusieurs pour créer un groupe de révision.";
   $("#room-friends").innerHTML = choices.length ? choices.map((f) => `
     <label class="pick-row room-friend"><input type="checkbox" value="${f.id}" ${f.id === preselect ? "checked" : ""}>${avatar(f.pseudo)}<b>${escapeHtml(f.pseudo)}</b></label>`).join("")
-    : `<p class="muted">${friends.length ? "Tous tes amis sont déjà dans ce groupe." : "Pas encore d'amis : ajoute-les avec leur code ami (onglet « Amis » de la bulle 💬)."}</p>`;
+    : `<p class="muted">${friends.length ? "Tous tes amis sont déjà dans ce groupe." : "Pas encore d'amis : ajoute-les avec leur code ami (onglet « Amis » de la bulle des messages)."}</p>`;
   $("#room-name").value = "";
   $("#room-status").hidden = true;
   syncRoomDialog();
