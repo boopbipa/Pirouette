@@ -21,3 +21,9 @@ if (-not $Iscc) {
 & $Iscc "/DVersion=$Version" packaging\pirouette.iss
 if ($LASTEXITCODE -ne 0) { throw "Inno Setup a echoue" }
 Write-Host "OK dist\Pirouette-$Version-Windows-Setup.exe"
+
+# Version sans installation (dossier à dézipper) : pour les PC où l'installateur est bloqué (ordinateurs
+# d'établissement qui interdisent de lancer un programme depuis le dossier temporaire de Windows)
+Write-Host "-> Version portable"
+Compress-Archive -Path dist\Pirouette -DestinationPath "dist\Pirouette-$Version-Windows-Portable.zip" -Force
+Write-Host "OK dist\Pirouette-$Version-Windows-Portable.zip"

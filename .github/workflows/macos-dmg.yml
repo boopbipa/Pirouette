@@ -195,7 +195,9 @@ jobs:
         with:
           name: Pirouette-Windows
           retention-days: 1
-          path: dist/*-Windows-Setup.exe
+          path: |
+            dist/*-Windows-Setup.exe
+            dist/*-Windows-Portable.zip
           if-no-files-found: error
 
   release:
@@ -230,6 +232,10 @@ jobs:
           if ls dmg/*-Windows-Setup.exe >/dev/null 2>&1; then
             cp dmg/*-Windows-Setup.exe Pirouette-Windows-Setup.exe
             FILES="$FILES Pirouette-Windows-Setup.exe"
+          fi
+          if ls dmg/*-Windows-Portable.zip >/dev/null 2>&1; then
+            cp dmg/*-Windows-Portable.zip Pirouette-Windows-Portable.zip
+            FILES="$FILES Pirouette-Windows-Portable.zip"
           fi
           # Une version republiée remplace la précédente du même numéro (les nouveautés arrivent sans changer de lien)
           gh release delete "$TAG" --yes --cleanup-tag || true

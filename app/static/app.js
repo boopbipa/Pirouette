@@ -4560,6 +4560,9 @@ const WELCOME = [
 ];
 // Les nouveautés de chaque version (le carton « Quoi de neuf » ne s'affiche que si la version en a)
 const WHATS_NEW = {
+  "0.56.1": [
+    ["⇩", "Windows sans installation", "Ordinateur d'établissement qui bloque l'installateur : une version à dézipper, Pirouette-Windows-Portable.zip"],
+  ],
   "0.56.0": [
     ["☑", "Réviser plusieurs cours d'un coup", "Réviser → « Choisir des cours… » : des cours entiers ou certains fichiers, de matières différentes"],
     ["★", "Sélections enregistrées", "Donne un nom à ta sélection (« Partiel Psycha ») : elle t'attend en haut de Réviser"],

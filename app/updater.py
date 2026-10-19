@@ -58,9 +58,20 @@ def app_bundle() -> Path | None:
     return bundle if bundle.suffix == ".app" else None
 
 
+def installed_windows() -> bool:
+    """Pirouette installée (dans %LOCALAPPDATA%\\Programs\\Pirouette), et non la version portable dézippée ailleurs."""
+    if not getattr(sys, "frozen", False):
+        return False
+    programs = Path(os.getenv("LOCALAPPDATA", Path.home())) / "Programs" / "Pirouette"
+    try:
+        return Path(sys.executable).resolve().parent == programs.resolve()
+    except OSError:
+        return False
+
+
 def can_install() -> bool:
     if WINDOWS:
-        return bool(getattr(sys, "frozen", False))
+        return installed_windows()  # version portable : on télécharge la nouvelle à la main
     bundle = app_bundle()
     return bundle is not None and os.access(bundle.parent, os.W_OK)
 
@@ -164,6 +175,11 @@ if (-not (Test-Path {q(setup)})) {{ Write-Output "Plus d'installateur : rien à 
 Write-Output "Pirouette fermée : arrêt des Pirouette sans fenêtre"
 Get-CimInstance Win32_Process -Filter "Name='Pirouette.exe'" | ForEach-Object {{ Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }}
 Start-Sleep -Seconds 2
+# Dossier temporaire à nous : certains PC (d'établissement) interdisent de lancer un programme depuis celui de Windows,
+# où l'installateur se décompresse (« Impossible d'exécuter un fichier depuis le dossier temporaire »)
+$tmp = Join-Path (Split-Path {q(setup)}) 'tmp'
+New-Item -ItemType Directory -Force -Path $tmp | Out-Null
+$env:TEMP = $tmp; $env:TMP = $tmp
 $p = Start-Process -FilePath {q(setup)} -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART','/NOCANCEL','/NORESTARTAPPLICATIONS',('/LOG="' + {q(inno)} + '"') -Wait -PassThru
 Write-Output "Installateur terminé (code $($p.ExitCode))"
 if ($p.ExitCode -eq 0) {{
@@ -210,7 +226,7 @@ def resume_pending() -> None:
     """Au lancement : une nouvelle version attend encore (Mac redémarré entre-temps…) ? On relance l'attente,
     le remplacement se fera quand cette Pirouette sera quittée."""
     if WINDOWS:
-        if getattr(sys, "frozen", False) and windows_setup().exists():
+        if installed_windows() and windows_setup().exists():
             start_windows_install(windows_setup())
         return
     bundle = app_bundle()
