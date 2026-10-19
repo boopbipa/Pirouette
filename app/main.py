@@ -913,13 +913,18 @@ def _units(course: dict, chapters: str) -> list[tuple[str, str]]:
     return units
 
 
+def _yes(value: str) -> bool:
+    """Une case cochée envoyée par un formulaire : « 1 », « true », « on »… ; vide ou « 0 » : non cochée."""
+    return str(value).strip().lower() not in {"", "0", "false", "off", "no", "non"}
+
+
 @app.post("/api/courses/{course_id}/prepare")
 async def prepare_course(
     course_id: str,
     provider: str = Form("local"),
     model: str = Form(""),
-    quizzes: bool = Form(True),
-    cards: bool = Form(True),
+    quizzes: str = Form("1"),  # (texte, pas booléen : FastAPI ≥ 0.147 lit un booléen absent comme « non »)
+    cards: str = Form("1"),
     num_questions: int = Form(10),
     cards_count: int = Form(10),
     types: str = Form("qcm,vrai_faux,reponse_courte"),
@@ -931,6 +936,7 @@ async def prepare_course(
     course = store.get_course(course_id)
     if not course["files"]:
         raise HTTPException(400, "Ce cours n'a encore aucun fichier : dépose ton cours d'abord.")
+    quizzes, cards = _yes(quizzes), _yes(cards)
     created = []
     for key, label in _units(course, chapters):
         if quizzes:
@@ -966,11 +972,12 @@ async def course_news(course_id: str) -> dict:
 
 @app.post("/api/courses/{course_id}/news/create")
 async def create_from_news(course_id: str, provider: str = Form("local"), model: str = Form(""),
-                           quizzes: bool = Form(True), cards: bool = Form(True),
+                           quizzes: str = Form("1"), cards: str = Form("1"),
                            types: str = Form("qcm,vrai_faux,reponse_courte"), language: str = Form("français")) -> dict:
     """Questions et cartes sur les passages nouveaux seulement, chapitre par chapitre (elles rejoignent le quiz
     et les cartes du chapitre) ; les nouveautés sont ensuite considérées comme traitées."""
     course = store.get_course(course_id)
+    quizzes, cards = _yes(quizzes), _yes(cards)
     created = []
     for unit in _course_news(course):
         label = unit["title"]
