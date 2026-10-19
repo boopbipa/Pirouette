@@ -578,9 +578,14 @@ $("#claude-diag").addEventListener("click", async () => {
   if (d.error) return setStatus("#claude-app-status", d.error, false);
   const yes = (v) => (v ? "oui" : "non");
   const lines = [`Pirouette : ${d.command.join(" ")} (${d.command_exists ? "trouvée" : "INTROUVABLE"})`, ""];
+  if (d.platform === "win32") {
+    lines.push(d.claude_running.length ? `App Claude ouverte : ${d.claude_running.join(" ; ")}`
+      : "App Claude pour ordinateur : AUCUNE en cours (ouvre-la avant le diagnostic ; si elle est ouverte, c'est peut-être la version web)", "");
+  }
   for (const f of d.files) {
     lines.push(f.path, `  existe : ${yes(f.exists)} · lisible : ${yes(f.readable)} · contient Pirouette : ${yes(f.pirouette)}`
-      + (f.pirouette ? ` · bon chemin : ${yes(f.same_command)}` : "") + (f.error ? ` · erreur : ${f.error}` : ""));
+      + (f.pirouette ? ` · bon chemin : ${yes(f.same_command)}` : "") + (f.error ? ` · erreur : ${f.error}` : ""),
+      `  dans ce dossier : ${(f.neighbours || []).join(", ") || "rien"}`);
   }
   lines.push("");
   if (!d.logs.length) lines.push("Aucun journal de l'app Claude trouvé (l'app Claude n'a peut-être jamais été ouverte ici).");
@@ -4591,6 +4596,9 @@ const WELCOME = [
 ];
 // Les nouveautés de chaque version (le carton « Quoi de neuf » ne s'affiche que si la version en a)
 const WHATS_NEW = {
+  "0.57.2": [
+    ["🩺", "Diagnostic plus complet", "Il dit aussi quelle app Claude est ouverte, et ce que contiennent ses dossiers"],
+  ],
   "0.57.1": [
     ["🩺", "Diagnostic de l'app Claude", "Réglages → App Claude → « Brancher à la main » : où Pirouette a écrit, et ce que disent les journaux de Claude"],
   ],

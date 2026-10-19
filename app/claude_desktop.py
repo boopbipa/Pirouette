@@ -127,12 +127,41 @@ def uninstall(path: Path | None = None) -> dict:
     return status(path)
 
 
+def _claude_processes() -> list[str]:
+    """Sous Windows : le chemin des programmes « claude.exe » en cours (l'app Claude pour ordinateur, si elle tourne)."""
+    if sys.platform != "win32":
+        return []
+    import subprocess
+    try:
+        out = subprocess.run(["powershell", "-NoProfile", "-Command",
+                              "Get-Process -Name claude -ErrorAction SilentlyContinue | ForEach-Object { $_.Path }"],
+                             capture_output=True, text=True, timeout=15,
+                             creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0)).stdout
+    except (OSError, subprocess.SubprocessError):
+        return []
+    return sorted({line.strip() for line in out.splitlines() if line.strip()})
+
+
+def _log_dirs() -> list[Path]:
+    dirs = [path.parent / "logs" for path in config_paths()]
+    if sys.platform == "win32":
+        local = Path(os.getenv("LOCALAPPDATA", Path.home() / "AppData" / "Local"))
+        try:
+            for d in (local / "Packages").iterdir():
+                if "claude" in d.name.lower() or "anthropic" in d.name.lower():
+                    dirs += [d / "LocalCache" / "Local" / "Claude" / "logs", d / "LocalState" / "logs"]
+        except OSError:
+            pass
+        dirs += [local / "AnthropicClaude" / "logs", local / "Claude" / "logs"]
+    return list(dict.fromkeys(dirs))
+
+
 def diagnose() -> dict:
-    """Pour comprendre un branchement qui ne marche pas : chaque fichier de configuration (existe-t-il, contient-il
-    Pirouette, avec le bon chemin ?) et les dernières lignes des journaux de l'app Claude qui parlent de Pirouette."""
+    """Pour comprendre un branchement qui ne marche pas : quelle app Claude tourne, chaque fichier de configuration
+    (existe-t-il, contient-il Pirouette, avec le bon chemin ? que contient son dossier ?) et les journaux de l'app
+    Claude (les lignes qui parlent de Pirouette ou d'erreurs MCP)."""
     program = command()
     files = []
-    logs = []
     for path in config_paths():
         info = {"path": str(path), "exists": path.exists(), "readable": True, "pirouette": False, "same_command": False}
         try:
@@ -143,14 +172,23 @@ def diagnose() -> dict:
             info["pirouette"] = True
             info["command"] = entry.get("command")
             info["same_command"] = [entry.get("command"), *entry.get("args", [])] == program
+        try:  # ce que l'app Claude a mis dans ce dossier (vide à part notre fichier : elle ne l'utilise pas)
+            info["neighbours"] = sorted(p.name for p in path.parent.iterdir())[:25]
+        except OSError:
+            info["neighbours"] = []
         files.append(info)
-        for name in ("mcp-server-pirouette.log", "mcp.log", "main.log"):
-            log = path.parent / "logs" / name
+    logs = []
+    for folder in _log_dirs():
+        try:
+            names = sorted(p for p in folder.iterdir() if p.suffix == ".log")
+        except OSError:
+            continue
+        for log in names:
             try:
                 lines = log.read_text(encoding="utf-8", errors="replace").splitlines()
             except OSError:
                 continue
-            keep = [line for line in lines if "pirouette" in line.lower() or (name != "main.log" and "error" in line.lower())]
-            logs.append({"path": str(log), "lines": keep[-12:], "modified": int(log.stat().st_mtime)})
+            keep = [line for line in lines if any(w in line.lower() for w in ("pirouette", "mcp", "error"))]
+            logs.append({"path": str(log), "lines": keep[-8:], "modified": int(log.stat().st_mtime)})
     return {"platform": sys.platform, "command": program, "command_exists": Path(program[0]).exists(),
-            "files": files, "logs": logs}
+            "claude_running": _claude_processes(), "files": files, "logs": logs[-8:]}
