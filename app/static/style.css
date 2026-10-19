@@ -1811,3 +1811,4 @@ html.windows [data-mac-only], html:not(.windows) [data-win-only] { display: none
   .msg-back { display: inline-grid; }
   .msg-line { max-width: 90%; }
 }
+.claude-diag { max-height: 320px; overflow: auto; white-space: pre-wrap; word-break: break-all; font-size: 12px; }

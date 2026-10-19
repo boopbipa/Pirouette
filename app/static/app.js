@@ -552,7 +552,9 @@ $("#local-thinking").addEventListener("change", async (e) => {
 
 // ---------- L'app Claude : Pirouette comme outil de Claude (MCP) ----------
 function renderClaudeApp(info) {
-  $("#claude-app-install").hidden = info.installed || !info.supported;
+  // Déjà branchée : le bouton reste là pour « rebrancher » (réécrire partout, avec le bon chemin)
+  $("#claude-app-install").hidden = !info.supported;
+  $("#claude-app-install").textContent = info.installed ? "Rebrancher" : "Brancher l'app Claude";
   $("#claude-app-remove").hidden = !info.installed;
   $("#claude-app-state").innerHTML = !info.supported
     ? "Disponible dans l'app Pirouette pour Mac."
@@ -570,6 +572,30 @@ function renderClaudeApp(info) {
       <button class="ghost small" type="button" data-claude-reveal="${i}">Ouvrir le dossier</button></span>`).join("")
     + (configs.length > 1 ? `<small class="muted">Plusieurs fichiers : colle le texte dans chacun.</small>` : "");
 }
+// Diagnostic : à envoyer quand le branchement ne marche pas (où Pirouette a écrit, ce que disent les journaux de Claude)
+$("#claude-diag").addEventListener("click", async () => {
+  const d = await api("/api/claude-app/diagnostic").catch((err) => ({ error: err.message }));
+  if (d.error) return setStatus("#claude-app-status", d.error, false);
+  const yes = (v) => (v ? "oui" : "non");
+  const lines = [`Pirouette : ${d.command.join(" ")} (${d.command_exists ? "trouvée" : "INTROUVABLE"})`, ""];
+  for (const f of d.files) {
+    lines.push(f.path, `  existe : ${yes(f.exists)} · lisible : ${yes(f.readable)} · contient Pirouette : ${yes(f.pirouette)}`
+      + (f.pirouette ? ` · bon chemin : ${yes(f.same_command)}` : "") + (f.error ? ` · erreur : ${f.error}` : ""));
+  }
+  lines.push("");
+  if (!d.logs.length) lines.push("Aucun journal de l'app Claude trouvé (l'app Claude n'a peut-être jamais été ouverte ici).");
+  for (const log of d.logs) {
+    lines.push(`Journal ${log.path} (modifié le ${new Date(log.modified * 1000).toLocaleString("fr-FR")}) :`);
+    lines.push(...(log.lines.length ? log.lines.map((l) => `  ${l}`) : ["  (rien sur Pirouette)"]));
+  }
+  $("#claude-diag-out").textContent = lines.join("\n");
+  $("#claude-diag-out").hidden = false;
+  $("#claude-diag-copy").hidden = false;
+});
+$("#claude-diag-copy").addEventListener("click", async () => {
+  await copyText($("#claude-diag-out").textContent);
+  setStatus("#claude-app-status", "Diagnostic copié : colle-le dans ta conversation avec Claude.", true);
+});
 $("#claude-manual-copy").addEventListener("click", async () => {
   await copyText($("#claude-manual-snippet").textContent);
   setStatus("#claude-app-status", "Texte copié : colle-le dans le fichier de l'app Claude.", true);
@@ -583,7 +609,9 @@ async function loadClaudeApp() {
 }
 $("#claude-app-install").addEventListener("click", async () => {
   try {
-    renderClaudeApp(await api("/api/claude-app", { method: "POST" }));
+    const info = await api("/api/claude-app", { method: "POST" });
+    renderClaudeApp(info);
+    $("#claude-manual").open = ON_WINDOWS;  // sous Windows : on montre où Pirouette a écrit (et le diagnostic)
     setStatus("#claude-app-status", "C'est branché. Quitte l'app Claude (⌘Q) et rouvre-la, puis pose-lui simplement ta demande.", true);
   } catch (err) {
     setStatus("#claude-app-status", err.message, false);
@@ -4563,6 +4591,9 @@ const WELCOME = [
 ];
 // Les nouveautés de chaque version (le carton « Quoi de neuf » ne s'affiche que si la version en a)
 const WHATS_NEW = {
+  "0.57.1": [
+    ["🩺", "Diagnostic de l'app Claude", "Réglages → App Claude → « Brancher à la main » : où Pirouette a écrit, et ce que disent les journaux de Claude"],
+  ],
   "0.57.0": [
     ["💬", "Messages", "Écris à tes amis, crée des groupes de révision, et envoie-leur tes quiz, flashcards, cours ou défis"],
     ["🏁", "Scores partagés", "Quand un ami fait le quiz que tu lui as envoyé, son score s'affiche dans la conversation"],

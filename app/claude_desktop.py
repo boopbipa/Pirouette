@@ -31,11 +31,19 @@ def config_paths() -> list[Path]:
     packages = Path(os.getenv("LOCALAPPDATA", Path.home() / "AppData" / "Local")) / "Packages"
     msix = []
     try:
-        msix = sorted(d / "LocalCache" / "Roaming" / "Claude" / FILE for d in packages.iterdir()
-                      if d.is_dir() and "claude" in d.name.lower() and (d / "LocalCache").is_dir())
+        entries = list(packages.iterdir())
     except OSError:
-        pass
-    return [*msix, Path(os.getenv("APPDATA", Path.home())) / "Claude" / FILE]
+        entries = []
+    for d in entries:
+        # Un dossier protégé (autre app) ne doit pas empêcher de trouver celui de Claude : on les teste un par un.
+        try:
+            roaming = d / "LocalCache" / "Roaming" / "Claude"
+            if ("claude" in d.name.lower() or "anthropic" in d.name.lower()) and (d / "LocalCache").is_dir() \
+                    or roaming.is_dir():
+                msix.append(roaming / FILE)
+        except OSError:
+            continue
+    return [*sorted(set(msix)), Path(os.getenv("APPDATA", Path.home())) / "Claude" / FILE]
 
 
 def config_path() -> Path:
@@ -117,3 +125,32 @@ def uninstall(path: Path | None = None) -> dict:
             del data["mcpServers"][NAME]
             p.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     return status(path)
+
+
+def diagnose() -> dict:
+    """Pour comprendre un branchement qui ne marche pas : chaque fichier de configuration (existe-t-il, contient-il
+    Pirouette, avec le bon chemin ?) et les dernières lignes des journaux de l'app Claude qui parlent de Pirouette."""
+    program = command()
+    files = []
+    logs = []
+    for path in config_paths():
+        info = {"path": str(path), "exists": path.exists(), "readable": True, "pirouette": False, "same_command": False}
+        try:
+            entry = _read(path).get("mcpServers", {}).get(NAME)
+        except (ValueError, OSError) as exc:
+            entry, info["readable"], info["error"] = None, False, str(exc)
+        if entry:
+            info["pirouette"] = True
+            info["command"] = entry.get("command")
+            info["same_command"] = [entry.get("command"), *entry.get("args", [])] == program
+        files.append(info)
+        for name in ("mcp-server-pirouette.log", "mcp.log", "main.log"):
+            log = path.parent / "logs" / name
+            try:
+                lines = log.read_text(encoding="utf-8", errors="replace").splitlines()
+            except OSError:
+                continue
+            keep = [line for line in lines if "pirouette" in line.lower() or (name != "main.log" and "error" in line.lower())]
+            logs.append({"path": str(log), "lines": keep[-12:], "modified": int(log.stat().st_mtime)})
+    return {"platform": sys.platform, "command": program, "command_exists": Path(program[0]).exists(),
+            "files": files, "logs": logs}

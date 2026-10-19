@@ -278,6 +278,11 @@ async def claude_app_install() -> dict:
     return _claude_app_view()
 
 
+@app.get("/api/claude-app/diagnostic")
+async def claude_app_diagnostic() -> dict:
+    return claude_desktop.diagnose()
+
+
 @app.post("/api/claude-app/reveal")
 async def claude_app_reveal(index: int = 0) -> dict:
     """Branchement à la main : ouvre le dossier d'un fichier de configuration de l'app Claude (créé s'il manque)."""

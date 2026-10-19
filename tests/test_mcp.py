@@ -189,3 +189,17 @@ def test_claude_for_windows_reads_its_msix_copy(tmp_path, monkeypatch):
     assert all(json.loads(p.read_text())["mcpServers"]["pirouette"]["args"][-1] == "--mcp" for p in paths)
     assert '"pirouette"' in claude_desktop.snippet() and "\\\\" not in claude_desktop.snippet()
     assert not claude_desktop.uninstall()["installed"]
+
+
+def test_claude_link_diagnostic_on_windows(tmp_path, monkeypatch):
+    monkeypatch.setattr(claude_desktop.sys, "platform", "win32")
+    monkeypatch.setenv("APPDATA", str(tmp_path / "Roaming"))
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path / "Local"))
+    # Un paquet au nom inattendu, mais qui a bien un dossier Claude : il compte aussi
+    logs = tmp_path / "Local" / "Packages" / "AnthropicPBC.App_1" / "LocalCache" / "Roaming" / "Claude" / "logs"
+    logs.mkdir(parents=True)
+    (logs / "mcp.log").write_text("ok\n[pirouette] Server started\nautre ligne\n[x] error: boom\n", encoding="utf-8")
+    claude_desktop.install()
+    report = claude_desktop.diagnose()
+    assert [f["pirouette"] and f["same_command"] for f in report["files"]] == [True, True]
+    assert report["logs"][0]["lines"] == ["[pirouette] Server started", "[x] error: boom"]

@@ -680,6 +680,9 @@
             <li><b>Rouvre l'app Claude</b>, puis Réglages → Développeur : « pirouette » doit apparaître avec l'état
               <i>running</i>.</li>
           </ol>
+          <p class="small-text"><button class="ghost small" type="button" id="claude-diag">Diagnostic du branchement</button>
+            <button class="ghost small" type="button" id="claude-diag-copy" hidden>Copier le diagnostic</button></p>
+          <pre class="app-request-text manual-snippet claude-diag" id="claude-diag-out" hidden></pre>
           <p class="small-text muted" data-win-only>Sous Windows, l'app Claude récente ne lit pas le fichier ouvert par son
             bouton « Modifier la configuration » mais une copie cachée (dans <code>AppData\Local\Packages\Claude_…</code>) :
             c'est ce fichier-là qui compte. Pirouette l'a écrit pour toi en cliquant sur « Brancher l'app Claude ».</p>
