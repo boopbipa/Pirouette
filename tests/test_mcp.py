@@ -180,9 +180,9 @@ def test_claude_for_windows_reads_its_msix_copy(tmp_path, monkeypatch):
     (tmp_path / "Local" / "Packages" / "Claude_pzs8sxrjxfjjc" / "LocalCache").mkdir(parents=True)
     (tmp_path / "Local" / "Packages" / "Microsoft.Autre_123" / "LocalCache").mkdir(parents=True)
     paths = claude_desktop.config_paths()
-    assert [p.parts[-5] if "Packages" in p.parts else "classique" for p in paths] == ["Claude_pzs8sxrjxfjjc", "classique"]
-    # Branchée par une ancienne version (seulement le fichier classique) : relancer Pirouette complète la copie MSIX
-    claude_desktop.install(paths[1])
+    assert [p.parts[-5] if "Packages" in p.parts else p.parts[-3] for p in paths] == ["Claude_pzs8sxrjxfjjc", "Local", "Roaming"]
+    # Branchée par une ancienne version (seulement le fichier classique) : relancer Pirouette complète les autres
+    claude_desktop.install(paths[-1])
     assert claude_desktop.needs_refresh()
     claude_desktop.install()
     assert not claude_desktop.needs_refresh()
@@ -201,5 +201,5 @@ def test_claude_link_diagnostic_on_windows(tmp_path, monkeypatch):
     (logs / "mcp.log").write_text("ok\n[pirouette] Server started\nautre ligne\n[x] error: boom\n", encoding="utf-8")
     claude_desktop.install()
     report = claude_desktop.diagnose()
-    assert [f["pirouette"] and f["same_command"] for f in report["files"]] == [True, True]
-    assert report["logs"][0]["lines"] == ["[pirouette] Server started", "[x] error: boom"]
+    assert [f["pirouette"] and f["same_command"] for f in report["files"]] == [True, True, True]
+    assert report["logs"][0]["lines"] == ["ok", "[pirouette] Server started", "autre ligne", "[x] error: boom"]  # mcp.log en entier

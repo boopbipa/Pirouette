@@ -43,7 +43,9 @@ def config_paths() -> list[Path]:
                 msix.append(roaming / FILE)
         except OSError:
             continue
-    return [*sorted(set(msix)), Path(os.getenv("APPDATA", Path.home())) / "Claude" / FILE]
+    # Les versions récentes (2026) écrivent leurs journaux dans %LOCALAPPDATA%\\Claude : on s'y inscrit aussi
+    local = Path(os.getenv("LOCALAPPDATA", Path.home() / "AppData" / "Local")) / "Claude" / FILE
+    return [*sorted(set(msix)), local, Path(os.getenv("APPDATA", Path.home())) / "Claude" / FILE]
 
 
 def config_path() -> Path:
@@ -188,7 +190,10 @@ def diagnose() -> dict:
                 lines = log.read_text(encoding="utf-8", errors="replace").splitlines()
             except OSError:
                 continue
-            keep = [line for line in lines if any(w in line.lower() for w in ("pirouette", "mcp", "error"))]
-            logs.append({"path": str(log), "lines": keep[-8:], "modified": int(log.stat().st_mtime)})
+            # mcp.log : en entier (la fin) ; les autres : seulement ce qui parle de Pirouette, des outils ou d'erreurs
+            keep = lines if log.name == "mcp.log" else \
+                [line for line in lines if any(w in line.lower() for w in ("pirouette", "mcp", "error"))]
+            logs.append({"path": str(log), "lines": keep[-15 if log.name == "mcp.log" else -8:],
+                         "modified": int(log.stat().st_mtime)})
     return {"platform": sys.platform, "command": program, "command_exists": Path(program[0]).exists(),
             "claude_running": _claude_processes(), "files": files, "logs": logs[-8:]}

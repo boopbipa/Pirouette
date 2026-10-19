@@ -4598,6 +4598,9 @@ const WELCOME = [
 ];
 // Les nouveautés de chaque version (le carton « Quoi de neuf » ne s'affiche que si la version en a)
 const WHATS_NEW = {
+  "0.58.1": [
+    ["🔌", "App Claude 2026 sous Windows", "Pirouette s'inscrit aussi dans le nouveau dossier de l'app Claude (AppData\\Local\\Claude)"],
+  ],
   "0.58.0": [
     ["◐", "Clair ou sombre", "Réglages → « Clair ou sombre » : automatique comme ton ordinateur, ou toujours clair, ou toujours sombre"],
   ],
