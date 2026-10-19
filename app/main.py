@@ -2613,11 +2613,13 @@ async def online_import(message_id: str, body: ImportIn) -> dict:
 
 
 @app.post("/api/quit")
-async def quit_app() -> dict:
+async def quit_app(reopen: bool = False) -> dict:
     """Arrête l'app Mac (après une mise à jour). Réponse d'abord, puis arrêt net un instant plus tard : les données
     sont déjà sur le disque, et rien ne peut plus bloquer la fermeture."""
     if os.getenv("PIROUETTE_DESKTOP") != "1":
         raise HTTPException(400, "Seulement dans l'app Mac.")
+    if reopen:
+        updater.ask_reopen()
     threading.Timer(0.4, lambda: os._exit(0)).start()
     return {"quitting": True}
 

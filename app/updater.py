@@ -184,7 +184,12 @@ $p = Start-Process -FilePath {q(setup)} -ArgumentList '/VERYSILENT','/SUPPRESSMS
 Write-Output "Installateur terminé (code $($p.ExitCode))"
 if ($p.ExitCode -eq 0) {{
   Remove-Item {q(setup)} -Force -ErrorAction SilentlyContinue
-  Start-Process -FilePath {q(app)}
+  # Rouverte seulement si on a cliqué sur « Redémarrer maintenant » ; sinon (Pirouette fermée comme d'habitude),
+  # la mise à jour s'installe en silence et la prochaine ouverture est à jour
+  if (Test-Path {q(setup.with_name("reopen"))}) {{
+    Remove-Item {q(setup.with_name("reopen"))} -Force -ErrorAction SilentlyContinue
+    Start-Process -FilePath {q(app)}
+  }}
 }} else {{
   Write-Output "Échec de l'installation silencieuse : ouverture de l'installateur"
   Start-Process -FilePath {q(setup)}
@@ -220,6 +225,15 @@ def start_windows_install(setup: Path) -> None:
         except OSError as exc:
             _note(setup, f"lancement du script impossible ({flags:#x}) : {exc!r}")
     raise RuntimeError("Le programme d'installation n'a pas pu être lancé.")
+
+
+def ask_reopen() -> None:
+    """« Redémarrer maintenant » (Windows) : une fois la mise à jour installée, Pirouette se rouvrira."""
+    if WINDOWS and windows_setup().exists():
+        try:
+            windows_setup().with_name("reopen").write_text("1", encoding="utf-8")
+        except OSError:
+            pass
 
 
 def resume_pending() -> None:

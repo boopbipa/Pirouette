@@ -4598,8 +4598,10 @@ const WELCOME = [
 ];
 // Les nouveautés de chaque version (le carton « Quoi de neuf » ne s'affiche que si la version en a)
 const WHATS_NEW = {
+  "0.58.3": [
+    ["⟳", "Mises à jour sans quitter (Windows)", "La nouvelle version se télécharge seule et s'installe quand tu fermes Pirouette, comme d'habitude"],
+  ],
   "0.58.2": [
-    ["⟳", "Mises à jour en un clic sous Windows", "« Mettre à jour et redémarrer » : Pirouette se ferme, s'installe et se rouvre toute seule"],
     ["🔔", "Recherche régulière", "Pirouette regarde s'il y a une nouvelle version au lancement, puis toutes les 3 heures"],
   ],
   "0.58.1": [
@@ -5974,7 +5976,29 @@ async function checkUpdate({ quiet = false } = {}) {
     if (info.error) setStatus("#update-status", UPDATE_ERRORS[info.error] || info.error, false);
     else setStatus("#update-status", info.available ? `La version ${info.latest} est disponible.` : "Tu as la dernière version.", true);
   }
+  if (info.available && RESTARTS_ITSELF && info.can_install && state.desktop) return downloadQuietly(info);
   if (info.available) showUpdateToast(info);
+}
+// Windows : la nouvelle version se télécharge en arrière-plan, puis s'installe à la prochaine fermeture de Pirouette
+async function downloadQuietly(info) {
+  if (state.updateDownloading) return;
+  state.updateDownloading = true;
+  try {
+    const response = await fetch("/api/update/install", jsonBody("POST", { url: info.url }));
+    if (!response.ok) throw new Error();
+    for await (const event of ndjson(response)) {
+      if (event.type === "error") throw new Error(event.message);
+      if (event.type === "done") {
+        info.ready = true;
+        try { if (sessionStorage.getItem("pirouette.updateLater") === info.latest) return; } catch {}
+        return showUpdateReady({ popup: false });
+      }
+    }
+  } catch {
+    showUpdateToast(info);  // téléchargement raté : on propose le bouton habituel
+  } finally {
+    state.updateDownloading = false;
+  }
 }
 
 function showUpdateToast(info) {
@@ -5983,7 +6007,7 @@ function showUpdateToast(info) {
   if (dismissed === info.latest && $("#view-settings").hidden) return;
   $("#update-text").innerHTML = `<b>Pirouette ${escapeHtml(info.latest)}</b> est disponible.`
     + (info.can_install ? " Tes cours et tes cartes sont gardés." : "");
-  $("#update-go").textContent = info.can_install ? (RESTARTS_ITSELF ? "Mettre à jour et redémarrer" : "Mettre à jour") : "Télécharger";
+  $("#update-go").textContent = info.can_install ? "Mettre à jour" : "Télécharger";
   $("#update-go").disabled = false;
   $("#update-go").hidden = false;
   $("#update-later").hidden = false;
@@ -6001,7 +6025,7 @@ $("#update-later").addEventListener("click", () => {
 // fermer la fenêtre depuis l'interface pouvait laisser l'app bloquée (il fallait forcer à quitter).
 function quitApp() {
   $("#update-text").textContent = RESTARTS_ITSELF ? "Pirouette se ferme, s'installe et revient dans quelques secondes…" : "Pirouette se ferme…";
-  fetch("/api/quit", { method: "POST" }).catch(() => {});
+  fetch(RESTARTS_ITSELF ? "/api/quit?reopen=true" : "/api/quit", { method: "POST" }).catch(() => {});
   setTimeout(() => window.pywebview?.api?.quit?.(), 300);
 }
 
@@ -6011,14 +6035,15 @@ function quitApp() {
 const RESTARTS_ITSELF = ON_WINDOWS;
 function showUpdateReady({ popup = true } = {}) {
   $("#update-text").innerHTML = RESTARTS_ITSELF
-    ? "<b>La mise à jour est prête.</b> Pirouette se ferme quelques secondes, s'installe et se rouvre toute seule."
+    ? `<b>Pirouette ${escapeHtml(state.update?.latest || "")} est prête.</b> Elle s'installera toute seule quand tu fermeras Pirouette : rien d'autre à faire.`
     : "<b>La mise à jour est prête.</b> Quitte Pirouette (⌘Q) puis rouvre-la.";
+  if (RESTARTS_ITSELF) popup = false;  // pas de fenêtre : un rappel discret suffit
   $("#update-progress").hidden = true;
   $("#update-go").hidden = !state.desktop;
   $("#update-go").disabled = false;
   $("#update-go").textContent = RESTARTS_ITSELF ? "Redémarrer maintenant" : "Quitter Pirouette";
   $("#update-later").hidden = false;
-  $("#update-later").textContent = "Plus tard";
+  $("#update-later").textContent = RESTARTS_ITSELF ? "OK" : "Plus tard";
   $("#update-toast").hidden = popup;
   if (!popup) return;
   $("#update-dialog-text").innerHTML = RESTARTS_ITSELF
@@ -6059,7 +6084,6 @@ $("#update-go").addEventListener("click", async () => {
       if (event.type === "error") throw new Error(event.message);
       if (event.type === "done") {
         info.ready = true;
-        if (RESTARTS_ITSELF && state.desktop) return quitApp();  // un seul clic : installée puis rouverte
         return showUpdateReady();
       }
     }

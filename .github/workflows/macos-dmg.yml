@@ -189,12 +189,11 @@ jobs:
             Write-Host "::error title=Mise à jour Windows::l'installateur attend toujours. setup.log : $setup"
             throw "La mise à jour ne s'est pas installée (l'installateur attend toujours)"
           }
+          # Fermée comme d'habitude : la mise à jour s'installe en silence, sans rouvrir Pirouette
           Start-Sleep -Seconds 10
-          $again = Get-Process -Name Pirouette -ErrorAction SilentlyContinue
-          if (-not $again) { Write-Host "::error title=Mise à jour Windows::installée, mais Pirouette ne s'est pas rouverte"; throw "Pirouette ne s'est pas rouverte" }
-          Write-Host "::notice title=Mise à jour Windows::installée puis Pirouette rouverte"
-          Write-Host "✓ Mise à jour installée et Pirouette rouverte"
-          $again | Stop-Process -Force
+          Get-Process -Name Pirouette -ErrorAction SilentlyContinue | Stop-Process -Force
+          Write-Host "::notice title=Mise à jour Windows::installée en silence à la fermeture"
+          Write-Host "✓ Mise à jour installée à la fermeture"
 
       - uses: actions/upload-artifact@v4
         with:
