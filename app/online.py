@@ -395,11 +395,17 @@ class Online:
     async def messages(self, room_id: str, after: str = "") -> dict:
         """Les messages d'une conversation (les nouveaux seulement avec `after`), et on la marque comme lue."""
         me = self._me()
-        params = {"room_id": f"eq.{room_id}", "select": "id,sender,body,kind,title,meta,created_at",
+        params = {"room_id": f"eq.{room_id}", "select": "id,sender,body,kind,title,meta,created_at,edited_at",
                   "order": "created_at.asc", "limit": "500"}
         if after:
             params["created_at"] = f"gt.{after}"
-        rows = await self._rows("messages", **params)
+        try:
+            rows = await self._rows("messages", **params)
+        except OnlineError as exc:
+            if "messages-edit" not in str(exc):
+                raise
+            # Base sans la mise à jour « modifier un message » : on lit sans la date de modification
+            rows = await self._rows("messages", **params | {"select": params["select"].replace(",edited_at", "")})
         pseudos = await self._pseudos({r["sender"] for r in rows})
         for row in rows:
             row["mine"] = row["sender"] == me
@@ -420,6 +426,24 @@ class Online:
             raise OnlineError("C'est trop gros à envoyer d'un coup : envoie plutôt un chapitre ou un quiz.")
         rows = (await self._call("POST", "/rest/v1/messages", json=row, headers={"Prefer": "return=representation"})).json()
         return rows[0] if rows else row
+
+    async def edit_message(self, message_id: str, body: str) -> None:
+        """Modifier le texte d'un de mes messages (Supabase n'accepte que les miens)."""
+        body = str(body or "").strip()[:2000]
+        if not body:
+            raise OnlineError("Message vide : supprime-le plutôt.")
+        from datetime import datetime, timezone
+        rows = (await self._call("PATCH", "/rest/v1/messages", json={"body": body, "edited_at": datetime.now(timezone.utc).isoformat()},
+                                 params={"id": f"eq.{message_id}", "sender": f"eq.{self._me()}"},
+                                 headers={"Prefer": "return=representation"})).json()
+        if not rows:  # refusé sans bruit par les règles d'accès : la mise à jour SQL manque
+            raise OnlineError(_french("row-level security messages"))
+
+    async def delete_message(self, message_id: str) -> None:
+        rows = (await self._call("DELETE", "/rest/v1/messages", params={"id": f"eq.{message_id}", "sender": f"eq.{self._me()}"},
+                                 headers={"Prefer": "return=representation"})).json()
+        if not rows:
+            raise OnlineError(_french("row-level security messages"))
 
     async def payload(self, message_id: str) -> dict:
         rows = await self._rows("messages", id=f"eq.{message_id}", select="id,kind,title,meta,payload,room_id")
@@ -477,6 +501,9 @@ def _french(message: str) -> str:
         return "Les comptes ne sont pas encore ouverts sur le service en ligne (réglage Supabase à activer)."
     if "rate limit" in lowered or "security purposes" in lowered:
         return "Trop de demandes d'un coup : patiente quelques minutes avant de réessayer."
+    if "edited_at" in lowered or ("row-level security" in lowered and "messages" in lowered):
+        return ("Modifier ou supprimer un message n'est pas encore activé sur le service en ligne : la mise à jour "
+                "docs/supabase-messages-edit.sql doit être collée une fois dans Supabase → SQL Editor.")
     if "could not find the table" in lowered and any(t in lowered for t in ("room", "messages")):
         return ("La messagerie n'est pas encore activée sur le service en ligne : la mise à jour « Messages » "
                 "(docs/supabase-messages.sql) doit être collée une fois dans Supabase → SQL Editor.")

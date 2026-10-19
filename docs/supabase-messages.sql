@@ -89,3 +89,12 @@ create policy "scores du défi" on public.attempts for select to authenticated
 drop policy if exists "mon score" on public.attempts;
 create policy "mon score" on public.attempts for insert to authenticated
   with check (user_id = auth.uid() and public.sees_challenge(challenge_id, auth.uid()));
+
+-- ---------- Modifier ou supprimer ses messages ----------
+-- (Mise à jour « Modifier un message » : pour une base qui a déjà les Messages, coller seulement cette partie.)
+alter table public.messages add column if not exists edited_at timestamptz;
+drop policy if exists "modifier mon message" on public.messages;
+create policy "modifier mon message" on public.messages for update to authenticated
+  using (sender = auth.uid()) with check (sender = auth.uid());
+drop policy if exists "supprimer mon message" on public.messages;
+create policy "supprimer mon message" on public.messages for delete to authenticated using (sender = auth.uid());

@@ -89,14 +89,15 @@ class FakeSupabase:
                 row.setdefault("status", "pending")
             rows.append(row)
             return httpx.Response(201, json=[row])
+        wants_rows = "return=representation" in request.headers.get("Prefer", "")
         if request.method == "PATCH":
             for r in match:
                 r.update(body)
-            return httpx.Response(204)
+            return httpx.Response(200, json=match) if wants_rows else httpx.Response(204)
         if request.method == "DELETE":
             for r in match:
                 rows.remove(r)
-            return httpx.Response(204)
+            return httpx.Response(200, json=match) if wants_rows else httpx.Response(204)
         raise AssertionError(request)
 
     def defaults(self, table, row):
@@ -313,3 +314,20 @@ def test_send_and_import_a_quiz_and_cards(tmp_path, fake, monkeypatch):
     result = api.post(f"/api/online/rooms/{room['id']}/messages",
                       json={"kind": "result", "title": "Freud", "score": 1, "total": 1, "seconds": 30}).json()
     assert result["meta"] == {"score": 1, "total": 1, "seconds": 30}
+
+
+def test_edit_and_delete_my_messages(tmp_path, fake):
+    alice, bob = player(tmp_path, fake, "alice"), player(tmp_path, fake, "bob")
+    for client, pseudo in ((alice, "Alice"), (bob, "Bob")):
+        run(client.start(pseudo))
+    run(alice.add_friend(run(bob.me())["profile"]["friend_code"]))
+    run(bob.add_friend(run(alice.me())["profile"]["friend_code"]))
+    room = run(alice.direct(run(bob.me())["profile"]["id"]))
+    sent = run(alice.send(room["id"], "Salut Bbo"))
+    run(alice.edit_message(sent["id"], "Salut Bob"))
+    got = run(bob.messages(room["id"]))["messages"][0]
+    assert got["body"] == "Salut Bob" and got["edited_at"]
+    with pytest.raises(online.OnlineError, match="pas encore activé"):
+        run(bob.edit_message(sent["id"], "pas à moi"))  # le message d'un autre : refusé
+    run(alice.delete_message(sent["id"]))
+    assert run(bob.messages(room["id"]))["messages"] == []

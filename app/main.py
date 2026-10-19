@@ -2566,6 +2566,18 @@ async def online_send(room_id: str, body: MessageIn) -> dict:
     raise HTTPException(400, "Type de message inconnu.")
 
 
+@app.put("/api/online/messages/{message_id}")
+async def online_edit_message(message_id: str, body: OnlineTextIn) -> dict:
+    await _online_call(_online().edit_message(message_id, body.text))
+    return {"ok": True}
+
+
+@app.delete("/api/online/messages/{message_id}")
+async def online_delete_message(message_id: str) -> dict:
+    await _online_call(_online().delete_message(message_id))
+    return {"ok": True}
+
+
 @app.get("/api/online/messages/{message_id}")
 async def online_message(message_id: str) -> dict:
     """Le contenu d'un quiz, de flashcards ou d'un cours reçus (pour faire le quiz ou l'ajouter à ses cours)."""

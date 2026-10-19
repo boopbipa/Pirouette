@@ -4604,6 +4604,11 @@ const WELCOME = [
 ];
 // Les nouveautés de chaque version (le carton « Quoi de neuf » ne s'affiche que si la version en a)
 const WHATS_NEW = {
+  "0.59.0": [
+    ["✎", "Modifier ou supprimer un message", "Sous tes messages : « Modifier » (le texte) et « Supprimer » (il disparaît aussi chez les autres)"],
+    ["🔔", "Notification de message", "Pastille sur Social et sur Messages, et un petit mot en bas de l'écran quand un message arrive"],
+    ["📚", "Envoyer un cours entier", "La liste ne montre plus que les cours, avec tous leurs fichiers"],
+  ],
   "0.58.4": [
     ["👥", "Onglet Social", "Messages, défis et amis réunis dans un seul onglet, en haut de l'app"],
   ],
@@ -6672,12 +6677,41 @@ const msgTime = (at) => {
     : d.toLocaleDateString("fr-FR", { day: "numeric", month: "short" });
 };
 
+function setUnread(unread) {
+  const text = unread > 99 ? "99+" : String(unread);
+  for (const badge of document.querySelectorAll("#messages-badge, .social-badge")) {
+    badge.hidden = !unread;
+    badge.textContent = text;
+  }
+}
 async function refreshMessagesBadge() {
   const { unread } = await api("/api/online/unread").catch(() => ({ unread: 0 }));
-  $("#messages-badge").hidden = !unread;
-  $("#messages-badge").textContent = unread > 99 ? "99+" : unread;
+  setUnread(unread);
+  // Un nouveau message (hors de sa conversation ouverte) : un petit mot en bas de l'écran, cliquable
+  if (unread > (msg.unreadSeen ?? unread)) {
+    const rooms = await api("/api/online/rooms").catch(() => []);
+    const open = !$("#view-messages").hidden ? msg.room?.id : null;  // pas pour la conversation qu'on lit déjà
+    const room = rooms.find((r) => r.unread && r.id !== open);
+    if (room?.last) notifyMessage(room);
+  }
+  msg.unreadSeen = unread;
 }
-setInterval(() => { if (!document.querySelector("[data-nav=social]").hidden && $("#view-messages").hidden) refreshMessagesBadge(); }, 30000);
+function notifyMessage(room) {
+  const box = $("#msg-toast");
+  box.innerHTML = `💬 <b>${escapeHtml(room.kind === "group" ? `${room.last.pseudo} · ${room.name}` : room.name)}</b> : ${escapeHtml(room.last.text)}`;
+  box.dataset.room = room.id;
+  box.hidden = false;
+  clearTimeout(msg.toastTimer);
+  msg.toastTimer = setTimeout(() => { box.hidden = true; }, 8000);
+}
+$("#msg-toast").addEventListener("click", () => {
+  $("#msg-toast").hidden = true;
+  location.hash = `#/social/${$("#msg-toast").dataset.room}`;
+});
+setInterval(() => {
+  if (document.querySelector("[data-nav=social]").hidden) return;
+  if ($("#view-messages").hidden || !msg.room) refreshMessagesBadge();
+}, 12000);
 
 async function openMessages(roomId = "") {
   show("messages");
@@ -6695,8 +6729,8 @@ async function openMessages(roomId = "") {
   let tick = 0;
   msg.timer = setInterval(async () => {
     if ($("#view-messages").hidden) return clearInterval(msg.timer);
-    if (msg.room) await pullMessages().catch(() => {});
-    if (++tick % 3 === 0) await loadRooms().catch(() => {});
+    if (msg.room) await (++tick % 5 === 0 ? reloadRoom() : pullMessages()).catch(() => {});
+    if (tick % 3 === 0) await loadRooms().catch(() => {});
   }, 4000);
 }
 
@@ -6707,8 +6741,8 @@ async function loadRooms() {
     return setStatus("#msg-status", err.message, false);
   }
   const unread = msg.rooms.reduce((n, r) => n + (r.id === msg.room?.id ? 0 : r.unread), 0);
-  $("#messages-badge").hidden = !unread;
-  $("#messages-badge").textContent = unread;
+  setUnread(unread);
+  msg.unreadSeen = unread;
   $("#msg-rooms").innerHTML = msg.rooms.length ? msg.rooms.map((r) => `
     <li><a class="msg-room-item${r.id === msg.room?.id ? " on" : ""}" href="#/messages/${r.id}">
       ${avatar(r.name)}
@@ -6750,19 +6784,38 @@ async function pullMessages() {
   renderPinned();
 }
 
+// Toute la conversation à nouveau (toutes les 20 s) : un message modifié ou supprimé par l'autre se met à jour
+async function reloadRoom() {
+  const room = msg.room;
+  const { messages } = await api(`/api/online/rooms/${room.id}/messages`);
+  if (msg.room !== room) return;
+  const list = $("#msg-list");
+  const html = messages.map(messageHtml).join("");
+  if (html === msg.lastHtml) return;
+  const atBottom = list.scrollHeight - list.scrollTop - list.clientHeight < 80;
+  msg.lastHtml = html;
+  msg.byId = Object.fromEntries(messages.map((m) => [m.id, m]));
+  msg.last = messages.length ? messages[messages.length - 1].created_at : "";
+  list.innerHTML = html;
+  if (atBottom) list.scrollTop = list.scrollHeight;
+  renderPinned();
+}
+
 function messageHtml(m) {
   const group = msg.room?.kind === "group";
   const who = group && !m.mine ? `<p class="msg-who">${escapeHtml(m.pseudo)}</p>` : "";
+  const mineTools = m.mine ? ` <span class="msg-tools">${m.kind === "text" ? `<button class="link-button" type="button" data-msg-edit="${m.id}">Modifier</button> · ` : ""}`
+    + `<button class="link-button" type="button" data-msg-delete="${m.id}">Supprimer</button></span>` : "";
+  const at = `<small class="msg-at" data-msg-id="${m.id}">${msgTime(m.created_at)}${m.edited_at ? " · modifié" : ""}${mineTools}</small>`;
   if (m.kind === "text") {
-    return `<div class="msg-line ${m.mine ? "me" : "them"}">${who}<div class="msg-bubble">${escapeHtml(m.body || "")}</div>
-      <small class="msg-at">${msgTime(m.created_at)}</small></div>`;
+    return `<div class="msg-line ${m.mine ? "me" : "them"}" data-line="${m.id}">${who}<div class="msg-bubble">${escapeHtml(m.body || "")}</div>${at}</div>`;
   }
   const meta = m.meta || {};
   if (m.kind === "result") {
     const time = meta.seconds != null ? ` · ${Math.floor(meta.seconds / 60)} min ${String(meta.seconds % 60).padStart(2, "0")}` : "";
-    return `<div class="msg-line ${m.mine ? "me" : "them"}"><div class="msg-card result">
+    return `<div class="msg-line ${m.mine ? "me" : "them"}" data-line="${m.id}"><div class="msg-card result">
       <span class="msg-kind">Résultat</span><b>${m.mine ? "Tu as" : `${escapeHtml(m.pseudo)} a`} fait « ${escapeHtml(m.title || "le quiz")} »</b>
-      <span class="msg-score">${meta.score} / ${meta.total}${time}</span></div><small class="msg-at">${msgTime(m.created_at)}</small></div>`;
+      <span class="msg-score">${meta.score} / ${meta.total}${time}</span></div>${at}</div>`;
   }
   const details = m.kind === "quiz" ? `${plural(meta.count || 0, "question", "questions")}${meta.course ? ` · ${escapeHtml(meta.course)}` : ""}`
     : m.kind === "challenge" ? `${plural(meta.count || 0, "question", "questions")}${meta.time_limit ? ` · ⏱ ${Math.round(meta.time_limit / 60)} min` : ""}`
@@ -6773,10 +6826,10 @@ function messageHtml(m) {
     `<a class="button ghost small" href="#/social/defis">Classement</a>`);
   if (["quiz", "cards", "course"].includes(m.kind) && !m.mine) actions.push(`<button class="${m.kind === "quiz" ? "ghost" : "primary"} small" type="button" data-msg-take="${m.id}">Ajouter à mes cours</button>`);
   if (group) actions.push(`<button class="icon msg-pin" type="button" data-msg-pin="${m.id}" title="Épingler en haut du groupe" aria-label="Épingler">📌</button>`);
-  return `<div class="msg-line ${m.mine ? "me" : "them"}">${who}<div class="msg-card ${m.kind}">
+  return `<div class="msg-line ${m.mine ? "me" : "them"}" data-line="${m.id}">${who}<div class="msg-card ${m.kind}">
     <span class="msg-kind">${MSG_KINDS[m.kind] || ""}</span><b>${escapeHtml(m.title || "")}</b>
     <small class="muted">${details}</small>${m.body ? `<p class="msg-note">« ${escapeHtml(m.body)} »</p>` : ""}
-    <span class="msg-actions">${actions.join("")}</span></div><small class="msg-at">${msgTime(m.created_at)}</small></div>`;
+    <span class="msg-actions">${actions.join("")}</span></div>${at}</div>`;
 }
 
 function renderPinned() {
@@ -6811,7 +6864,21 @@ $("#view-messages").addEventListener("click", async (e) => {
   const challenge = e.target.closest("[data-msg-challenge]")?.dataset.msgChallenge;
   const take = e.target.closest("[data-msg-take]")?.dataset.msgTake;
   const pin = e.target.closest("[data-msg-pin]")?.dataset.msgPin;
+  const edit = e.target.closest("[data-msg-edit]")?.dataset.msgEdit;
+  const del = e.target.closest("[data-msg-delete]")?.dataset.msgDelete;
   try {
+    if (edit) {
+      const text = await askText("Modifier le message", msg.byId?.[edit]?.body || "");
+      if (!text) return;
+      await api(`/api/online/messages/${edit}`, jsonBody("PUT", { text }));
+      return reloadRoom();
+    }
+    if (del) {
+      if (!await askConfirm("Supprimer ce message ? Il disparaît aussi chez les autres.")) return;
+      await api(`/api/online/messages/${del}`, { method: "DELETE" });
+      await reloadRoom();
+      return loadRooms();
+    }
     if (play) {
       const m = await api(`/api/online/messages/${play}`);
       const questions = (m.payload?.questions || []).map((q) => ({ ...q }));
@@ -6930,8 +6997,9 @@ $("#msg-attach-pop").addEventListener("click", async (e) => {
   const names = Object.fromEntries(courses.map((c) => [c.id, c.name]));
   const quizOptions = quizzes.filter((q) => q.count).map((q) => `<option value="quiz:${q.id}">${escapeHtml(names[q.course_id] ? `${names[q.course_id]} · ${q.title}` : q.title)} (${q.count})</option>`).join("");
   // Un cours entier, ou un seul de ses fichiers (onglets) s'il en a plusieurs
-  const courseOptions = courses.map((c) => `<option value="course:${c.id}:">${escapeHtml(c.name)}</option>`
-    + (c.files.length > 1 ? c.files.map((f) => `<option value="course:${c.id}:${f.id}">   ${escapeHtml(c.name)} · ${escapeHtml(fileLabel(f))}</option>`).join("") : "")).join("");
+  // Un cours entier : tous ses fichiers, avec leurs quiz et leurs flashcards (flashcards : un cours, ou un de ses fichiers)
+  const courseOptions = courses.map((c) => `<option value="course:${c.id}:">${escapeHtml(c.name)}${c.files.length > 1 ? ` (${c.files.length} fichiers)` : ""}</option>`
+    + (kind === "cards" && c.files.length > 1 ? c.files.map((f) => `<option value="course:${c.id}:${f.id}">   ${escapeHtml(c.name)} · ${escapeHtml(fileLabel(f))}</option>`).join("") : "")).join("");
   msg.shareKind = kind;
   $("#share-title").textContent = { quiz: "Envoyer un quiz", cards: "Envoyer des flashcards", course: "Envoyer un cours entier", challenge: "Lancer un défi" }[kind];
   $("#share-source-label").textContent = kind === "quiz" ? "Quel quiz ?" : kind === "challenge" ? "Sur quoi ?" : "Quel cours ?";

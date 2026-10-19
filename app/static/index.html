@@ -91,7 +91,7 @@
     <section id="view-messages" class="view" hidden>
       <!-- Social : deux sous-onglets, Messages et Défis et amis -->
       <nav class="filters social-tabs" aria-label="Social">
-        <a href="#/social" data-social-tab="messages">Messages</a>
+        <a href="#/social" data-social-tab="messages">Messages<span class="nav-badge social-badge" hidden></span></a>
         <a href="#/social/defis" data-social-tab="defis">Défis et amis</a>
       </nav>
       <div class="card" id="msg-off" hidden>
@@ -146,7 +146,7 @@
     <section id="view-online" class="view" hidden>
       <!-- Social : deux sous-onglets, Messages et Défis et amis -->
       <nav class="filters social-tabs" aria-label="Social">
-        <a href="#/social" data-social-tab="messages">Messages</a>
+        <a href="#/social" data-social-tab="messages">Messages<span class="nav-badge social-badge" hidden></span></a>
         <a href="#/social/defis" data-social-tab="defis">Défis et amis</a>
       </nav>
       <h1>Défis entre amis</h1>
@@ -1360,6 +1360,9 @@
       </div>
     </form>
   </dialog>
+
+  <!-- Un message vient d'arriver : un petit mot cliquable en bas de l'écran -->
+  <button class="msg-toast" id="msg-toast" type="button" hidden></button>
 
   <!-- Messages : nouvelle conversation (un ami) ou nouveau groupe (plusieurs amis) -->
   <dialog id="room-dialog" class="report-dialog">
