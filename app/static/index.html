@@ -24,7 +24,7 @@
       <a href="#/" data-nav="accueil">Accueil</a>
       <a href="#/cours" data-nav="cours">Mes cours</a>
       <a href="#/reviser" data-nav="reviser">Réviser</a>
-      <a href="#/social" data-nav="social" hidden>Social<span class="nav-badge" id="messages-badge" hidden></span></a>
+      <a href="#/defis" data-nav="defis" hidden>Défis</a>
       <a href="#/reglages" data-nav="reglages">Réglages</a>
       <button type="button" class="nav-feedback" id="feedback-btn" title="Une idée, un bug ? Écris-moi">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="M4 5h16v11H9l-5 4z"/></svg>Feedback</button>
@@ -87,68 +87,8 @@
       </div>
     </section>
 
-    <!-- Messages entre amis : conversations à deux et groupes ; on s'y envoie quiz, flashcards, cours et défis -->
-    <section id="view-messages" class="view" hidden>
-      <!-- Social : deux sous-onglets, Messages et Défis et amis -->
-      <nav class="filters social-tabs" aria-label="Social">
-        <a href="#/social" data-social-tab="messages">Messages<span class="nav-badge social-badge" hidden></span></a>
-        <a href="#/social/defis" data-social-tab="defis">Défis et amis</a>
-      </nav>
-      <div class="card" id="msg-off" hidden>
-        <h2>Messages</h2>
-        <p class="muted">Pour écrire à tes amis et leur envoyer tes quiz, connecte-toi d'abord dans
-          <a href="#/social/defis">Défis et amis</a> (Google ou un simple pseudo), puis ajoute tes amis avec leur code.</p>
-        <a class="button primary" href="#/social/defis">Me connecter</a>
-      </div>
-      <div class="msg-app" id="msg-app" hidden>
-        <aside class="msg-side">
-          <div class="msg-side-head"><h2>Messages</h2>
-            <button class="icon" type="button" id="msg-new" title="Nouvelle conversation" aria-label="Nouvelle conversation">＋</button></div>
-          <ul class="msg-rooms" id="msg-rooms"></ul>
-          <p class="muted small-text msg-privacy">Messages non chiffrés de bout en bout : chacun ne lit que ses conversations.</p>
-        </aside>
-        <section class="msg-main" id="msg-main">
-          <div class="msg-empty muted" id="msg-empty">Choisis une conversation, ou écris à un ami avec ＋.</div>
-          <div class="msg-room" id="msg-room" hidden>
-            <header class="msg-head">
-              <button class="icon msg-back" type="button" id="msg-back" aria-label="Retour aux conversations">←</button>
-              <span class="msg-avatar" id="msg-head-avatar"></span>
-              <span class="msg-head-text"><b id="msg-head-name"></b><small class="muted" id="msg-head-sub"></small></span>
-              <button class="ghost small" type="button" id="msg-room-menu" hidden>Groupe ▾</button>
-              <div class="plus-menu more-menu msg-room-pop" id="msg-room-pop" role="menu" hidden>
-                <button type="button" role="menuitem" data-room-action="add"><strong>Ajouter des amis</strong></button>
-                <button type="button" role="menuitem" data-room-action="rename"><strong>Renommer le groupe</strong></button>
-                <button type="button" role="menuitem" data-room-action="leave" class="danger"><strong>Quitter le groupe</strong></button>
-              </div>
-            </header>
-            <div class="msg-pinned" id="msg-pinned" hidden></div>
-            <div class="msg-list" id="msg-list"></div>
-            <form class="msg-compose" id="msg-compose">
-              <div class="msg-attach-wrap">
-                <button class="msg-plus" type="button" id="msg-attach" aria-label="Envoyer un quiz, des flashcards…">+</button>
-                <div class="plus-menu msg-attach-pop" id="msg-attach-pop" role="menu" hidden>
-                  <button type="button" role="menuitem" data-attach="quiz"><strong>📝 Envoyer un quiz</strong></button>
-                  <button type="button" role="menuitem" data-attach="cards"><strong>🃏 Envoyer des flashcards</strong></button>
-                  <button type="button" role="menuitem" data-attach="course"><strong>📚 Envoyer un cours entier</strong><small>ses quiz et ses flashcards</small></button>
-                  <button type="button" role="menuitem" data-attach="challenge"><strong>⚔️ Lancer un défi</strong></button>
-                </div>
-              </div>
-              <input type="text" id="msg-input" maxlength="2000" placeholder="Écris un message…" autocomplete="off">
-              <button class="primary" type="submit" id="msg-send">Envoyer</button>
-            </form>
-          </div>
-        </section>
-      </div>
-      <p class="status" id="msg-status" hidden></p>
-    </section>
-
     <!-- Défis entre amis (en ligne) : un compte, des amis, 10 questions à faire chacun -->
     <section id="view-online" class="view" hidden>
-      <!-- Social : deux sous-onglets, Messages et Défis et amis -->
-      <nav class="filters social-tabs" aria-label="Social">
-        <a href="#/social" data-social-tab="messages">Messages<span class="nav-badge social-badge" hidden></span></a>
-        <a href="#/social/defis" data-social-tab="defis">Défis et amis</a>
-      </nav>
       <h1>Défis entre amis</h1>
       <p class="muted" id="online-intro">Lance un défi tiré d'un de tes quiz ou de tout un cours (5 à 20 questions, avec ou sans chrono) : tes amis le font aussi, et vous comparez vos scores.
         Seuls ton pseudo, les questions du défi et les scores sont en ligne : tes cours restent sur ton ordinateur.</p>
@@ -206,7 +146,7 @@
           </div>
           <p class="status" id="online-challenge-status" hidden></p>
         </div>
-        <div class="card">
+        <div class="card" id="online-friends-card">
           <h2>Amis</h2>
           <div class="inline-row">
             <input type="text" id="online-friend-code" maxlength="8" placeholder="Code ami (ex. 4F2A9C)">
@@ -1360,6 +1300,33 @@
       </div>
     </form>
   </dialog>
+
+  <!-- Messages : la bulle en bas à droite (conversations et amis) et les fenêtres de discussion -->
+  <div class="chat-dock" id="chat-dock" hidden>
+    <div class="chat-windows" id="chat-windows"></div>
+    <div class="chat-panel" id="chat-panel" hidden>
+      <header class="chat-panel-head"><b>Messages</b>
+        <button class="icon" type="button" id="chat-panel-close" aria-label="Fermer">×</button></header>
+      <div id="chat-panel-off" hidden>
+        <p class="muted small-text">Pour écrire à tes amis et leur envoyer tes quiz, connecte-toi d'abord (Google ou un simple pseudo).</p>
+        <button class="primary small" type="button" id="chat-panel-login">Me connecter</button>
+      </div>
+      <div id="chat-panel-on" hidden>
+        <div class="filters chat-tabs" role="tablist">
+          <button type="button" role="tab" class="active" data-panel-tab="convs">Conversations</button>
+          <button type="button" role="tab" data-panel-tab="amis">Amis</button>
+        </div>
+        <div id="chat-convs">
+          <button class="ghost small chat-new" type="button" id="chat-new">+ Nouvelle conversation</button>
+          <ul class="msg-rooms" id="chat-rooms"></ul>
+          <p class="muted small-text msg-privacy">Messages non chiffrés de bout en bout : chacun ne lit que ses conversations.</p>
+        </div>
+        <div id="chat-friends" hidden></div>
+        <p class="status" id="chat-panel-status" hidden></p>
+      </div>
+    </div>
+    <button class="chat-bubble" id="chat-bubble" type="button" aria-label="Messages">💬<span class="nav-badge chat-badge" id="chat-badge" hidden></span></button>
+  </div>
 
   <!-- Un message vient d'arriver : un petit mot cliquable en bas de l'écran -->
   <button class="msg-toast" id="msg-toast" type="button" hidden></button>

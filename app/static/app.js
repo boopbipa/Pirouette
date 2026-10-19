@@ -90,19 +90,20 @@ async function route() {
   // Lien actif du menu du haut
   const section = !hash || hash === "#/" ? "accueil"
     : hash.startsWith("#/cours") || hash.startsWith("#/nouveau-cours") ? "cours"
-      : /^#\/(defis|messages|social)/.test(hash) ? "social" : hash.slice(2).split("/")[0];
-  // Sous-onglet actif de Social
-  const socialTab = /^#\/(defis|social\/defis)/.test(hash) ? "defis" : "messages";
-  document.querySelectorAll("[data-social-tab]").forEach((a) => a.classList.toggle("active", a.dataset.socialTab === socialTab));
+      : hash.startsWith("#/social/defis") ? "defis" : hash.slice(2).split("/")[0];
   document.querySelectorAll("[data-nav]").forEach((a) => a.classList.toggle("on", a.dataset.nav === section));
   try {
     if (match && match[2]) await openCreate(match[1], match[3] === "quiz" ? "quiz" : "cartes");
     else if (match) await openCourse(match[1], match[3]);
     else if (hash.startsWith("#/reglages")) await openSettings();
-    // Social : Messages (#/social, #/social/<conversation>) et Défis et amis (#/social/defis) ; anciens liens gardés
     else if (hash.startsWith("#/defis") || hash.startsWith("#/social/defis")) await openOnline();
-    else if (hash.startsWith("#/messages")) await openMessages(hash.split("/")[2] || "");
-    else if (hash.startsWith("#/social")) await openMessages(hash.split("/")[2] || "");
+    // Anciens liens des messages : la conversation s'ouvre dans sa fenêtre (en bas à droite), sur l'accueil
+    else if (hash.startsWith("#/messages") || hash.startsWith("#/social")) {
+      const room = hash.split("/")[2];
+      history.replaceState(null, "", "#/");
+      await openHome();
+      if (room) { await loadRooms(); openChat(room); } else togglePanel(true);
+    }
     else if (hash.match(/^#\/reviser\/(tout|dossier|cours)/)) await openReviewScope(...hash.slice(10).split("/"));
     else if (hash.startsWith("#/reviser")) await openReview();
     else if (hash.startsWith("#/nouveau-cours")) {
@@ -3454,8 +3455,7 @@ function sessionCrumbs(back, title) {
   if (back.startsWith("#/reviser/") && state.reviewScope) {
     return [{ label: "Réviser", href: "#/reviser" }, { label: state.reviewScope.name, href: back }, { label: title }];
   }
-  if (back === "#/defis") return [{ label: "Social", href: "#/social" }, { label: "Défis", href: "#/social/defis" }, { label: title }];
-  if (back.startsWith("#/messages")) return [{ label: "Messages", href: back }, { label: title }];
+  if (back === "#/defis") return [{ label: "Défis", href: "#/defis" }, { label: title }];
   return [back === "#/" ? { label: "Accueil", href: "#/" } : { label: "Réviser", href: "#/reviser" }, { label: title }];
 }
 $("#session-done-back").addEventListener("click", (e) => { state.sessionBack = state.session?.back; leaveSession(e); });
@@ -4316,7 +4316,6 @@ function startQuiz(quiz, questions, { back = state.quizBack } = {}) {
     : quiz.course_id ? [COURSES_CRUMB, { label: quiz.course_name || "Cours", href: `#/cours/${quiz.course_id}/quiz` }, { label: quiz.title }]
     : [COURSES_CRUMB, { label: quiz.title }]);
   $("#back-course-btn").textContent = state.quizBack === "#/defis" ? "Retour aux défis"
-    : state.quizBack?.startsWith("#/messages") ? "Retour aux messages"
     : state.quizBack ? "Retour à Réviser" : quiz.course_id ? "Retour au cours" : "Mes cours";
   show("quiz");
   renderQuestion();
@@ -4604,6 +4603,10 @@ const WELCOME = [
 ];
 // Les nouveautés de chaque version (le carton « Quoi de neuf » ne s'affiche que si la version en a)
 const WHATS_NEW = {
+  "0.60.0": [
+    ["💬", "La bulle des messages", "En bas à droite, sur toutes les pages : tes conversations et tes amis ; chaque conversation s'ouvre dans une petite fenêtre qu'on réduit ou ferme"],
+    ["⚔️", "L'onglet Défis revient", "Rien que les défis et ton compte ; les amis sont dans la bulle 💬"],
+  ],
   "0.59.0": [
     ["✎", "Modifier ou supprimer un message", "Sous tes messages : « Modifier » (le texte) et « Supprimer » (il disparaît aussi chez les autres)"],
     ["🔔", "Notification de message", "Pastille sur Social et sur Messages, et un petit mot en bas de l'écran quand un message arrive"],
@@ -6467,9 +6470,8 @@ pageScroll().addEventListener("scroll", () => {
 // ---------- Défis entre amis (en ligne, voir app/online.py) ----------
 // Onglet Défis : visible seulement quand le service en ligne est branché dans cette version
 api("/api/online").then((me) => {
-  document.querySelector("[data-nav=social]").hidden = !me.configured;
-  if (me.connected && me.profile) refreshMessagesBadge();
-}).catch(() => { document.querySelector("[data-nav=social]").hidden = true; });
+  document.querySelector("[data-nav=defis]").hidden = !me.configured;
+}).catch(() => { document.querySelector("[data-nav=defis]").hidden = true; });
 async function openOnline() {
   state.course = null;
   setCrumbs();
@@ -6635,7 +6637,8 @@ async function renderFriends() {
   $("#online-friends").innerHTML = [
     ...data.received.map((f) => row(f, `<small class="muted">t'invite</small>
       <button class="primary small" type="button" data-accept-friend="${f.id}">Accepter</button>`)),
-    ...data.friends.map((f) => row(f, `<button class="link-button" type="button" data-remove-friend="${f.id}">Retirer</button>`)),
+    ...data.friends.map((f) => row(f, `<button class="primary small" type="button" data-chat-friend="${f.id}">Écrire</button>
+      <button class="link-button" type="button" data-remove-friend="${f.id}">Retirer</button>`)),
     ...data.sent.map((f) => row(f, `<small class="muted">invitation envoyée</small>`)),
   ].join("") || `<li class="empty muted">Pas encore d'amis : envoie-leur ton code ami.</li>`;
 }
@@ -6662,36 +6665,105 @@ $("#online-friends").addEventListener("click", async (e) => {
 });
 
 
-// ---------- Messages entre amis : conversations à deux et groupes (voir app/online.py) ----------
-// Les nouveaux messages arrivent en quelques secondes tant que la conversation est ouverte ; ailleurs, une pastille
-// sur l'onglet Messages dit combien il y en a.
-const msg = { rooms: [], room: null, last: "", timer: null, friends: [], me: null };
+// ---------- Messages entre amis : une bulle en bas à droite, et des fenêtres de discussion (voir app/online.py) ----------
+// Comme une messagerie de réseau social : la bulle 💬 (sur toutes les pages) ouvre la liste des conversations et des
+// amis ; chaque conversation s'ouvre dans une petite fenêtre en bas de l'écran, qu'on réduit ou ferme, et qui reste
+// ouverte quand on change de page. Les nouveaux messages arrivent toutes les 4 s dans les fenêtres ouvertes.
+const msg = { rooms: [], wins: new Map(), ready: false, me: null, unreadSeen: null, tick: 0 };
 const MSG_KINDS = { quiz: "Quiz", cards: "Flashcards", course: "Cours", challenge: "Défi", result: "Résultat" };
+const MAX_WINDOWS = 3;
 const avatarColor = (text) => ["#B4532A", "#2F7D4F", "#5B6CB5", "#8A6D3B", "#9C4F8F", "#3E7F8C"][
   [...String(text)].reduce((n, c) => n + c.charCodeAt(0), 0) % 6];
 const avatar = (name) => `<span class="msg-avatar" style="background:${avatarColor(name)}">${escapeHtml((name || "?").slice(0, 2).toUpperCase())}</span>`;
 const msgTime = (at) => {
   const d = new Date(at);
-  const today = new Date().toDateString() === d.toDateString();
-  return today ? d.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })
+  return new Date().toDateString() === d.toDateString() ? d.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })
     : d.toLocaleDateString("fr-FR", { day: "numeric", month: "short" });
 };
 
-function setUnread(unread) {
-  const text = unread > 99 ? "99+" : String(unread);
-  for (const badge of document.querySelectorAll("#messages-badge, .social-badge")) {
-    badge.hidden = !unread;
-    badge.textContent = text;
+// Fenêtres ouvertes, gardées d'une ouverture de Pirouette à l'autre : [{ id, min }]
+function savedWindows() { try { return JSON.parse(localStorage.getItem("pirouette.chats") || "[]"); } catch { return []; } }
+function saveWindows() {
+  try { localStorage.setItem("pirouette.chats", JSON.stringify([...msg.wins.values()].map((w) => ({ id: w.id, min: w.min })))); } catch {}
+}
+
+// Au lancement : la bulle n'apparaît que si les défis en ligne sont ouverts dans cette version
+async function startDock() {
+  const me = await api("/api/online").catch(() => ({}));
+  $("#chat-dock").hidden = !me.configured;
+  if (!me.configured) return;
+  msg.me = me.profile;
+  msg.ready = Boolean(me.connected && me.profile);
+  if (!msg.ready) return;
+  await loadRooms();
+  msg.unreadSeen = msg.rooms.reduce((n, r) => n + r.unread, 0);  // déjà là au lancement : la pastille suffit
+  for (const w of savedWindows()) if (msg.rooms.some((r) => r.id === w.id)) openChat(w.id, { min: w.min, focus: false });
+}
+setTimeout(startDock, 1200);
+
+// ---------- La bulle et son panneau : conversations / amis ----------
+$("#chat-bubble").addEventListener("click", () => togglePanel());
+async function togglePanel(open = $("#chat-panel").hidden) {
+  $("#chat-panel").hidden = !open;
+  if (!open) return;
+  const me = await api("/api/online").catch(() => ({}));
+  msg.me = me.profile;
+  msg.ready = Boolean(me.connected && me.profile);
+  $("#chat-panel-off").hidden = msg.ready;
+  $("#chat-panel-on").hidden = !msg.ready;
+  if (msg.ready) { await loadRooms(); if (panelTab() === "amis") renderFriends(); }
+}
+const panelTab = () => document.querySelector("[data-panel-tab].active")?.dataset.panelTab || "convs";
+document.querySelectorAll("[data-panel-tab]").forEach((b) => b.addEventListener("click", () => {
+  document.querySelectorAll("[data-panel-tab]").forEach((x) => x.classList.toggle("active", x === b));
+  $("#chat-convs").hidden = b.dataset.panelTab !== "convs";
+  $("#chat-friends").hidden = b.dataset.panelTab !== "amis";
+  if (b.dataset.panelTab === "amis") renderFriends();
+}));
+$("#chat-panel-close").addEventListener("click", () => togglePanel(false));
+$("#chat-panel-login").addEventListener("click", () => { togglePanel(false); location.hash = "#/defis"; });
+// La carte « Amis » de la page Défis vit maintenant dans le panneau
+$("#chat-friends").append($("#online-friends-card"));
+
+async function loadRooms() {
+  try {
+    msg.rooms = await api("/api/online/rooms");
+  } catch (err) {
+    return setStatus("#chat-panel-status", err.message, false);
+  }
+  const openIds = new Set([...msg.wins.values()].filter((w) => !w.min).map((w) => w.id));
+  setUnread(msg.rooms.reduce((n, r) => n + (openIds.has(r.id) ? 0 : r.unread), 0));
+  $("#chat-rooms").innerHTML = msg.rooms.length ? msg.rooms.map((r) => `
+    <li><button class="msg-room-item" type="button" data-open-chat="${r.id}">
+      ${avatar(r.name)}
+      <span class="msg-room-text"><b>${escapeHtml(r.name)}${r.kind === "group" ? ` <small class="muted">· ${r.members.length}</small>` : ""}</b>
+        <small class="muted">${r.last ? `${r.kind === "group" && !r.last.mine ? `${escapeHtml(r.last.pseudo)} : ` : r.last.mine ? "Toi : " : ""}${escapeHtml(r.last.text)}` : "Pas encore de message"}</small></span>
+      ${r.unread && !openIds.has(r.id) ? `<span class="badge">${r.unread}</span>` : ""}
+    </button></li>`).join("")
+    : `<li class="muted small-text msg-none">Pas encore de conversation : « + Nouvelle » pour écrire à un ami ou créer un groupe.</li>`;
+  for (const w of msg.wins.values()) {  // le nom d'un groupe, ses membres ou son épinglé ont pu changer
+    const room = msg.rooms.find((r) => r.id === w.id);
+    if (room) { w.room = room; renderWinHead(w); }
   }
 }
-async function refreshMessagesBadge() {
-  const { unread } = await api("/api/online/unread").catch(() => ({ unread: 0 }));
-  setUnread(unread);
-  // Un nouveau message (hors de sa conversation ouverte) : un petit mot en bas de l'écran, cliquable
-  if (unread > (msg.unreadSeen ?? unread)) {
-    const rooms = await api("/api/online/rooms").catch(() => []);
-    const open = !$("#view-messages").hidden ? msg.room?.id : null;  // pas pour la conversation qu'on lit déjà
-    const room = rooms.find((r) => r.unread && r.id !== open);
+$("#chat-rooms").addEventListener("click", (e) => {
+  const id = e.target.closest("[data-open-chat]")?.dataset.openChat;
+  if (id) { openChat(id); togglePanel(false); }
+});
+$("#chat-new").addEventListener("click", () => openRoomDialog());
+
+function setUnread(unread) {
+  $("#chat-badge").hidden = !unread;
+  $("#chat-badge").textContent = unread > 99 ? "99+" : String(unread);
+}
+// Un message arrive dans une conversation qui n'est pas ouverte : la pastille, et un petit mot cliquable
+async function checkUnread() {
+  if (!msg.ready) return;
+  await loadRooms();
+  const openIds = new Set([...msg.wins.values()].filter((w) => !w.min).map((w) => w.id));
+  const unread = msg.rooms.reduce((n, r) => n + (openIds.has(r.id) ? 0 : r.unread), 0);
+  if (msg.unreadSeen !== null && unread > msg.unreadSeen) {
+    const room = msg.rooms.find((r) => r.unread && !openIds.has(r.id));
     if (room?.last) notifyMessage(room);
   }
   msg.unreadSeen = unread;
@@ -6704,118 +6776,133 @@ function notifyMessage(room) {
   clearTimeout(msg.toastTimer);
   msg.toastTimer = setTimeout(() => { box.hidden = true; }, 8000);
 }
-$("#msg-toast").addEventListener("click", () => {
-  $("#msg-toast").hidden = true;
-  location.hash = `#/social/${$("#msg-toast").dataset.room}`;
-});
-setInterval(() => {
-  if (document.querySelector("[data-nav=social]").hidden) return;
-  if ($("#view-messages").hidden || !msg.room) refreshMessagesBadge();
-}, 12000);
+$("#msg-toast").addEventListener("click", () => { $("#msg-toast").hidden = true; openChat($("#msg-toast").dataset.room); });
 
-async function openMessages(roomId = "") {
-  show("messages");
-  clearInterval(msg.timer);
-  const me = await api("/api/online").catch(() => ({}));
-  msg.me = me.profile;
-  const ready = me.connected && me.profile;
-  $("#msg-off").hidden = Boolean(ready);
-  $("#msg-app").hidden = !ready;
-  if (!ready) return;
-  await loadRooms();
-  if (roomId) await openRoom(roomId);
-  else { msg.room = null; $("#msg-room").hidden = true; $("#msg-empty").hidden = false; $("#msg-app").classList.remove("in-room"); }
-  // Tant que la page est ouverte : nouveaux messages toutes les 4 s, liste des conversations toutes les 12 s
-  let tick = 0;
-  msg.timer = setInterval(async () => {
-    if ($("#view-messages").hidden) return clearInterval(msg.timer);
-    if (msg.room) await (++tick % 5 === 0 ? reloadRoom() : pullMessages()).catch(() => {});
-    if (tick % 3 === 0) await loadRooms().catch(() => {});
-  }, 4000);
-}
-
-async function loadRooms() {
-  try {
-    msg.rooms = await api("/api/online/rooms");
-  } catch (err) {
-    return setStatus("#msg-status", err.message, false);
+// Une seule horloge : les fenêtres ouvertes toutes les 4 s (tout relu toutes les 20 s : modifications, suppressions),
+// les conversations et la pastille toutes les 12 s
+setInterval(async () => {
+  if (!msg.ready) return;
+  msg.tick += 1;
+  for (const w of msg.wins.values()) {
+    if (!w.min) await (msg.tick % 5 === 0 ? reloadWin(w) : pullWin(w)).catch(() => {});
   }
-  const unread = msg.rooms.reduce((n, r) => n + (r.id === msg.room?.id ? 0 : r.unread), 0);
-  setUnread(unread);
-  msg.unreadSeen = unread;
-  $("#msg-rooms").innerHTML = msg.rooms.length ? msg.rooms.map((r) => `
-    <li><a class="msg-room-item${r.id === msg.room?.id ? " on" : ""}" href="#/messages/${r.id}">
-      ${avatar(r.name)}
-      <span class="msg-room-text"><b>${escapeHtml(r.name)}${r.kind === "group" ? ` <small class="muted">· ${r.members.length}</small>` : ""}</b>
-        <small class="muted">${r.last ? `${r.kind === "group" && !r.last.mine ? `${escapeHtml(r.last.pseudo)} : ` : r.last.mine ? "Toi : " : ""}${escapeHtml(r.last.text)}` : "Pas encore de message"}</small></span>
-      ${r.unread && r.id !== msg.room?.id ? `<span class="badge">${r.unread}</span>` : ""}
-    </a></li>`).join("")
-    : `<li class="muted small-text msg-none">Pas encore de conversation : clique sur ＋ pour écrire à un ami ou créer un groupe.</li>`;
-}
+  if (msg.tick % 3 === 0) await checkUnread().catch(() => {});
+}, 4000);
 
-async function openRoom(roomId) {
+// ---------- Les fenêtres de discussion ----------
+function openChat(roomId, { min = false, focus = true } = {}) {
   const room = msg.rooms.find((r) => r.id === roomId);
-  if (!room) { $("#msg-room").hidden = true; $("#msg-empty").hidden = false; return; }
-  msg.room = room;
-  msg.last = "";
-  $("#msg-app").classList.add("in-room");
-  $("#msg-empty").hidden = true;
-  $("#msg-room").hidden = false;
-  $("#msg-head-avatar").outerHTML = `<span id="msg-head-avatar">${avatar(room.name)}</span>`;
-  $("#msg-head-name").textContent = room.name;
-  $("#msg-head-sub").textContent = room.kind === "group" ? ` · ${room.members.map((m) => m.pseudo).join(", ")}` : "";
-  $("#msg-room-menu").hidden = room.kind !== "group";
-  $("#msg-list").innerHTML = "";
-  await pullMessages();
-  loadRooms();
-  $("#msg-input").focus();
-}
-
-async function pullMessages() {
-  const room = msg.room;
-  const { messages } = await api(`/api/online/rooms/${room.id}/messages${msg.last ? `?after=${encodeURIComponent(msg.last)}` : ""}`);
-  if (msg.room !== room || !messages.length) return renderPinned();
-  const list = $("#msg-list");
-  const atBottom = list.scrollHeight - list.scrollTop - list.clientHeight < 80;
-  msg.last = messages[messages.length - 1].created_at;
-  msg.byId = { ...(msg.byId || {}), ...Object.fromEntries(messages.map((m) => [m.id, m])) };
-  list.insertAdjacentHTML("beforeend", messages.map(messageHtml).join(""));
-  if (atBottom || messages.some((m) => m.mine)) list.scrollTop = list.scrollHeight;
-  renderPinned();
-}
-
-// Toute la conversation à nouveau (toutes les 20 s) : un message modifié ou supprimé par l'autre se met à jour
-async function reloadRoom() {
-  const room = msg.room;
-  const { messages } = await api(`/api/online/rooms/${room.id}/messages`);
-  if (msg.room !== room) return;
-  const list = $("#msg-list");
-  const html = messages.map(messageHtml).join("");
-  if (html === msg.lastHtml) return;
-  const atBottom = list.scrollHeight - list.scrollTop - list.clientHeight < 80;
-  msg.lastHtml = html;
-  msg.byId = Object.fromEntries(messages.map((m) => [m.id, m]));
-  msg.last = messages.length ? messages[messages.length - 1].created_at : "";
-  list.innerHTML = html;
-  if (atBottom) list.scrollTop = list.scrollHeight;
-  renderPinned();
-}
-
-function messageHtml(m) {
-  const group = msg.room?.kind === "group";
-  const who = group && !m.mine ? `<p class="msg-who">${escapeHtml(m.pseudo)}</p>` : "";
-  const mineTools = m.mine ? ` <span class="msg-tools">${m.kind === "text" ? `<button class="link-button" type="button" data-msg-edit="${m.id}">Modifier</button> · ` : ""}`
-    + `<button class="link-button" type="button" data-msg-delete="${m.id}">Supprimer</button></span>` : "";
-  const at = `<small class="msg-at" data-msg-id="${m.id}">${msgTime(m.created_at)}${m.edited_at ? " · modifié" : ""}${mineTools}</small>`;
-  if (m.kind === "text") {
-    return `<div class="msg-line ${m.mine ? "me" : "them"}" data-line="${m.id}">${who}<div class="msg-bubble">${escapeHtml(m.body || "")}</div>${at}</div>`;
+  if (!room) return;
+  let w = msg.wins.get(roomId);
+  if (!w) {
+    // Trop de fenêtres : la plus ancienne se ferme
+    if (msg.wins.size >= MAX_WINDOWS) closeChat([...msg.wins.keys()][0]);
+    const el = document.createElement("section");
+    el.className = "chat-win";
+    el.dataset.room = roomId;
+    el.innerHTML = `
+      <header class="chat-head">
+        <button class="chat-title" type="button" data-win="toggle"><span class="chat-av"></span><span class="chat-name"></span></button>
+        <button class="icon" type="button" data-win="group" title="Groupe" aria-label="Menu du groupe" hidden>⋯</button>
+        <button class="icon" type="button" data-win="toggle" title="Réduire" aria-label="Réduire">–</button>
+        <button class="icon" type="button" data-win="close" title="Fermer" aria-label="Fermer">×</button>
+        <div class="plus-menu more-menu chat-group-pop" role="menu" hidden>
+          <button type="button" role="menuitem" data-room-action="add"><strong>Ajouter des amis</strong></button>
+          <button type="button" role="menuitem" data-room-action="rename"><strong>Renommer le groupe</strong></button>
+          <button type="button" role="menuitem" data-room-action="leave" class="danger"><strong>Quitter le groupe</strong></button>
+        </div>
+      </header>
+      <div class="chat-body">
+        <div class="msg-pinned" hidden></div>
+        <div class="msg-list"></div>
+        <form class="msg-compose">
+          <div class="msg-attach-wrap">
+            <button class="msg-plus" type="button" data-win="attach" aria-label="Envoyer un quiz, des flashcards…">+</button>
+            <div class="plus-menu msg-attach-pop" role="menu" hidden>
+              <button type="button" role="menuitem" data-attach="quiz"><strong>📝 Envoyer un quiz</strong></button>
+              <button type="button" role="menuitem" data-attach="cards"><strong>🃏 Envoyer des flashcards</strong></button>
+              <button type="button" role="menuitem" data-attach="course"><strong>📚 Envoyer un cours entier</strong><small>ses quiz et ses flashcards</small></button>
+              <button type="button" role="menuitem" data-attach="challenge"><strong>⚔️ Lancer un défi</strong></button>
+            </div>
+          </div>
+          <input type="text" maxlength="2000" placeholder="Écris un message…" autocomplete="off">
+          <button class="primary small" type="submit">Envoyer</button>
+        </form>
+      </div>`;
+    $("#chat-windows").prepend(el);
+    w = { id: roomId, room, el, min, last: "", byId: {}, html: "" };
+    msg.wins.set(roomId, w);
+    renderWinHead(w);
+    reloadWin(w).catch(() => {});
   }
+  setMin(w, min);
+  saveWindows();
+  if (focus && !min) w.el.querySelector(".msg-compose input").focus();
+}
+function closeChat(roomId) {
+  const w = msg.wins.get(roomId);
+  if (!w) return;
+  w.el.remove();
+  msg.wins.delete(roomId);
+  saveWindows();
+}
+function setMin(w, min) {
+  w.min = min;
+  w.el.classList.toggle("min", min);
+  if (!min) { reloadWin(w).catch(() => {}); loadRooms(); }
+  saveWindows();
+}
+function renderWinHead(w) {
+  w.el.querySelector(".chat-av").innerHTML = avatar(w.room.name);
+  w.el.querySelector(".chat-name").textContent = w.room.name;
+  w.el.querySelector("[data-win=group]").hidden = w.room.kind !== "group";
+  const unread = w.min && w.room.unread;
+  w.el.classList.toggle("has-unread", Boolean(unread));
+  renderPinned(w);
+}
+
+async function pullWin(w) {
+  const { messages } = await api(`/api/online/rooms/${w.id}/messages${w.last ? `?after=${encodeURIComponent(w.last)}` : ""}`);
+  if (!messages.length || !msg.wins.has(w.id)) return;
+  const list = w.el.querySelector(".msg-list");
+  const atBottom = list.scrollHeight - list.scrollTop - list.clientHeight < 80;
+  w.last = messages[messages.length - 1].created_at;
+  messages.forEach((m) => { w.byId[m.id] = m; });
+  list.insertAdjacentHTML("beforeend", messages.map((m) => messageHtml(m, w)).join(""));
+  w.html = list.innerHTML;
+  if (atBottom || messages.some((m) => m.mine)) list.scrollTop = list.scrollHeight;
+  renderPinned(w);
+}
+async function reloadWin(w) {
+  const { messages } = await api(`/api/online/rooms/${w.id}/messages`);
+  if (!msg.wins.has(w.id)) return;
+  const list = w.el.querySelector(".msg-list");
+  const html = messages.map((m) => messageHtml(m, w)).join("")
+    || `<p class="muted small-text msg-none">Écris le premier message, ou envoie un quiz avec +.</p>`;
+  w.byId = Object.fromEntries(messages.map((m) => [m.id, m]));
+  w.last = messages.length ? messages[messages.length - 1].created_at : "";
+  renderPinned(w);
+  if (html === w.html) return;
+  const first = !w.html;
+  const atBottom = list.scrollHeight - list.scrollTop - list.clientHeight < 80;
+  list.innerHTML = w.html = html;
+  if (first || atBottom) list.scrollTop = list.scrollHeight;
+}
+
+function messageHtml(m, w) {
+  const group = w.room.kind === "group";
+  const who = group && !m.mine ? `<p class="msg-who">${escapeHtml(m.pseudo)}</p>` : "";
+  const tools = m.mine ? ` <span class="msg-tools">${m.kind === "text" ? `<button class="link-button" type="button" data-msg-edit="${m.id}">Modifier</button> · ` : ""}`
+    + `<button class="link-button" type="button" data-msg-delete="${m.id}">Supprimer</button></span>` : "";
+  const at = `<small class="msg-at">${msgTime(m.created_at)}${m.edited_at ? " · modifié" : ""}${tools}</small>`;
+  const line = (inner) => `<div class="msg-line ${m.mine ? "me" : "them"}">${who}${inner}${at}</div>`;
+  if (m.kind === "text") return line(`<div class="msg-bubble">${escapeHtml(m.body || "")}</div>`);
   const meta = m.meta || {};
   if (m.kind === "result") {
     const time = meta.seconds != null ? ` · ${Math.floor(meta.seconds / 60)} min ${String(meta.seconds % 60).padStart(2, "0")}` : "";
-    return `<div class="msg-line ${m.mine ? "me" : "them"}" data-line="${m.id}"><div class="msg-card result">
-      <span class="msg-kind">Résultat</span><b>${m.mine ? "Tu as" : `${escapeHtml(m.pseudo)} a`} fait « ${escapeHtml(m.title || "le quiz")} »</b>
-      <span class="msg-score">${meta.score} / ${meta.total}${time}</span></div>${at}</div>`;
+    return line(`<div class="msg-card result"><span class="msg-kind">Résultat</span>
+      <b>${m.mine ? "Tu as" : `${escapeHtml(m.pseudo)} a`} fait « ${escapeHtml(m.title || "le quiz")} »</b>
+      <span class="msg-score">${meta.score} / ${meta.total}${time}</span></div>`);
   }
   const details = m.kind === "quiz" ? `${plural(meta.count || 0, "question", "questions")}${meta.course ? ` · ${escapeHtml(meta.course)}` : ""}`
     : m.kind === "challenge" ? `${plural(meta.count || 0, "question", "questions")}${meta.time_limit ? ` · ⏱ ${Math.round(meta.time_limit / 60)} min` : ""}`
@@ -6823,43 +6910,56 @@ function messageHtml(m) {
   const actions = [];
   if (m.kind === "quiz") actions.push(`<button class="primary small" type="button" data-msg-play="${m.id}">Faire le quiz</button>`);
   if (m.kind === "challenge") actions.push(`<button class="primary small" type="button" data-msg-challenge="${meta.challenge_id}">Faire le défi</button>`,
-    `<a class="button ghost small" href="#/social/defis">Classement</a>`);
+    `<a class="button ghost small" href="#/defis">Classement</a>`);
   if (["quiz", "cards", "course"].includes(m.kind) && !m.mine) actions.push(`<button class="${m.kind === "quiz" ? "ghost" : "primary"} small" type="button" data-msg-take="${m.id}">Ajouter à mes cours</button>`);
   if (group) actions.push(`<button class="icon msg-pin" type="button" data-msg-pin="${m.id}" title="Épingler en haut du groupe" aria-label="Épingler">📌</button>`);
-  return `<div class="msg-line ${m.mine ? "me" : "them"}" data-line="${m.id}">${who}<div class="msg-card ${m.kind}">
-    <span class="msg-kind">${MSG_KINDS[m.kind] || ""}</span><b>${escapeHtml(m.title || "")}</b>
+  return line(`<div class="msg-card ${m.kind}"><span class="msg-kind">${MSG_KINDS[m.kind] || ""}</span><b>${escapeHtml(m.title || "")}</b>
     <small class="muted">${details}</small>${m.body ? `<p class="msg-note">« ${escapeHtml(m.body)} »</p>` : ""}
-    <span class="msg-actions">${actions.join("")}</span></div>${at}</div>`;
+    <span class="msg-actions">${actions.join("")}</span></div>`);
 }
 
-function renderPinned() {
-  const pin = msg.room?.kind === "group" && msg.room.pinned ? msg.byId?.[msg.room.pinned] : null;
-  $("#msg-pinned").hidden = !pin;
+function renderPinned(w) {
+  const box = w.el.querySelector(".msg-pinned");
+  const pin = w.room.kind === "group" && w.room.pinned ? w.byId[w.room.pinned] : null;
+  box.hidden = !pin;
   if (!pin) return;
-  $("#msg-pinned").innerHTML = `📌 <b>Épinglé :</b> ${escapeHtml(MSG_KINDS[pin.kind] || "Message")} · ${escapeHtml(pin.title || pin.body || "")}
+  box.innerHTML = `📌 <b>${escapeHtml(MSG_KINDS[pin.kind] || "Épinglé")} :</b> <span>${escapeHtml(pin.title || pin.body || "")}</span>
     ${pin.kind === "quiz" ? `<button class="ghost small" type="button" data-msg-play="${pin.id}">Faire le quiz</button>` : ""}
-    ${["quiz", "cards", "course"].includes(pin.kind) && !pin.mine ? `<button class="ghost small" type="button" data-msg-take="${pin.id}">Ajouter à mes cours</button>` : ""}
+    ${["quiz", "cards", "course"].includes(pin.kind) && !pin.mine ? `<button class="ghost small" type="button" data-msg-take="${pin.id}">Ajouter</button>` : ""}
     <button class="icon" type="button" data-msg-unpin title="Désépingler" aria-label="Désépingler">✕</button>`;
 }
 
-$("#msg-compose").addEventListener("submit", async (e) => {
+// Écrire
+$("#chat-windows").addEventListener("submit", async (e) => {
   e.preventDefault();
-  const text = $("#msg-input").value.trim();
-  if (!text || !msg.room) return;
-  $("#msg-input").value = "";
+  const w = msg.wins.get(e.target.closest(".chat-win")?.dataset.room);
+  const input = e.target.querySelector("input");
+  const text = input.value.trim();
+  if (!w || !text) return;
+  input.value = "";
   try {
-    await api(`/api/online/rooms/${msg.room.id}/messages`, jsonBody("POST", { text }));
-    await pullMessages();
-    loadRooms();
+    await api(`/api/online/rooms/${w.id}/messages`, jsonBody("POST", { text }));
+    await pullWin(w);
   } catch (err) {
-    $("#msg-input").value = text;
-    setStatus("#msg-status", err.message, false);
+    input.value = text;
+    notify(err.message);
   }
 });
-$("#msg-back").addEventListener("click", () => { location.hash = "#/social"; });
 
-// Actions sur les messages : faire le quiz, le défi, ajouter à mes cours, épingler
-$("#view-messages").addEventListener("click", async (e) => {
+// Tout ce qu'on clique dans une fenêtre : réduire, fermer, menus, et les actions des messages
+$("#chat-windows").addEventListener("click", async (e) => {
+  const win = e.target.closest(".chat-win");
+  const w = win && msg.wins.get(win.dataset.room);
+  if (!w) return;
+  const control = e.target.closest("[data-win]")?.dataset.win;
+  if (control === "toggle") return setMin(w, !w.min);
+  if (control === "close") return closeChat(w.id);
+  if (control === "group") { const pop = win.querySelector(".chat-group-pop"); pop.hidden = !pop.hidden; return; }
+  if (control === "attach") { const pop = win.querySelector(".msg-attach-pop"); pop.hidden = !pop.hidden; return; }
+  const kind = e.target.closest("[data-attach]")?.dataset.attach;
+  if (kind) { win.querySelector(".msg-attach-pop").hidden = true; return openShare(w, kind); }
+  const roomAction = e.target.closest("[data-room-action]")?.dataset.roomAction;
+  if (roomAction) { win.querySelector(".chat-group-pop").hidden = true; return groupAction(w, roomAction); }
   const play = e.target.closest("[data-msg-play]")?.dataset.msgPlay;
   const challenge = e.target.closest("[data-msg-challenge]")?.dataset.msgChallenge;
   const take = e.target.closest("[data-msg-take]")?.dataset.msgTake;
@@ -6867,78 +6967,70 @@ $("#view-messages").addEventListener("click", async (e) => {
   const edit = e.target.closest("[data-msg-edit]")?.dataset.msgEdit;
   const del = e.target.closest("[data-msg-delete]")?.dataset.msgDelete;
   try {
+    if (play) {
+      const m = await api(`/api/online/messages/${play}`);
+      const questions = (m.payload?.questions || []).map((q) => ({ ...q }));
+      if (!questions.length) return notify("Ce quiz est vide.");
+      setMin(w, true);  // la fenêtre se range pendant le quiz
+      const quiz = { id: null, shared: { room: w.id, title: m.title }, started: Date.now(), title: m.title || "Quiz reçu",
+                     questions, course_name: m.payload?.course_name || "" };
+      return startQuiz(quiz, shuffle(questions), { back: location.hash || "#/" });
+    }
+    if (challenge) { setMin(w, true); return await playChallenge(challenge, location.hash || "#/"); }
+    if (take) return openTake(w, take);
+    if (pin) { await api(`/api/online/rooms/${w.id}`, jsonBody("PUT", { pinned: pin })); w.room.pinned = pin; return renderPinned(w); }
+    if (e.target.closest("[data-msg-unpin]")) { await api(`/api/online/rooms/${w.id}`, jsonBody("PUT", { unpin: true })); w.room.pinned = null; return renderPinned(w); }
     if (edit) {
-      const text = await askText("Modifier le message", msg.byId?.[edit]?.body || "");
+      const text = await askText("Modifier le message", w.byId[edit]?.body || "");
       if (!text) return;
       await api(`/api/online/messages/${edit}`, jsonBody("PUT", { text }));
-      return reloadRoom();
+      return reloadWin(w);
     }
     if (del) {
       if (!await askConfirm("Supprimer ce message ? Il disparaît aussi chez les autres.")) return;
       await api(`/api/online/messages/${del}`, { method: "DELETE" });
-      await reloadRoom();
+      await reloadWin(w);
       return loadRooms();
     }
-    if (play) {
-      const m = await api(`/api/online/messages/${play}`);
-      const questions = (m.payload?.questions || []).map((q) => ({ ...q }));
-      if (!questions.length) return setStatus("#msg-status", "Ce quiz est vide.", false);
-      const quiz = { id: null, shared: { room: msg.room.id, title: m.title }, started: Date.now(), title: m.title || "Quiz reçu",
-                     questions, course_name: m.payload?.course_name || "" };
-      return startQuiz(quiz, shuffle(questions), { back: `#/messages/${msg.room.id}` });
-    }
-    if (challenge) return await playChallenge(challenge, `#/messages/${msg.room.id}`);
-    if (take) return openTake(take);
-    if (pin) {
-      await api(`/api/online/rooms/${msg.room.id}`, jsonBody("PUT", { pinned: pin }));
-      msg.room.pinned = pin;
-      return renderPinned();
-    }
-    if (e.target.closest("[data-msg-unpin]")) {
-      await api(`/api/online/rooms/${msg.room.id}`, jsonBody("PUT", { unpin: true }));
-      msg.room.pinned = null;
-      return renderPinned();
-    }
   } catch (err) {
-    setStatus("#msg-status", err.message, false);
+    notify(err.message);
   }
 });
+document.addEventListener("click", (e) => {
+  document.querySelectorAll(".chat-win .msg-attach-pop, .chat-win .chat-group-pop").forEach((pop) => {
+    if (!pop.parentElement.contains(e.target)) pop.hidden = true;
+  });
+});
 
-// Menu du groupe : ajouter des amis, renommer, quitter
-$("#msg-room-menu").addEventListener("click", () => { $("#msg-room-pop").hidden = !$("#msg-room-pop").hidden; });
-$("#msg-room-pop").addEventListener("click", async (e) => {
-  const action = e.target.closest("[data-room-action]")?.dataset.roomAction;
-  if (!action) return;
-  $("#msg-room-pop").hidden = true;
-  const room = msg.room;
+async function groupAction(w, action) {
   try {
     if (action === "rename") {
-      const name = await askText("Nom du groupe", room.name);
+      const name = await askText("Nom du groupe", w.room.name);
       if (!name) return;
-      await api(`/api/online/rooms/${room.id}`, jsonBody("PUT", { name }));
-      $("#msg-head-name").textContent = room.name = name;
+      await api(`/api/online/rooms/${w.id}`, jsonBody("PUT", { name }));
+      w.room.name = name;
+      renderWinHead(w);
       return loadRooms();
     }
     if (action === "leave") {
-      if (!await askConfirm(`Quitter le groupe « ${room.name} » ? Tu ne verras plus ses messages.`)) return;
-      await api(`/api/online/rooms/${room.id}`, { method: "DELETE" });
-      location.hash = "#/social";
-      return;
+      if (!await askConfirm(`Quitter le groupe « ${w.room.name} » ? Tu ne verras plus ses messages.`)) return;
+      await api(`/api/online/rooms/${w.id}`, { method: "DELETE" });
+      closeChat(w.id);
+      return loadRooms();
     }
-    if (action === "add") return openRoomDialog(room);
+    if (action === "add") return openRoomDialog(w.room);
   } catch (err) {
-    setStatus("#msg-status", err.message, false);
+    notify(err.message);
   }
-});
+}
 
 // Nouvelle conversation : un ami coché → conversation à deux ; plusieurs → groupe (avec un nom)
-$("#msg-new").addEventListener("click", () => openRoomDialog());
-async function openRoomDialog(addTo = null) {
+async function openRoomDialog(addTo = null, preselect = "") {
   let friends = [];
   try {
     friends = (await api("/api/online/friends")).friends;
   } catch (err) {
-    return setStatus("#msg-status", err.message, false);
+    return notify(err.message);
   }
   const inside = new Set((addTo?.members || []).map((m) => m.id));
   const choices = friends.filter((f) => !inside.has(f.id));
@@ -6947,8 +7039,8 @@ async function openRoomDialog(addTo = null) {
   $("#room-dialog-help").textContent = addTo ? "Coche les amis à ajouter au groupe."
     : "Coche un ami pour lui écrire, ou plusieurs pour créer un groupe de révision.";
   $("#room-friends").innerHTML = choices.length ? choices.map((f) => `
-    <label class="pick-row room-friend"><input type="checkbox" value="${f.id}">${avatar(f.pseudo)}<b>${escapeHtml(f.pseudo)}</b></label>`).join("")
-    : `<p class="muted">${friends.length ? "Tous tes amis sont déjà dans ce groupe." : "Pas encore d'amis : ajoute-les avec leur code ami dans l'onglet Défis."}</p>`;
+    <label class="pick-row room-friend"><input type="checkbox" value="${f.id}" ${f.id === preselect ? "checked" : ""}>${avatar(f.pseudo)}<b>${escapeHtml(f.pseudo)}</b></label>`).join("")
+    : `<p class="muted">${friends.length ? "Tous tes amis sont déjà dans ce groupe." : "Pas encore d'amis : ajoute-les avec leur code ami (onglet « Amis » de la bulle 💬)."}</p>`;
   $("#room-name").value = "";
   $("#room-status").hidden = true;
   syncRoomDialog();
@@ -6969,38 +7061,41 @@ $("#room-go").addEventListener("click", async () => {
     if (msg.addTo) {
       await api(`/api/online/rooms/${msg.addTo.id}`, jsonBody("PUT", { add: ids }));
       $("#room-dialog").close();
-      await loadRooms();
-      return openRoom(msg.addTo.id);
+      return loadRooms();
     }
     const name = $("#room-name").value.trim();
     if (ids.length > 1 && !name) return setStatus("#room-status", "Donne un nom au groupe.", false);
     const room = await api("/api/online/rooms", jsonBody("POST", ids.length > 1 ? { name, members: ids } : { friend_id: ids[0] }));
     $("#room-dialog").close();
     await loadRooms();
-    location.hash = `#/messages/${room.id}`;
+    togglePanel(false);
+    openChat(room.id);
   } catch (err) {
     setStatus("#room-status", err.message, false);
   }
 });
-
-// Envoyer un quiz, des flashcards, un cours entier ou un défi
-$("#msg-attach").addEventListener("click", () => { $("#msg-attach-pop").hidden = !$("#msg-attach-pop").hidden; });
-document.addEventListener("click", (e) => {
-  if (!e.target.closest("#msg-attach, #msg-attach-pop")) $("#msg-attach-pop").hidden = true;
-  if (!e.target.closest("#msg-room-menu, #msg-room-pop")) $("#msg-room-pop").hidden = true;
+// « Écrire » à côté d'un ami (onglet Amis) : sa conversation s'ouvre
+document.addEventListener("click", async (e) => {
+  const id = e.target.closest("[data-chat-friend]")?.dataset.chatFriend;
+  if (!id) return;
+  try {
+    const room = await api("/api/online/rooms", jsonBody("POST", { friend_id: id }));
+    await loadRooms();
+    togglePanel(false);
+    openChat(room.id);
+  } catch (err) {
+    notify(err.message);
+  }
 });
-$("#msg-attach-pop").addEventListener("click", async (e) => {
-  const kind = e.target.closest("[data-attach]")?.dataset.attach;
-  if (!kind) return;
-  $("#msg-attach-pop").hidden = true;
+
+// Envoyer un quiz, des flashcards, un cours entier ou un défi (dans la fenêtre d'où l'on clique)
+async function openShare(w, kind) {
   const [quizzes, courses] = await Promise.all([api("/api/quizzes").catch(() => []), api("/api/courses").catch(() => [])]);
   const names = Object.fromEntries(courses.map((c) => [c.id, c.name]));
   const quizOptions = quizzes.filter((q) => q.count).map((q) => `<option value="quiz:${q.id}">${escapeHtml(names[q.course_id] ? `${names[q.course_id]} · ${q.title}` : q.title)} (${q.count})</option>`).join("");
-  // Un cours entier, ou un seul de ses fichiers (onglets) s'il en a plusieurs
-  // Un cours entier : tous ses fichiers, avec leurs quiz et leurs flashcards (flashcards : un cours, ou un de ses fichiers)
   const courseOptions = courses.map((c) => `<option value="course:${c.id}:">${escapeHtml(c.name)}${c.files.length > 1 ? ` (${c.files.length} fichiers)` : ""}</option>`
     + (kind === "cards" && c.files.length > 1 ? c.files.map((f) => `<option value="course:${c.id}:${f.id}">   ${escapeHtml(c.name)} · ${escapeHtml(fileLabel(f))}</option>`).join("") : "")).join("");
-  msg.shareKind = kind;
+  msg.share = { w, kind };
   $("#share-title").textContent = { quiz: "Envoyer un quiz", cards: "Envoyer des flashcards", course: "Envoyer un cours entier", challenge: "Lancer un défi" }[kind];
   $("#share-source-label").textContent = kind === "quiz" ? "Quel quiz ?" : kind === "challenge" ? "Sur quoi ?" : "Quel cours ?";
   $("#share-source").innerHTML = kind === "quiz" ? quizOptions || `<option value="">Pas encore de quiz</option>`
@@ -7010,20 +7105,19 @@ $("#msg-attach-pop").addEventListener("click", async (e) => {
   $("#share-text").value = "";
   $("#share-status").hidden = true;
   $("#share-dialog").showModal();
-});
+}
 $("#share-cancel").addEventListener("click", () => $("#share-dialog").close());
 $("#share-go").addEventListener("click", async () => {
   const [type, id, file = ""] = $("#share-source").value.split(":");
-  if (!id) return;
-  const kind = msg.shareKind;
+  const { w, kind } = msg.share || {};
+  if (!id || !w) return;
   const body = { kind, text: $("#share-text").value.trim(), ...(type === "quiz" ? { quiz_id: id } : { course_id: id, file_id: file }) };
   if (kind === "challenge") Object.assign(body, { size: Number($("#share-size").value), time_limit: Number($("#share-time").value) || null });
   $("#share-go").disabled = true;
   try {
-    await api(`/api/online/rooms/${msg.room.id}/messages`, jsonBody("POST", body));
+    await api(`/api/online/rooms/${w.id}/messages`, jsonBody("POST", body));
     $("#share-dialog").close();
-    await pullMessages();
-    loadRooms();
+    await pullWin(w);
   } catch (err) {
     setStatus("#share-status", err.message, false);
   } finally {
@@ -7032,12 +7126,12 @@ $("#share-go").addEventListener("click", async () => {
 });
 
 // Ajouter à mes cours ce qu'on m'a envoyé : dans un de mes cours, ou un nouveau
-async function openTake(messageId) {
-  const m = msg.byId?.[messageId];
+async function openTake(w, messageId) {
+  const m = w.byId[messageId];
   const courses = await api("/api/courses").catch(() => []);
   const guess = (m?.meta?.course || m?.title || "").toLowerCase();
   const best = courses.find((c) => guess && (c.name.toLowerCase() === guess || guess.includes(c.name.toLowerCase())));
-  msg.taking = messageId;
+  msg.taking = m;
   $("#take-title").textContent = `Ajouter « ${m?.title || "ce partage"} » à mes cours`;
   $("#take-course").innerHTML = `<option value="">Un nouveau cours « ${escapeHtml(m?.meta?.course || m?.title || "Cours reçu")} »</option>`
     + courses.map((c) => `<option value="${c.id}" ${best?.id === c.id ? "selected" : ""}>${escapeHtml(c.name)}</option>`).join("");
@@ -7046,19 +7140,18 @@ async function openTake(messageId) {
 }
 $("#take-cancel").addEventListener("click", () => $("#take-dialog").close());
 $("#take-go").addEventListener("click", async () => {
-  const m = msg.byId?.[msg.taking];
+  const m = msg.taking;
   const course = $("#take-course").value;
   try {
-    const done = await api(`/api/online/messages/${msg.taking}/import`, jsonBody("POST", course ? { course_id: course }
+    const done = await api(`/api/online/messages/${m.id}/import`, jsonBody("POST", course ? { course_id: course }
       : { new_course: m?.meta?.course || m?.title || "Cours reçu" }));
     $("#take-dialog").close();
     const parts = [done.questions ? plural(done.questions, "question", "questions") : "", done.cards ? plural(done.cards, "flashcard", "flashcards") : ""].filter(Boolean);
-    setStatus("#msg-status", parts.length ? `Ajouté à « ${done.course_name} » : ${parts.join(" et ")}.` : `Rien de nouveau : tout était déjà dans « ${done.course_name} ».`, true);
+    notify(parts.length ? `Ajouté à « ${done.course_name} » : ${parts.join(" et ")}.` : `Rien de nouveau : tout était déjà dans « ${done.course_name} ».`);
   } catch (err) {
     setStatus("#take-status", err.message, false);
   }
 });
-
 
 // ---------- Clair ou sombre : automatique (comme l'ordinateur), ou choisi ----------
 function applyTheme(theme) {
