@@ -1004,9 +1004,6 @@ input.cloze-input:disabled { opacity: 1; }
 .ai-explain.loading p { animation: pulse 1.2s ease-in-out infinite; }
 @keyframes pulse { 50% { opacity: .45; } }
 
-/* Cours mis à jour */
-.outdated-note { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap;
-                 margin-top: 12px; padding: 10px 12px 10px 16px; border-radius: var(--radius);
                  background: color-mix(in srgb, var(--warn) 14%, transparent); font-size: 14.5px; }
 .wide-dialog { width: min(680px, calc(100vw - 32px)); }
 .outdated-list { list-style: none; padding: 0; margin: 12px 0; display: grid; gap: 6px; max-height: 50vh; overflow: auto; }

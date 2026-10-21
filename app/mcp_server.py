@@ -12,12 +12,14 @@ sont écartés, et Claude reçoit la raison pour corriger.
 from __future__ import annotations
 
 import base64
+import hashlib
 import json
 import sys
 from datetime import datetime
 
 from . import __version__
 from . import figures as figures_module
+from . import news
 from .chapters import MAX_CHAPTERS, build_chapters, chapter_text
 from .grounding import Grounding, is_logistics
 from .quiz import QUESTION_TYPES, SYSTEM_PROMPT, giveaway, normalize_question
@@ -28,6 +30,7 @@ PART_CHARS = 40_000   # texte du cours renvoyé par appel (le reste avec « part
 MAX_QUESTIONS = 40
 MAX_CARDS = 60
 MAX_FIGURES = 4
+NEWS_CHARS = 30_000  # passages nouveaux / retirés renvoyés par pirouette_mise_a_jour (le reste : pirouette_lire)
 
 INSTRUCTIONS = """Pirouette est l'app de révision de l'étudiant : ses cours (PDF, Word, Pages…) découpés en chapitres,
 ses quiz et ses flashcards. Pour créer un quiz ou des flashcards : 1) pirouette_cours pour trouver le cours et les
@@ -36,7 +39,8 @@ pirouette_ajouter_cartes. Un fichier « pas encore découpé » se découpe d'ab
 depuis Pirouette), saute l'étape 1 et ne lis que ces chapitres : c'est plus rapide et bien moins coûteux. Tout doit
 venir du texte du cours, avec une citation exacte (« source »). Le texte signale les schémas et images par
 « [Figure …] » : ne les regarde (pirouette_figure) que si le texte ne suffit pas ; une question qui a besoin de la
-figure la cite dans « figure » (Pirouette l'affichera). Écris en français sauf demande contraire, tutoie
+figure la cite dans « figure » (Pirouette l'affichera). Quand un cours a une nouvelle version : pirouette_mise_a_jour
+dit ce qui a changé, pirouette_corriger modifie ou supprime les questions et cartes dépassées. Écris en français sauf demande contraire, tutoie
 l'étudiant, et termine par un résumé court."""
 
 QUESTION_RULES = SYSTEM_PROMPT.split("Règles :", 1)[1].rsplit("- Réponds uniquement", 1)[0].strip()
@@ -132,6 +136,44 @@ TOOLS = [
                 "required": ["recto", "verso", "source"],
             }},
         }, "required": ["cours", "cartes"], "additionalProperties": False},
+    },
+    {
+        "name": "pirouette_mise_a_jour",
+        "description": "Quand l'étudiant a déposé une nouvelle version d'un fichier du cours : les passages nouveaux "
+                       "(par chapitre, avec leur clé), les passages retirés ou réécrits, et les questions et cartes dont "
+                       "la phrase du cours n'existe plus (avec leur repère pour pirouette_corriger). Dit aussi quoi faire.",
+        "inputSchema": {"type": "object", "properties": {
+            "cours": {"type": "string", "description": "Identifiant du cours."},
+        }, "required": ["cours"], "additionalProperties": False},
+    },
+    {
+        "name": "pirouette_corriger",
+        "description": "Met à jour des questions et des flashcards après une nouvelle version du cours, par leur repère "
+                       "(donné par pirouette_mise_a_jour) : « modifier » (nouveau contenu, avec une « source » recopiée "
+                       "mot pour mot de la nouvelle version), « supprimer » (la notion n'est plus au cours) ou « garder » "
+                       "(toujours juste). Le suivi des révisions de l'étudiant est gardé. Quand toute la mise à jour est "
+                       "faite (questions et cartes nouvelles comprises), rappelle-le avec fini=true.",
+        "inputSchema": {"type": "object", "properties": {
+            "cours": {"type": "string", "description": "Identifiant du cours."},
+            "elements": {"type": "array", "maxItems": MAX_CARDS, "items": {
+                "type": "object",
+                "properties": {
+                    "repere": {"type": "string", "description": "« q:… » (question) ou « c:… » (carte)."},
+                    "action": {"type": "string", "enum": ["modifier", "supprimer", "garder"]},
+                    "recto": {"type": "string", "description": "Carte modifiée : le recto."},
+                    "verso": {"type": "string", "description": "Carte modifiée : le verso."},
+                    "type": {"type": "string", "enum": list(QUESTION_TYPES), "description": "Question modifiée."},
+                    "question": {"type": "string"},
+                    "choices": {"type": "array", "items": {"type": "string"}},
+                    "answer": {"type": "string"},
+                    "explanation": {"type": "string"},
+                    "source": {"type": "string", "description": "Modifier : la phrase de la nouvelle version, mot pour mot."},
+                },
+                "required": ["repere", "action"],
+            }},
+            "fini": {"type": "boolean", "description": "true : la mise à jour est terminée (Pirouette range l'encart "
+                                                       "« Ton cours a changé »)."},
+        }, "required": ["cours"], "additionalProperties": False},
     },
     {
         "name": "pirouette_figure",
@@ -369,6 +411,155 @@ class Pirouette:
         if duplicates > 0:
             lines.append(f"{duplicates} carte{'s' if duplicates > 1 else ''} ignorée{'s' if duplicates > 1 else ''} : vide ou déjà présente.")
         if not new:
+            raise ToolError("\n".join(lines))
+        return "\n".join(lines)
+
+    # ---- Nouvelle version d'un cours ----
+    @staticmethod
+    def _question_ref(quiz_id: str, question: str) -> str:
+        return f"q:{quiz_id}:{hashlib.sha1(question.encode()).hexdigest()[:6]}"
+
+    def pirouette_mise_a_jour(self, cours: str) -> str:
+        course = self._course(cours)
+        fresh, gone = [], []
+        for f in course["files"]:
+            previous = self.store.previous_text(course["id"], f["id"])
+            if previous is None:
+                continue
+            text = self.store.file_text(course["id"], f["id"])
+            chapters = f.get("chapters") or []
+            units = [(f"{f['id']}-{i}", f"{f['name']} — {c['title']}", chapter_text(text, chapters, i))
+                     for i, c in enumerate(chapters)] if chapters else [(f["id"], f["name"], text)]
+            for key, title, body in units:
+                added = news.new_text(previous, body)
+                if added:
+                    fresh.append(f"### « {title} » — clé {key}\n{added}")
+            removed = news.removed_text(previous, text)
+            if removed:
+                gone.append(f"### « {f['name']} »\n{removed}")
+        outdated = self.store.outdated_items(course["id"])
+        checks = []
+        for item in outdated["questions"]:
+            q = self.store.get_quiz(item["quiz_id"])["questions"][item["index"]]
+            checks.append(f"- {self._question_ref(item['quiz_id'], q['question'])} — question ({q['type']}) : {q['question']}"
+                          + (f" — propositions : {' | '.join(q['choices'])}" if q.get("choices") else "")
+                          + f" — réponse : {q['answer']} — ancienne source : « {item['source']} »")
+        deck = {c["id"]: c for c in (self.store.get_doc(course["id"], "cards") or {}).get("cards", [])}
+        for item in outdated["cards"]:
+            card = deck[item["id"]]
+            checks.append(f"- c:{card['id']} — carte : {card['front']} → {card['back']} — ancienne source : « {item['source']} »")
+        if not fresh and not gone and not checks:
+            return (f"Rien à mettre à jour dans « {course['name']} » : pas de nouvelle version en attente, et toutes les "
+                    "questions et cartes correspondent au cours.")
+
+        def section(title: str, parts: list[str]) -> str:
+            body = "\n\n".join(parts)
+            if len(body) > NEWS_CHARS:
+                body = body[:NEWS_CHARS] + "\n[… coupé : lis la suite avec pirouette_lire]"
+            return f"## {title}\n{body}"
+
+        out = [f"Cours « {course['name']} » (identifiant {course['id']}) : ce qui a changé avec la nouvelle version."]
+        if fresh:
+            out.append(section("Passages nouveaux", fresh))
+        if gone:
+            out.append(section("Passages retirés ou réécrits (ancienne version)", gone))
+        if checks:
+            out.append(f"## Questions et cartes à vérifier ({len(checks)}) : leur phrase du cours n'existe plus\n" + "\n".join(checks))
+        out.append("## À faire\n"
+                   "1. Questions et cartes à vérifier : compare-les à la nouvelle version (pirouette_lire du chapitre si "
+                   "besoin), puis pirouette_corriger : « modifier » si la notion a changé (avec une source de la nouvelle "
+                   "version), « supprimer » si elle n'est plus au cours, « garder » si elle reste juste.\n"
+                   "2. Passages nouveaux : des questions (pirouette_creer_quiz) et des cartes (pirouette_ajouter_cartes) "
+                   "sur eux seulement, avec la clé de leur chapitre dans « chapitres ». Rien sur ce qui n'a pas changé.\n"
+                   "3. Pour finir : pirouette_corriger avec fini=true, puis un résumé court pour l'étudiant (ajouté, "
+                   "modifié, supprimé).")
+        return "\n\n".join(out)
+
+    def pirouette_corriger(self, cours: str, elements: list | None = None, fini: bool = False) -> str:
+        course = self._course(cours)
+        grounding = Grounding("\n\n".join(text for _, text in self.store.course_sources(course["id"])))
+        quizzes = {s["id"]: self.store.get_quiz(s["id"]) for s in self.store.list_quizzes(course["id"])}
+        done, refused, deletions, keep = [], [], [], []
+        for raw in list(elements or [])[:MAX_CARDS]:
+            if not isinstance(raw, dict):
+                continue
+            ref, action = str(raw.get("repere", "")).strip(), raw.get("action")
+            if ref.startswith("q:"):
+                _, quiz_id, _ = (ref.split(":") + ["", ""])[:3]
+                quiz = quizzes.get(quiz_id)
+                index = next((i for i, q in enumerate((quiz or {}).get("questions", []))
+                              if self._question_ref(quiz_id, q["question"]) == ref), None)
+                if index is None:
+                    refused.append(f"{ref} : question introuvable (redemande pirouette_mise_a_jour)")
+                    continue
+                old = quiz["questions"][index]
+                if action == "supprimer":
+                    deletions.append((quiz_id, index))
+                    done.append(f"question supprimée : {old['question'][:80]}")
+                elif action == "garder":
+                    keep.append(f"{quiz_id}:{old['question']}")
+                    done.append(f"question gardée : {old['question'][:80]}")
+                elif action == "modifier":
+                    question = normalize_question({"kind": old.get("kind", "cours"), **raw}, list(QUESTION_TYPES))
+                    if question is None:
+                        refused.append(f"{ref} : format invalide (type, propositions, ou réponse absente des propositions)")
+                    elif not grounding.quote_found(question["source"]):
+                        refused.append(f"{ref} : la « source » n'est pas une phrase de la nouvelle version (mot pour mot)")
+                    elif question["type"] != "vrai_faux" and not grounding.words_found(question["answer"]):
+                        refused.append(f"{ref} : la réponse ne vient pas du cours")
+                    else:
+                        if old.get("figure"):
+                            question["figure"] = old["figure"]
+                        quiz["questions"][index] = question
+                        self.store.update_question(quiz_id, index, question)
+                        done.append(f"question modifiée : {question['question'][:80]}")
+                else:
+                    refused.append(f"{ref} : action inconnue")
+            elif ref.startswith("c:"):
+                card_id = ref[2:]
+                try:
+                    _, card = self.store._deck_card(course["id"], card_id)
+                except Exception:
+                    refused.append(f"{ref} : carte introuvable")
+                    continue
+                if action == "supprimer":
+                    self.store.remove_card(course["id"], card_id)
+                    done.append(f"carte supprimée : {card['front'][:80]}")
+                elif action == "garder":
+                    keep.append(f"card:{card_id}")
+                    done.append(f"carte gardée : {card['front'][:80]}")
+                elif action == "modifier":
+                    front, back = str(raw.get("recto", "")).strip(), str(raw.get("verso", "")).strip()
+                    source = str(raw.get("source", "")).strip()
+                    if not front or not back:
+                        refused.append(f"{ref} : recto et verso sont obligatoires")
+                    elif not grounding.quote_found(source):
+                        refused.append(f"{ref} : la « source » n'est pas une phrase de la nouvelle version (mot pour mot)")
+                    else:
+                        self.store.set_card_content(course["id"], card_id, front, back, source)
+                        done.append(f"carte modifiée : {front[:80]}")
+                else:
+                    refused.append(f"{ref} : action inconnue")
+            else:
+                refused.append(f"« {ref} » : repère inconnu (« q:… » ou « c:… », donnés par pirouette_mise_a_jour)")
+        for quiz_id, index in sorted(deletions, key=lambda d: -d[1]):
+            if not self.store.remove_question(quiz_id, index)["questions"]:
+                self.store.delete_quiz(quiz_id)
+        if keep:
+            self.store.keep_outdated(course["id"], keep)
+        lines = [f"{len(done)} changement{'s' if len(done) > 1 else ''} enregistré{'s' if len(done) > 1 else ''}."
+                 if done else "Aucun changement enregistré."]
+        lines += [f"- {d}" for d in done]
+        if refused:
+            lines.append("Refusés — corrige-les et renvoie-les :")
+            lines += [f"- {r}" for r in refused]
+        if fini:
+            self.store.forget_previous(course["id"])
+            left = sum(len(v) for v in self.store.outdated_items(course["id"]).values())
+            lines.append("Mise à jour terminée : l'encart « Ton cours a changé » disparaît." if not left else
+                         f"Nouveautés rangées, mais {left} question(s) ou carte(s) restent à vérifier : traite-les "
+                         "(pirouette_mise_a_jour les redonne).")
+        if not done and refused and not fini:
             raise ToolError("\n".join(lines))
         return "\n".join(lines)
 

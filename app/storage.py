@@ -674,6 +674,13 @@ class Store:
             _write(self._doc_path(course_id, "cards"), deck)
         return card
 
+    def set_card_content(self, course_id: str, card_id: str, front: str, back: str, source: str) -> dict:
+        """Nouveau contenu d'une carte, avec sa phrase du cours (cours mis à jour) ; son suivi est gardé."""
+        deck, card = self._deck_card(course_id, card_id)
+        card.update(front=front, back=back, source=source, edited_at=_now())
+        _write(self._doc_path(course_id, "cards"), deck)
+        return card
+
     def add_card(self, course_id: str, front: str, back: str) -> dict:
         """Carte écrite à la main, ajoutée au paquet du cours (créé s'il n'existe pas encore)."""
         course = self.get_course(course_id)
@@ -793,6 +800,15 @@ class Store:
         quiz = self.get_quiz(quiz_id)
         quiz["title"] = title.strip()[:160] or quiz["title"]
         quiz["custom_title"] = True
+        _write(self._quiz_path(quiz_id), quiz)
+        return quiz
+
+    def update_question(self, quiz_id: str, index: int, question: dict) -> dict:
+        """Remplace une question (cours mis à jour) ; son suivi (réussites, ratés) est gardé."""
+        quiz = self.get_quiz(quiz_id)
+        if not 0 <= index < len(quiz["questions"]):
+            raise NotFound(str(index))
+        quiz["questions"][index] = question | {"edited_at": _now()}
         _write(self._quiz_path(quiz_id), quiz)
         return quiz
 

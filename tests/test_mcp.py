@@ -46,7 +46,7 @@ def test_handshake_and_tool_list(tmp_path):
     assert replies[0]["result"]["protocolVersion"] == "2025-06-18"
     assert replies[0]["result"]["serverInfo"]["name"] == "pirouette"
     names = [t["name"] for t in replies[1]["result"]["tools"]]
-    assert names == ["pirouette_cours", "pirouette_lire", "pirouette_decouper", "pirouette_creer_quiz", "pirouette_ajouter_cartes", "pirouette_figure", "pirouette_difficultes"]
+    assert names == ["pirouette_cours", "pirouette_lire", "pirouette_decouper", "pirouette_creer_quiz", "pirouette_ajouter_cartes", "pirouette_mise_a_jour", "pirouette_corriger", "pirouette_figure", "pirouette_difficultes"]
     assert replies[3]["error"]["code"] == -32601
 
 
@@ -203,3 +203,46 @@ def test_claude_link_diagnostic_on_windows(tmp_path, monkeypatch):
     report = claude_desktop.diagnose()
     assert [f["pirouette"] and f["same_command"] for f in report["files"]] == [True, True, True]
     assert report["logs"][0]["lines"] == ["ok", "[pirouette] Server started", "autre ligne", "[x] error: boom"]  # mcp.log en entier
+
+
+def test_claude_updates_a_course_after_a_new_version(tmp_path):
+    store, cid = _store(tmp_path)
+    old = "La gaine de myéline accélère la conduction de l'influx nerveux le long de l'axone."
+    question = {"type": "qcm", "kind": "cours", "question": "Quel est le rôle de la gaine de myéline ?",
+                "choices": ["Accélérer la conduction", "Produire l'ATP", "Stocker le calcium", "Relier deux neurones"],
+                "answer": "Accélérer la conduction", "explanation": "Elle accélère l'influx.", "source": old}
+    _call(store, "pirouette_creer_quiz", cours=cid, titre="Myéline", questions=[question])
+    _call(store, "pirouette_ajouter_cartes", cours=cid, cartes=[
+        {"recto": "Rôle de la myéline ?", "verso": "Accélérer la conduction de l'influx nerveux", "source": old}])
+    text, error = _call(store, "pirouette_mise_a_jour", cours=cid)
+    assert not error and "Rien à mettre à jour" in text
+
+    new = "La gaine de myéline, produite par les oligodendrocytes, isole l'axone et rend la conduction saltatoire."
+    added = "Les nœuds de Ranvier sont les interruptions de la gaine de myéline entre deux segments."
+    version = TEXT.replace(old, f"{new} {added}")
+    store.add_file(cid, "neuro.txt", version.encode(), version,
+                   [{"title": "Chapitre 1 : Le neurone", "line": 0}, {"title": "Chapitre 2 : La myéline", "line": 3}], 2)
+    fid = store.get_course(cid)["files"][0]["id"]
+    text, error = _call(store, "pirouette_mise_a_jour", cours=cid)
+    assert not error and "Ranvier" in text and f"clé {fid}-1" in text and "accélère la conduction" in text
+    card_id = store.get_doc(cid, "cards")["cards"][0]["id"]
+    quiz_id = store.list_quizzes(cid)[0]["id"]
+    q_ref = next(w for w in text.split() if w.startswith(f"q:{quiz_id}:"))
+    assert f"c:{card_id}" in text
+
+    text, error = _call(store, "pirouette_corriger", cours=cid, elements=[
+        {"repere": f"c:{card_id}", "action": "modifier", "recto": "Rôle de la myéline ?",
+         "verso": "Isoler l'axone, conduction saltatoire", "source": new},
+        {"repere": q_ref, "action": "supprimer"},
+        {"repere": "c:zzzzzzzz", "action": "supprimer"},
+    ])
+    assert not error and "carte modifiée" in text and "question supprimée" in text and "introuvable" in text
+    card = store.get_doc(cid, "cards")["cards"][0]
+    assert card["id"] == card_id and card["back"] == "Isoler l'axone, conduction saltatoire" and card["source"] == new
+    assert store.list_quizzes(cid) == []  # quiz vidé : supprimé
+    invented, error = _call(store, "pirouette_corriger", cours=cid, elements=[
+        {"repere": f"c:{card_id}", "action": "modifier", "recto": "x", "verso": "y", "source": "Phrase inventée de toutes pièces."}])
+    assert error and "nouvelle version" in invented
+    text, error = _call(store, "pirouette_corriger", cours=cid, fini=True)
+    assert not error and "terminée" in text
+    assert store.previous_text(cid, fid) is None and store.outdated_items(cid) == {"questions": [], "cards": []}

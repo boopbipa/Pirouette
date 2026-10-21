@@ -796,21 +796,15 @@
       </label>
 
       <p class="status" id="course-status" hidden></p>
-      <div class="outdated-note" id="outdated-note" hidden>
-        <span id="outdated-text"></span>
-        <button class="ghost small" type="button" id="outdated-open">Vérifier</button>
-      </div>
-
-
-      <!-- Nouvelle version du fichier : des questions et des cartes sur les passages nouveaux seulement -->
+      <!-- Nouvelle version d'un fichier : Claude regarde ce qui a changé, ajoute sur les nouveautés, corrige ou
+           supprime les questions et cartes dépassées (outils pirouette_mise_a_jour / pirouette_corriger) -->
       <div class="card news-card" id="news-card" hidden>
-        <h2>Du nouveau dans ton cours</h2>
-        <p class="muted small-text">La nouvelle version a des passages qui n'existaient pas. Pirouette peut créer des questions et des
-          cartes <strong>seulement sur eux</strong> : elles rejoignent le quiz et les cartes de leur chapitre, le reste ne bouge pas.</p>
+        <h2>Ton cours a changé</h2>
+        <p class="muted small-text" id="news-text"></p>
         <ul class="news-list" id="news-list"></ul>
         <div class="actions">
-          <button class="primary small" type="button" id="news-go">Créer questions et cartes (IA locale)</button>
-          <button class="ghost small" type="button" id="news-copy">Copier la demande pour l'app Claude</button>
+          <button class="primary small" type="button" id="news-copy">Mettre à jour avec Claude</button>
+          <button class="ghost small" type="button" id="outdated-open" hidden>Vérifier moi-même</button>
           <button class="link-button" type="button" id="news-dismiss">Ignorer</button>
         </div>
         <p class="status" id="news-status" hidden></p>

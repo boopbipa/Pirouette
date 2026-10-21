@@ -1424,47 +1424,34 @@ async function openCourse(id, tab, { keepScroll = false } = {}) {
   else if (tab) $(`#panel-${tab}`).scrollIntoView({ block: "start" });
   renderPrepare(course, tab);
   renderNews(course);
-  // Nouvelle version d'un fichier : questions et cartes à vérifier.
-  $("#outdated-note").hidden = !course.outdated;
-  $("#outdated-text").textContent = `Ton cours a changé : ${plural(course.outdated, "question ou carte ne correspond", "questions ou cartes ne correspondent")} plus au cours.`;
 }
 
-// ---- Nouvelle version d'un fichier : les passages nouveaux, pour des questions et des cartes sur eux seulement ----
+// ---- Nouvelle version d'un fichier : passages nouveaux, et questions / cartes dont la phrase n'est plus au cours.
+// Claude fait le tri (outils pirouette_mise_a_jour et pirouette_corriger) ; « Vérifier moi-même » reste possible.
 async function renderNews(course) {
   const { units } = await api(`/api/courses/${course.id}/news`).catch(() => ({ units: [] }));
   if (state.course?.id !== course.id) return;
   state.news = units;
-  $("#news-card").hidden = !units.length;
+  $("#news-card").hidden = !units.length && !course.outdated;
+  $("#news-text").textContent = [
+    units.length ? "La nouvelle version a des passages nouveaux." : "",
+    course.outdated ? `${plural(course.outdated, "question ou carte ne correspond", "questions ou cartes ne correspondent")} plus au cours.` : "",
+    "Claude peut ajouter des questions et des cartes sur les nouveautés, et corriger ou supprimer celles qui sont dépassées ; le reste ne bouge pas.",
+  ].filter(Boolean).join(" ");
   $("#news-list").innerHTML = units.map((u) => `<li><strong>${escapeHtml(u.title)}</strong>
-    <small class="muted">≈ ${u.chars.toLocaleString("fr-FR")} caractères nouveaux → ${u.questions} questions, ${u.cards} cartes</small></li>`).join("");
-  const config = state.config || await api("/api/config").catch(() => null);
-  $("#news-go").hidden = !config?.local?.available;
-  state.newsModel = config?.local?.default_model || "";
+    <small class="muted">≈ ${u.chars.toLocaleString("fr-FR")} caractères nouveaux</small></li>`).join("");
+  $("#outdated-open").hidden = !course.outdated;
+  $("#news-dismiss").hidden = !units.length;
 }
 function newsRequest() {
   const c = state.course;
-  const parts = state.news.map((u) => `--- Chapitre « ${u.title} » (clé ${u.key}) ---\n${u.text}`).join("\n\n");
-  return `Pirouette : mon cours « ${c.name} » (identifiant ${c.id}) a une nouvelle version. Voici UNIQUEMENT les passages `
-    + `nouveaux, chapitre par chapitre. Crée des questions et des flashcards seulement sur eux (ne relis pas le cours) : `
-    + `pour chaque chapitre, pirouette_creer_quiz puis pirouette_ajouter_cartes avec sa clé dans « chapitres » `
-    + `(la « source » est une phrase de ces passages, recopiée mot pour mot). Réponds ensuite par un résumé court.\n\n${parts}`;
+  return `Pirouette : mon cours « ${c.name} » (identifiant ${c.id}) a une nouvelle version. Mets-le à jour : `
+    + `pirouette_mise_a_jour te dit ce qui a changé et quoi faire (nouvelles questions et cartes sur les passages nouveaux, `
+    + `questions et cartes dépassées à modifier ou supprimer avec pirouette_corriger). Réponds ensuite par un résumé court.`;
 }
-$("#news-go").addEventListener("click", async () => {
-  const form = new FormData();
-  form.append("provider", "local");
-  form.append("model", state.newsModel || "");
-  try {
-    await api(`/api/courses/${state.course.id}/news/create`, { method: "POST", body: form });
-    $("#news-card").hidden = true;
-    jobsState.open = true;
-    refreshJobs();
-  } catch (err) {
-    setStatus("#news-status", err.message, false);
-  }
-});
 $("#news-copy").addEventListener("click", async () => {
   await copyText(newsRequest());
-  setStatus("#news-status", "Demande copiée : colle-la dans l'app Claude. Une fois faite, clique sur « Ignorer » pour ranger cet encart.", true);
+  setStatus("#news-status", "Demande copiée : colle-la dans l'app Claude. L'encart disparaîtra quand Claude aura fini (reviens sur cette page).", true);
 });
 $("#news-dismiss").addEventListener("click", async () => {
   await api(`/api/courses/${state.course.id}/news/dismiss`, { method: "POST" }).catch(() => {});
@@ -4632,6 +4619,10 @@ const WELCOME = [
 ];
 // Les nouveautés de chaque version (le carton « Quoi de neuf » ne s'affiche que si la version en a)
 const WHATS_NEW = {
+  "0.61.0": [
+    ["⟳", "Claude met ton cours à jour", "Nouvelle version d'un fichier : « Mettre à jour avec Claude » ajoute des questions et des cartes sur les nouveautés, et corrige ou supprime celles qui sont dépassées"],
+    ["✎", "Le suivi est gardé", "Une carte ou une question corrigée garde ses révisions ; « Vérifier moi-même » reste possible"],
+  ],
   "0.60.1": [
     ["🐱", "La bulle aux couleurs de Pirouette", "En bas à droite : la tête du chat qui parle, comme l'icône de l'app"],
     ["✦", "Icônes plus sobres", "Les emojis en couleur laissent la place à des icônes au trait, dans les menus, les nouveautés et le chrono"],

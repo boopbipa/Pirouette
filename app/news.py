@@ -51,3 +51,8 @@ def news_by_chapter(old: str, new: str, chapters: list[dict], file_id: str) -> l
         if len(fresh) >= MIN_NEWS:
             found.append({"key": key, "position": position, "text": fresh, "chars": len(fresh)})
     return found
+
+
+def removed_text(old: str, new: str) -> str:
+    """Les phrases de l'ancienne version qui ne sont plus dans la nouvelle (retirées ou réécrites)."""
+    return new_text(new, old)
