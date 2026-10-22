@@ -144,6 +144,7 @@ class SettingsIn(BaseModel):
     theme: str | None = None            # « auto » (comme l'ordinateur), « light » (clair) ou « dark » (sombre)
     welcome_seen: str | None = None     # cartons de bienvenue vus (« 1 ») / dernière version dont on a vu les nouveautés
     backup_mode: str | None = None      # sauvegarde automatique : "open" (à l'ouverture), "week", "off"
+    live_intro: bool | None = None      # l'explication du quiz en direct a été vue (montrée une seule fois)
 
 
 def _settings_view() -> dict:
@@ -171,6 +172,7 @@ def _settings_view() -> dict:
         "shortcuts": store.get_settings().get("shortcuts") or {},
         "keys_instant": bool(store.get_settings().get("keys_instant", False)),
         "theme": store.get_settings().get("theme", "auto"),
+        "live_intro": bool(store.get_settings().get("live_intro")),
         "last_folder": store.get_settings().get("last_folder", ""),  # semestre où l'on a rangé un cours en dernier
         "welcome_seen": store.get_settings().get("welcome_seen") or "",
         "news_seen": store.get_settings().get("news_seen") or "",
@@ -235,6 +237,8 @@ async def save_settings(body: SettingsIn) -> dict:
             store.save_settings(welcome_seen="1", news_seen=updater.__version__)
         else:
             store.save_settings(news_seen=body.welcome_seen[:20])
+    if body.live_intro is not None:
+        store.save_settings(live_intro=body.live_intro)
     if body.backup_mode is not None:
         if body.backup_mode not in backup.MODES:
             raise HTTPException(400, "Fréquence de sauvegarde inconnue.")
@@ -2450,7 +2454,7 @@ class RoomEditIn(BaseModel):
 
 class MessageIn(BaseModel):
     text: str = ""
-    kind: str = "text"             # text, quiz, cards, course, challenge, result
+    kind: str = "text"             # text, quiz, cards, course, challenge, result, live (quiz en direct)
     quiz_id: str = ""
     course_id: str = ""
     file_id: str = ""              # flashcards / cours : seulement ce fichier de la matière
@@ -2566,10 +2570,54 @@ async def online_send(room_id: str, body: MessageIn) -> dict:
         meta = {"challenge_id": challenge.get("id"), "count": len(challenge.get("questions") or []),
                 "time_limit": challenge.get("time_limit"), "course": source.get("course_name") or ""}
         return await _online_call(client.send(room_id, body.text, "challenge", challenge.get("title") or "Défi", meta))
+    if body.kind == "live":
+        if body.course_id:
+            course = store.get_course(body.course_id)
+            source = {"title": course["name"], "questions": [q for summary in store.list_quizzes(body.course_id)
+                                                             for q in store.get_quiz(summary["id"]).get("questions", [])]}
+        else:
+            source = store.get_quiz(body.quiz_id)
+        game = await _online_call(client.create_live(room_id, source, body.size))
+        meta = {"game_id": game.get("id"), "count": len(game.get("questions") or [])}
+        return await _online_call(client.send(room_id, body.text, "live", game.get("title") or "Quiz en direct", meta))
     if body.kind == "result":
         meta = {"score": body.score, "total": body.total, "seconds": body.seconds}
         return await _online_call(client.send(room_id, "", "result", body.title, meta))
     raise HTTPException(400, "Type de message inconnu.")
+
+
+class LiveAnswerIn(BaseModel):
+    q: int
+    choice: str
+    ms: int = 0
+
+
+class LiveAdvanceIn(BaseModel):
+    state: str
+    current: int = 0
+
+
+@app.get("/api/online/live/{game_id}")
+async def online_live(game_id: str) -> dict:
+    """Où en est un quiz en direct : la question, les joueurs, les points."""
+    return await _online_call(_online().live(game_id))
+
+
+@app.post("/api/online/live/{game_id}/join")
+async def online_live_join(game_id: str) -> dict:
+    await _online_call(_online().join_live(game_id))
+    return {"ok": True}
+
+
+@app.post("/api/online/live/{game_id}/answer")
+async def online_live_answer(game_id: str, body: LiveAnswerIn) -> dict:
+    return await _online_call(_online().answer_live(game_id, body.q, body.choice, body.ms))
+
+
+@app.post("/api/online/live/{game_id}/advance")
+async def online_live_advance(game_id: str, body: LiveAdvanceIn) -> dict:
+    await _online_call(_online().advance_live(game_id, body.state, body.current))
+    return {"ok": True}
 
 
 @app.put("/api/online/messages/{message_id}")

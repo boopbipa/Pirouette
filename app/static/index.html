@@ -1171,6 +1171,43 @@
       </div>
     </section>
 
+    <!-- Quiz en direct : la même question pour tous les joueurs, en même temps -->
+    <section id="view-live" class="view live-view" hidden>
+      <div class="quiz-head live-head">
+        <span class="live-tag"><i></i>En direct</span>
+        <h1 id="live-title"></h1>
+        <span id="live-count" class="pill"></span>
+      </div>
+      <div class="progress"><div id="live-bar"></div></div>
+      <p class="status" id="live-status" hidden></p>
+      <div id="live-lobby" class="live-lobby">
+        <h2>Salle d'attente</h2>
+        <div class="live-players-list" id="live-players"></div>
+        <button class="primary" type="button" id="live-start" hidden>Lancer la partie</button>
+        <p class="muted" id="live-wait" hidden></p>
+      </div>
+      <div id="live-play" class="live-play" hidden>
+        <div class="live-q-head"><span class="live-timer" id="live-timer"><b></b></span></div>
+        <h2 id="live-question" class="live-question"></h2>
+        <div id="live-choices" class="live-choices"></div>
+        <p class="feedback neutral" id="live-expl" hidden></p>
+        <div class="live-answered" id="live-answered"></div>
+      </div>
+      <div id="live-board" class="live-board" hidden>
+        <h3 id="live-board-title">Classement</h3>
+        <ol class="live-ranking" id="live-ranking"></ol>
+        <button class="primary" type="button" id="live-leave" hidden>Terminer</button>
+      </div>
+      <!-- La toute première partie : comment ça marche (une seule fois) -->
+      <div class="live-intro" id="live-intro" hidden>
+        <div class="live-intro-card">
+          <b>Ton premier quiz en direct</b>
+          <ol><li>Tout le monde a la même question en même temps.</li><li>20 secondes pour répondre.</li><li>Juste et rapide : plus de points.</li></ol>
+          <button class="primary" type="button" id="live-intro-ok">C'est parti</button>
+        </div>
+      </div>
+    </section>
+
     <!-- Quiz -->
     <section id="view-quiz" class="view" hidden>
       <div class="quiz-head">

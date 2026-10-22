@@ -104,7 +104,8 @@ function show(view) {
   document.querySelectorAll(".view").forEach((v) => (v.hidden = v.id !== `view-${view}`));
   document.body.classList.toggle("on-home", view === "home");  // l'accueil a déjà son grand logo au centre
   // Séances, quiz et partiels : mode concentration (fond noir, rien que la carte ou la question)
-  document.body.classList.toggle("focus", ["cards", "quiz", "exam"].includes(view));
+  document.body.classList.toggle("focus", ["cards", "quiz", "exam", "live"].includes(view));
+  if (view !== "live") stopLive();
   if (view !== "cards") document.body.classList.remove("card-zoomed");
   pageScroll().scrollTo(0, 0);
   // Flèches, Page bas, Espace : c'est ce cadre qui défile (sauf si on écrit dans un champ)
@@ -127,6 +128,7 @@ async function route() {
   try {
     if (match && match[2]) await openCreate(match[1], match[3] === "quiz" ? "quiz" : "cartes");
     else if (match) await openCourse(match[1], match[3]);
+    else if (hash.startsWith("#/direct/")) await openLive(hash.split("/")[2]);
     else if (hash.startsWith("#/reglages")) { await openSettings(); showPref(hash.split("/")[2]); }
     else if (hash.startsWith("#/defis") || hash.startsWith("#/social/defis")) await openOnline();
     // Anciens liens des messages : la conversation s'ouvre dans sa fenêtre (en bas à droite), sur l'accueil
@@ -4613,6 +4615,7 @@ async function quitByKey() {
   const question = leaveQuestion();
   if (question && !await askConfirm(question)) return;
   if (!$("#view-quiz").hidden) return backToCourse();
+  if (!$("#view-live").hidden) return go(live.back || "#/cours");
   if (!$("#view-cards").hidden) { state.sessionBack = state.session?.back; return leaveSession(); }
   if (!$("#view-exam").hidden) {
     clearInterval(state.exam?.tick);
@@ -4712,6 +4715,9 @@ const WELCOME = [
 ];
 // Les nouveautés de chaque version (le carton « Quoi de neuf » ne s'affiche que si la version en a)
 const WHATS_NEW = {
+  "0.64.0": [
+    ["⏱", "Quiz en direct", "Dans une conversation : + → Quiz en direct. Tout le monde a la même question en même temps, 20 secondes, le plus rapide marque le plus de points"],
+  ],
   "0.63.0": [
     ["✦", "Un nouveau design", "La police du Mac, un fond crème, des cartes qui flottent, des onglets en verre : plus sobre, plus net"],
     ["▦", "Plus d'accueil", "Pirouette s'ouvre sur tes matières, avec ta révision du jour en haut ; une couleur douce par matière"],
@@ -6857,7 +6863,7 @@ $("#online-friends").addEventListener("click", async (e) => {
 // amis ; chaque conversation s'ouvre dans une petite fenêtre en bas de l'écran, qu'on réduit ou ferme, et qui reste
 // ouverte quand on change de page. Les nouveaux messages arrivent toutes les 4 s dans les fenêtres ouvertes.
 const msg = { rooms: [], wins: new Map(), ready: false, me: null, unreadSeen: null, tick: 0 };
-const MSG_KINDS = { quiz: "Quiz", cards: "Flashcards", course: "Cours", challenge: "Défi", result: "Résultat" };
+const MSG_KINDS = { quiz: "Quiz", cards: "Flashcards", course: "Cours", challenge: "Défi", result: "Résultat", live: "Quiz en direct" };
 const MAX_WINDOWS = 3;
 const avatarColor = (text) => ["#B4532A", "#2F7D4F", "#5B6CB5", "#8A6D3B", "#9C4F8F", "#3E7F8C"][
   [...String(text)].reduce((n, c) => n + c.charCodeAt(0), 0) % 6];
@@ -7036,6 +7042,7 @@ function openChat(roomId, { min = false, focus = true } = {}) {
               <button type="button" role="menuitem" data-attach="cards"><strong>${icon("cards")} Envoyer des flashcards</strong></button>
               <button type="button" role="menuitem" data-attach="course"><strong>${icon("book")} Envoyer un cours entier</strong><small>ses quiz et ses flashcards</small></button>
               <button type="button" role="menuitem" data-attach="challenge"><strong>${icon("swords")} Lancer un défi</strong></button>
+              <button type="button" role="menuitem" data-attach="live"><strong>${icon("timer")} Quiz en direct</strong><small>la même question pour tous, en même temps</small></button>
             </div>
           </div>
           <input type="text" maxlength="2000" placeholder="Écris un message…" autocomplete="off">
@@ -7119,9 +7126,11 @@ function messageHtml(m, w) {
   }
   const details = m.kind === "quiz" ? `${plural(meta.count || 0, "question", "questions")}${meta.course ? ` · ${escapeHtml(meta.course)}` : ""}`
     : m.kind === "challenge" ? `${plural(meta.count || 0, "question", "questions")}${meta.time_limit ? ` · ${ICON_TIMER} ${Math.round(meta.time_limit / 60)} min` : ""}`
+    : m.kind === "live" ? `${plural(meta.count || 0, "question", "questions")} · 20 secondes chacune`
       : [meta.quizzes ? plural(meta.quizzes, "quiz", "quiz") : "", meta.cards ? plural(meta.cards, "flashcard", "flashcards") : ""].filter(Boolean).join(" · ");
   const actions = [];
   if (m.kind === "quiz") actions.push(`<button class="primary small" type="button" data-msg-play="${m.id}">Faire le quiz</button>`);
+  if (m.kind === "live") actions.push(`<button class="primary small" type="button" data-live-join="${meta.game_id}">${m.mine ? "Ouvrir la partie" : "Rejoindre"}</button>`);
   if (m.kind === "challenge") actions.push(`<button class="primary small" type="button" data-msg-challenge="${meta.challenge_id}">Faire le défi</button>`,
     `<a class="button ghost small" href="#/defis">Classement</a>`);
   if (["quiz", "cards", "course"].includes(m.kind) && !m.mine) actions.push(`<button class="${m.kind === "quiz" ? "ghost" : "primary"} small" type="button" data-msg-take="${m.id}">Ajouter à mes cours</button>`);
@@ -7190,6 +7199,8 @@ $("#chat-windows").addEventListener("click", async (e) => {
       return startQuiz(quiz, shuffle(questions), { back: location.hash || "#/" });
     }
     if (challenge) { setMin(w, true); return await playChallenge(challenge, location.hash || "#/"); }
+    const liveGame = e.target.closest("[data-live-join]")?.dataset.liveJoin;
+    if (liveGame) { setMin(w, true); live.back = location.hash || "#/cours"; return go(`#/direct/${liveGame}`); }
     if (take) return openTake(w, take);
     if (pin) { await api(`/api/online/rooms/${w.id}`, jsonBody("PUT", { pinned: pin })); w.room.pinned = pin; return renderPinned(w); }
     if (e.target.closest("[data-msg-unpin]")) { await api(`/api/online/rooms/${w.id}`, jsonBody("PUT", { unpin: true })); w.room.pinned = null; return renderPinned(w); }
@@ -7309,12 +7320,16 @@ async function openShare(w, kind) {
   const courseOptions = courses.map((c) => `<option value="course:${c.id}:">${escapeHtml(c.name)}${c.files.length > 1 ? ` (${c.files.length} fichiers)` : ""}</option>`
     + (kind === "cards" && c.files.length > 1 ? c.files.map((f) => `<option value="course:${c.id}:${f.id}">   ${escapeHtml(c.name)} · ${escapeHtml(fileLabel(f))}</option>`).join("") : "")).join("");
   msg.share = { w, kind };
-  $("#share-title").textContent = { quiz: "Envoyer un quiz", cards: "Envoyer des flashcards", course: "Envoyer un cours entier", challenge: "Lancer un défi" }[kind];
-  $("#share-source-label").textContent = kind === "quiz" ? "Quel quiz ?" : kind === "challenge" ? "Sur quoi ?" : "Quel cours ?";
+  $("#share-title").textContent = { quiz: "Envoyer un quiz", cards: "Envoyer des flashcards", course: "Envoyer un cours entier",
+    challenge: "Lancer un défi", live: "Lancer un quiz en direct" }[kind];
+  $("#share-go").textContent = kind === "live" ? "Créer la partie" : "Envoyer";
+  const asChallenge = kind === "challenge" || kind === "live";
+  $("#share-source-label").textContent = kind === "quiz" ? "Quel quiz ?" : asChallenge ? "Sur quoi ?" : "Quel cours ?";
   $("#share-source").innerHTML = kind === "quiz" ? quizOptions || `<option value="">Pas encore de quiz</option>`
-    : kind === "challenge" ? `<optgroup label="Tout un cours">${courses.map((c) => `<option value="course:${c.id}:">${escapeHtml(c.name)}</option>`).join("")}</optgroup><optgroup label="Un quiz">${quizOptions}</optgroup>`
+    : asChallenge ? `<optgroup label="Tout un cours">${courses.map((c) => `<option value="course:${c.id}:">${escapeHtml(c.name)}</option>`).join("")}</optgroup><optgroup label="Un quiz">${quizOptions}</optgroup>`
       : courseOptions || `<option value="">Pas encore de cours</option>`;
-  $("#share-challenge-opts").hidden = kind !== "challenge";
+  $("#share-challenge-opts").hidden = !asChallenge;
+  $("#share-time").hidden = kind === "live";  // en direct : 20 secondes par question, pas de chrono global
   $("#share-text").value = "";
   $("#share-status").hidden = true;
   $("#share-dialog").showModal();
@@ -7326,11 +7341,13 @@ $("#share-go").addEventListener("click", async () => {
   if (!id || !w) return;
   const body = { kind, text: $("#share-text").value.trim(), ...(type === "quiz" ? { quiz_id: id } : { course_id: id, file_id: file }) };
   if (kind === "challenge") Object.assign(body, { size: Number($("#share-size").value), time_limit: Number($("#share-time").value) || null });
+  if (kind === "live") body.size = Number($("#share-size").value);
   $("#share-go").disabled = true;
   try {
-    await api(`/api/online/rooms/${w.id}/messages`, jsonBody("POST", body));
+    const sent = await api(`/api/online/rooms/${w.id}/messages`, jsonBody("POST", body));
     $("#share-dialog").close();
     await pullWin(w);
+    if (kind === "live" && sent.meta?.game_id) { setMin(w, true); live.back = location.hash || "#/cours"; go(`#/direct/${sent.meta.game_id}`); }
   } catch (err) {
     setStatus("#share-status", err.message, false);
   } finally {
@@ -7400,4 +7417,118 @@ document.addEventListener("pointerdown", (e) => {
   const box = choice.getBoundingClientRect();
   choice.style.setProperty("--px", `${e.clientX - box.left}px`);
   choice.style.setProperty("--py", `${e.clientY - box.top}px`);
+});
+
+// ---------- Quiz en direct : la même question pour tous, 20 secondes, le plus rapide marque le plus ----------
+// Chacun interroge la partie chaque seconde ; l'hôte la fait avancer (question → correction → question suivante).
+const LIVE_SECONDS = 20, LIVE_REVEAL = 4500;
+const live = { id: null, timer: null, data: null, shown: "", qStart: 0, hostAt: {}, sending: false, back: "#/cours" };
+async function openLive(id) {
+  stopLive();
+  Object.assign(live, { id, data: null, shown: "", hostAt: {}, back: live.back || "#/cours" });
+  await api(`/api/online/live/${id}/join`, { method: "POST" }).catch(() => {});
+  setCrumbs();
+  show("live");
+  $("#live-intro").hidden = true;
+  const settings = await api("/api/settings").catch(() => ({ live_intro: true }));
+  $("#live-intro").hidden = Boolean(settings.live_intro);  // l'explication, une seule fois
+  await pollLive();
+  live.timer = setInterval(pollLive, 1000);
+}
+function stopLive() { clearInterval(live.timer); live.timer = null; }
+$("#live-intro-ok").addEventListener("click", () => {
+  $("#live-intro").hidden = true;
+  api("/api/settings", jsonBody("PUT", { live_intro: true })).catch(() => {});
+});
+async function pollLive() {
+  if (!live.id || $("#view-live").hidden) return;
+  let data;
+  try { data = await api(`/api/online/live/${live.id}`); } catch (err) { return setStatus("#live-status", err.message, false); }
+  live.data = data;
+  renderLive(data);
+  if (data.game.me_host) hostLive(data);
+}
+// L'hôte : lance la question suivante quand tout le monde a répondu (ou au bout des 20 secondes), après la correction
+async function hostLive(data) {
+  const { game, players } = data;
+  const key = `${game.state}:${game.current}`;
+  live.hostAt[key] ??= Date.now();
+  const since = Date.now() - live.hostAt[key];
+  const advance = (state, current) => api(`/api/online/live/${live.id}/advance`, jsonBody("POST", { state, current })).then(pollLive).catch(() => {});
+  if (game.state === "question" && (players.every((p) => p.answered) || since > (LIVE_SECONDS + 1.5) * 1000)) return advance("reveal", game.current);
+  if (game.state === "reveal" && since > LIVE_REVEAL) {
+    return game.current + 1 < game.count ? advance("question", game.current + 1) : advance("done", game.current);
+  }
+}
+$("#live-start").addEventListener("click", () => api(`/api/online/live/${live.id}/advance`, jsonBody("POST", { state: "question", current: 0 })).then(pollLive));
+$("#live-leave").addEventListener("click", () => go(live.back || "#/cours"));
+const livePlayer = (p) => `<span class="live-player${p.answered ? " done" : ""}${p.me ? " me" : ""}" title="${escapeHtml(p.pseudo)}">${avatar(p.pseudo)}</span>`;
+function renderLive(data) {
+  const { game, question, players, mine } = data;
+  $("#live-title").textContent = game.title;
+  $("#live-count").textContent = game.state === "lobby" ? plural(game.count, "question", "questions")
+    : game.state === "done" ? "Terminé" : `${game.current + 1} / ${game.count}`;
+  $("#live-bar").style.width = `${game.state === "done" ? 100 : (100 * (game.current + (game.state === "lobby" ? 0 : 1))) / game.count}%`;
+  $("#live-lobby").hidden = game.state !== "lobby";
+  $("#live-play").hidden = !["question", "reveal"].includes(game.state);
+  $("#live-board").hidden = !["reveal", "done"].includes(game.state);
+  if (game.state === "lobby") {
+    $("#live-players").innerHTML = players.map((p) => `<span class="live-chip">${avatar(p.pseudo)}${escapeHtml(p.me ? `${p.pseudo} (toi)` : p.pseudo)}</span>`).join("");
+    $("#live-start").hidden = !game.me_host;
+    $("#live-wait").hidden = game.me_host;
+    $("#live-wait").textContent = `En attente que ${game.host_pseudo} lance la partie…`;
+    return;
+  }
+  if (question && ["question", "reveal"].includes(game.state)) {
+    const key = `${game.current}`;
+    if (live.shown !== key) {  // nouvelle question : on la pose, chacun a ses 20 secondes depuis qu'il la voit
+      live.shown = key;
+      live.qStart = Date.now();
+      $("#live-question").textContent = question.question;
+      $("#live-choices").innerHTML = question.choices.map((c, i) => `<button type="button" class="choice live-choice" data-live-choice="${escapeHtml(c)}">
+        <span class="live-letter">${"ABCDEFGH"[i]}</span><span>${escapeHtml(c)}</span></button>`).join("");
+      $("#live-expl").hidden = true;
+    }
+    const left = Math.max(0, LIVE_SECONDS - (Date.now() - live.qStart) / 1000);
+    const timer = $("#live-timer");
+    timer.style.setProperty("--t", `${(100 * left) / LIVE_SECONDS}%`);
+    timer.querySelector("b").textContent = game.state === "question" ? Math.ceil(left) : "";
+    timer.style.visibility = game.state === "question" ? "visible" : "hidden";
+    const locked = game.state !== "question" || Boolean(mine) || left <= 0;
+    document.querySelectorAll("[data-live-choice]").forEach((b) => {
+      const c = b.dataset.liveChoice;
+      b.disabled = locked;
+      b.classList.toggle("picked", mine?.choice === c && game.state === "question");
+      if (game.state === "reveal") {
+        b.classList.toggle("right", c === question.answer);
+        b.classList.toggle("wrong", mine?.choice === c && c !== question.answer);
+        b.classList.toggle("dim", c !== question.answer && mine?.choice !== c);
+      }
+    });
+    $("#live-answered").innerHTML = players.map(livePlayer).join("")
+      + `<small class="muted">${game.state === "question" ? `${players.filter((p) => p.answered).length} / ${players.length} ont répondu` : ""}</small>`;
+    if (game.state === "reveal" && question.explanation) { $("#live-expl").hidden = false; $("#live-expl").textContent = question.explanation; }
+  }
+  if (["reveal", "done"].includes(game.state)) {
+    $("#live-board-title").textContent = game.state === "done" ? "Classement final" : "Classement";
+    $("#live-ranking").innerHTML = players.map((p, i) => `<li class="${p.me ? "me" : ""}"><span class="rk">${i + 1}</span>${avatar(p.pseudo)}
+      <b>${escapeHtml(p.me ? "Toi" : p.pseudo)}</b>${p.gained && game.state === "reveal" ? `<small class="gain">+${p.gained}</small>` : ""}<span class="pts">${p.score}</span></li>`).join("");
+    $("#live-leave").hidden = game.state !== "done";
+  }
+}
+$("#live-choices").addEventListener("click", async (e) => {
+  const b = e.target.closest("[data-live-choice]");
+  const data = live.data;
+  if (!b || b.disabled || !data || data.game.state !== "question" || data.mine || live.sending) return;
+  live.sending = true;
+  b.classList.add("picked");
+  document.querySelectorAll("[data-live-choice]").forEach((x) => { x.disabled = true; });
+  try {
+    await api(`/api/online/live/${live.id}/answer`, jsonBody("POST", { q: data.game.current, choice: b.dataset.liveChoice, ms: Date.now() - live.qStart }));
+  } catch (err) {
+    setStatus("#live-status", err.message, false);
+  } finally {
+    live.sending = false;
+    pollLive();
+  }
 });

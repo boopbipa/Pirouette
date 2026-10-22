@@ -2208,3 +2208,50 @@ body.focus .feedback, body.focus .feedback.ok, body.focus .feedback.ko, body.foc
 .peek-text small { grid-column: 1 / -1; font-size: 13px; color: color-mix(in srgb, var(--text) 80%, transparent); overflow: hidden;
   display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
 .chat-peek { pointer-events: auto; }
+
+/* Quiz en direct (fond noir, comme les séances) */
+.live-head { justify-content: center; align-items: center; gap: 12px; }
+.live-tag { display: inline-flex; align-items: center; gap: 6px; font-size: 11.5px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: var(--wrong); }
+.live-tag i { width: 7px; height: 7px; border-radius: 50%; background: var(--wrong); box-shadow: 0 0 0 3px color-mix(in srgb, var(--wrong) 25%, transparent);
+  animation: live-blink 1.6s ease-in-out infinite; }
+@keyframes live-blink { 50% { opacity: .35; } }
+.live-lobby { text-align: center; padding: 40px 0; }
+.live-players-list { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; margin: 18px 0 26px; }
+.live-chip { display: inline-flex; align-items: center; gap: 8px; padding: 6px 14px 6px 6px; border-radius: 999px; background: rgba(255, 255, 255, .08); font-size: 14px; }
+.live-play { max-width: 620px; margin: 24px auto 0; }
+.live-q-head { display: flex; justify-content: flex-end; }
+.live-timer { --t: 100%; position: relative; width: 44px; height: 44px; border-radius: 50%; display: grid; place-items: center;
+  background: conic-gradient(#F5F5F7 var(--t), rgba(255, 255, 255, .12) 0); transition: background .9s linear; }
+.live-timer::before { content: ""; position: absolute; inset: 3.5px; border-radius: 50%; background: #000; }
+.live-timer b { position: relative; font-size: 14px; font-variant-numeric: tabular-nums; }
+.live-question { font: 600 24px/1.3 var(--display); letter-spacing: -.02em; margin: 6px 0 18px; }
+.live-choice { width: 100%; text-align: left; font-size: 15.5px; padding: 14px 16px; margin-top: 8px; }
+.live-letter { flex: none; width: 24px; height: 24px; border-radius: 8px; display: grid; place-items: center; font-size: 11.5px; font-weight: 700;
+  background: rgba(255, 255, 255, .1); color: #C7C7CC; }
+.live-choice.picked { box-shadow: inset 0 0 0 1.5px var(--accent-ink); }
+.live-choice:disabled { cursor: default; opacity: 1; }
+.live-choice.dim { opacity: .4; }
+.live-choice.right .live-letter { background: var(--right); color: #0b0b0b; }
+.live-choice.wrong .live-letter { background: var(--wrong); color: #0b0b0b; }
+.live-answered { display: flex; align-items: center; gap: 4px; margin-top: 18px; }
+.live-answered small { margin-left: 10px; }
+.live-player { opacity: .35; transition: opacity .2s; }
+.live-player.done { opacity: 1; }
+.live-board { max-width: 520px; margin: 26px auto 0; text-align: center; }
+.live-board h3 { margin: 0 0 12px; font-size: 15px; color: var(--muted); font-weight: 600; }
+.live-ranking { list-style: none; margin: 0 0 20px; padding: 6px 14px; text-align: left; background: rgba(255, 255, 255, .05); border-radius: 18px; }
+.live-ranking li { display: flex; align-items: center; gap: 10px; padding: 10px 0; border-bottom: .5px solid rgba(255, 255, 255, .08); }
+.live-ranking li:last-child { border: 0; }
+.live-ranking li.me b { color: var(--accent-ink); }
+.live-ranking .rk { width: 20px; color: var(--muted); font-weight: 600; font-size: 13px; }
+.live-ranking b { flex: 1; font-weight: 500; }
+.live-ranking .gain { color: var(--right); font-weight: 600; }
+.live-ranking .pts { font-weight: 700; font-variant-numeric: tabular-nums; }
+.live-intro { position: fixed; inset: 0; z-index: 25; display: grid; place-items: center; background: rgba(0, 0, 0, .7);
+  backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
+.live-intro-card { width: min(320px, 90vw); padding: 22px; border-radius: 22px; background: #1C1C1E; box-shadow: inset 0 .5px 0 rgba(255, 255, 255, .15); }
+.live-intro-card b { display: block; font-size: 17px; margin-bottom: 8px; }
+.live-intro-card ol { margin: 0 0 18px; padding-left: 20px; color: #D1D1D6; font-size: 14px; }
+.live-intro-card li { margin: 5px 0; }
+.live-intro-card .primary { width: 100%; }
+.choice > span.live-letter { flex: none; }

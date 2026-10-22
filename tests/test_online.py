@@ -16,7 +16,8 @@ class FakeSupabase:
     def __init__(self):
         self.users = {}       # comptes créés
         self.tables = {"profiles": [], "friendships": [], "challenges": [], "attempts": [],
-                       "rooms": [], "room_members": [], "messages": []}
+                       "rooms": [], "room_members": [], "messages": [],
+                       "live_games": [], "live_players": [], "live_answers": []}
         self.clock = 0  # horodatage croissant des lignes créées
         self.token_user = {}  # jeton -> id
 
@@ -77,6 +78,10 @@ class FakeSupabase:
                 if not any(all(r.get(k) == v for k, v in item.items()) for r in rows):
                     rows.append(self.defaults(table, dict(item)))
             return httpx.Response(201, json=[])
+        if request.method == "POST" and "ignore-duplicates" in request.headers.get("Prefer", "") and table.startswith("live_"):
+            key = [k for k in ("game_id", "user_id", "q") if k in body]  # clé primaire des parties en direct
+            if any(all(r.get(k) == body[k] for k in key) for r in rows):
+                return httpx.Response(201, json=[])
         if request.method == "POST":
             row = self.defaults(table, dict(body))
             if table == "profiles":
@@ -103,11 +108,13 @@ class FakeSupabase:
     def defaults(self, table, row):
         self.clock += 1
         stamp = f"2099-01-01T10:{self.clock // 60:02d}:{self.clock % 60:02d}+00:00"
-        if table in ("rooms", "messages"):
+        if table in ("rooms", "messages", "live_games"):
             row.setdefault("id", str(uuid.uuid4()))
             row.setdefault("created_at", stamp)
         if table == "room_members":
             row.setdefault("last_read", "2000-01-01T00:00:00+00:00")
+        if table == "live_players":
+            row.setdefault("joined_at", stamp)
         return row
 
     def pseudo(self, user_id):
@@ -331,3 +338,34 @@ def test_edit_and_delete_my_messages(tmp_path, fake):
         run(bob.edit_message(sent["id"], "pas à moi"))  # le message d'un autre : refusé
     run(alice.delete_message(sent["id"]))
     assert run(bob.messages(room["id"]))["messages"] == []
+
+
+def test_live_quiz_two_players(tmp_path, fake):
+    alice, bob = player(tmp_path, fake, "alice"), player(tmp_path, fake, "bob")
+    for client, pseudo in ((alice, "Alice"), (bob, "Bob")):
+        run(client.start(pseudo))
+    run(alice.add_friend(run(bob.me())["profile"]["friend_code"]))
+    run(bob.add_friend(run(alice.me())["profile"]["friend_code"]))
+    room = run(alice.direct(run(bob.me())["profile"]["id"]))
+    quiz = {"title": "Tests", "questions": [{"type": "qcm", "question": f"Q{i} ?", "choices": ["a", "b", "c"], "answer": "b"}
+                                            for i in range(5)] + [{"type": "reponse_courte", "question": "Libre ?", "answer": "x"}]}
+    game = run(alice.create_live(room["id"], quiz, size=3))
+    assert len(game["questions"]) == 3 and all(q["choices"] for q in game["questions"])  # pas de question libre
+    run(bob.join_live(game["id"]))
+    state = run(bob.live(game["id"]))
+    assert state["game"]["state"] == "lobby" and not state["game"]["me_host"] and [p["pseudo"] for p in state["players"]] == ["Alice", "Bob"]
+    with pytest.raises(online.OnlineError, match="hôte"):
+        run(bob.advance_live(game["id"], "question", 0))
+    run(alice.advance_live(game["id"], "question", 0))
+    asked = run(bob.live(game["id"]))
+    assert "answer" not in asked["question"]  # pas de réponse tant qu'on peut répondre
+    run(alice.answer_live(game["id"], 0, "b", 2000))   # juste et rapide
+    run(bob.answer_live(game["id"], 0, "a", 1000))     # faux
+    run(bob.answer_live(game["id"], 0, "b", 1000))     # une seule réponse par question
+    assert all(p["answered"] for p in run(alice.live(game["id"]))["players"])
+    run(alice.advance_live(game["id"], "reveal", 0))
+    shown = run(bob.live(game["id"]))
+    assert shown["question"]["answer"] == "b" and shown["mine"] == {"choice": "a", "correct": False, "points": 0}
+    assert [(p["pseudo"], p["score"]) for p in shown["players"]] == [("Alice", 950), ("Bob", 0)]
+    with pytest.raises(online.OnlineError, match="Trop tard"):
+        run(bob.answer_live(game["id"], 1, "b", 0))  # question pas encore posée

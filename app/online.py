@@ -35,6 +35,7 @@ def _config() -> dict:
 URL = (os.getenv("PIROUETTE_SUPABASE_URL") or _config().get("url", "")).rstrip("/")
 KEY = os.getenv("PIROUETTE_SUPABASE_KEY") or _config().get("key", "")
 CHALLENGE_SIZE = 10
+LIVE_SECONDS = 20       # secondes pour répondre à une question du quiz en direct
 _PENDING: dict = {}  # connexion Google en cours : le vérificateur PKCE (un seul Pirouette par ordinateur)
 
 
@@ -451,6 +452,82 @@ class Online:
             raise OnlineError("Ce message n'existe plus.")
         return rows[0]
 
+    # ---------- Quiz en direct : la même question pour tous, en même temps ----------
+    # Une partie (« live_games ») vit dans une conversation. L'hôte la fait avancer : salle d'attente, question,
+    # correction, puis question suivante, jusqu'à la fin. Chacun répond une fois par question ; une bonne réponse
+    # rapporte entre 500 et 1000 points selon la vitesse.
+    async def create_live(self, room_id: str, quiz: dict, size: int = 10) -> dict:
+        questions = [{k: q.get(k) for k in ("type", "question", "choices", "answer", "explanation")}
+                     for q in quiz.get("questions", []) if q.get("choices") and q.get("answer") in q.get("choices", [])]
+        if not questions:
+            raise OnlineError("Il faut des questions à choix (QCM, vrai ou faux) pour un quiz en direct.")
+        picked = random.sample(questions, min(max(3, min(int(size), 20)), len(questions)))
+        for q in picked:  # les propositions mélangées une fois pour toutes : tout le monde voit le même ordre
+            random.shuffle(q["choices"])
+        me = self._me()
+        body = {"room_id": room_id, "host": me, "title": str(quiz.get("title") or "Quiz en direct")[:120],
+                "questions": picked, "state": "lobby", "current": 0}
+        rows = (await self._call("POST", "/rest/v1/live_games", json=body, headers={"Prefer": "return=representation"})).json()
+        game = rows[0] if rows else body
+        await self._call("POST", "/rest/v1/live_players", json={"game_id": game["id"], "user_id": me},
+                         headers={"Prefer": "resolution=ignore-duplicates"})
+        return game
+
+    async def join_live(self, game_id: str) -> None:
+        await self._call("POST", "/rest/v1/live_players", json={"game_id": game_id, "user_id": self._me()},
+                         headers={"Prefer": "resolution=ignore-duplicates"})
+
+    async def live(self, game_id: str) -> dict:
+        """Où en est la partie : la question en cours (sans sa réponse tant qu'on peut répondre), les joueurs,
+        leurs points et qui a déjà répondu."""
+        me = self._me()
+        rows = await self._rows("live_games", id=f"eq.{game_id}", select="id,room_id,host,title,questions,state,current,created_at")
+        if not rows:
+            raise OnlineError("Cette partie n'existe plus.")
+        game = rows[0]
+        players = await self._rows("live_players", game_id=f"eq.{game_id}", select="user_id,joined_at", order="joined_at.asc")
+        answers = await self._rows("live_answers", game_id=f"eq.{game_id}", select="user_id,q,choice,correct,points")
+        pseudos = await self._pseudos({p["user_id"] for p in players} | {game["host"]})
+        questions = game.pop("questions") or []
+        current = game["current"]
+        q = questions[current] if 0 <= current < len(questions) else None
+        reveal = game["state"] in ("reveal", "done")
+        score = lambda uid: sum(a["points"] for a in answers if a["user_id"] == uid)  # noqa: E731
+        now = {a["user_id"]: a for a in answers if a["q"] == current}
+        mine = now.get(me)
+        return {
+            "game": game | {"count": len(questions), "me_host": game["host"] == me, "host_pseudo": pseudos.get(game["host"], "?")},
+            "question": q and ({"question": q["question"], "choices": q["choices"], "type": q.get("type")}
+                               | ({"answer": q["answer"], "explanation": q.get("explanation") or ""} if reveal else {})),
+            "players": sorted([{"id": p["user_id"], "pseudo": pseudos.get(p["user_id"], "?"), "score": score(p["user_id"]),
+                                "answered": p["user_id"] in now, "gained": (now.get(p["user_id"]) or {}).get("points", 0) if reveal else 0,
+                                "me": p["user_id"] == me} for p in players], key=lambda p: -p["score"]),
+            "mine": mine and {"choice": mine["choice"], **({"correct": mine["correct"], "points": mine["points"]} if reveal else {})},
+            "joined": any(p["user_id"] == me for p in players),
+        }
+
+    async def answer_live(self, game_id: str, q: int, choice: str, ms: int) -> dict:
+        rows = await self._rows("live_games", id=f"eq.{game_id}", select="questions,state,current")
+        if not rows or rows[0]["state"] != "question" or rows[0]["current"] != int(q):
+            raise OnlineError("Trop tard pour cette question.")
+        question = rows[0]["questions"][int(q)]
+        correct = choice == question["answer"]
+        points = round(1000 - 500 * min(max(int(ms), 0), LIVE_SECONDS * 1000) / (LIVE_SECONDS * 1000)) if correct else 0
+        await self._call("POST", "/rest/v1/live_answers", json={"game_id": game_id, "user_id": self._me(), "q": int(q),
+                                                              "choice": choice, "correct": correct, "points": points},
+                         headers={"Prefer": "resolution=ignore-duplicates"})
+        return {"ok": True}
+
+    async def advance_live(self, game_id: str, state: str, current: int) -> None:
+        """L'hôte fait avancer la partie (Supabase n'accepte que l'hôte)."""
+        if state not in ("lobby", "question", "reveal", "done"):
+            raise OnlineError("État inconnu.")
+        rows = (await self._call("PATCH", "/rest/v1/live_games", json={"state": state, "current": int(current)},
+                                 params={"id": f"eq.{game_id}", "host": f"eq.{self._me()}"},
+                                 headers={"Prefer": "return=representation"})).json()
+        if not rows:
+            raise OnlineError("Seul l'hôte de la partie peut la faire avancer.")
+
     async def unread(self) -> int:
         try:
             return sum(r["unread"] for r in await self.rooms())
@@ -472,7 +549,8 @@ def _after(stamp: str | None, reference: str | None) -> bool:
 
 
 def _preview(message: dict) -> str:
-    labels = {"quiz": "📝 Quiz", "cards": "🃏 Flashcards", "course": "📚 Cours", "challenge": "⚔️ Défi", "result": "🏁 Résultat"}
+    labels = {"quiz": "📝 Quiz", "cards": "🃏 Flashcards", "course": "📚 Cours", "challenge": "⚔️ Défi", "result": "🏁 Résultat",
+              "live": "⚡ Quiz en direct"}
     if message.get("kind") in labels:
         return f"{labels[message['kind']]} : {message.get('title') or ''}".strip(" :")
     return (message.get("body") or "")[:120]
@@ -504,6 +582,9 @@ def _french(message: str) -> str:
     if "edited_at" in lowered or ("row-level security" in lowered and "messages" in lowered):
         return ("Modifier ou supprimer un message n'est pas encore activé sur le service en ligne : la mise à jour "
                 "docs/supabase-messages-edit.sql doit être collée une fois dans Supabase → SQL Editor.")
+    if ("could not find the table" in lowered and "live_" in lowered) or "messages_kind_check" in lowered:
+        return ("Le quiz en direct n'est pas encore activé sur le service en ligne : la mise à jour "
+                "docs/supabase-live.sql doit être collée une fois dans Supabase → SQL Editor.")
     if "could not find the table" in lowered and any(t in lowered for t in ("room", "messages")):
         return ("La messagerie n'est pas encore activée sur le service en ligne : la mise à jour « Messages » "
                 "(docs/supabase-messages.sql) doit être collée une fois dans Supabase → SQL Editor.")
