@@ -434,8 +434,7 @@ function folderHtml(folder, courses) {
         <span class="folder-actions">
           <button class="icon" type="button" data-folder-rename="${folder.id}" title="Renommer le semestre" aria-label="Renommer le semestre">${ICON_EDIT}</button>
           <button class="icon" type="button" data-folder-exam="${folder.id}" title="Semaine des partiels" aria-label="Semaine des partiels">${ICON_CALENDAR}</button>
-          <button class="icon" type="button" data-folder-export="${folder.id}" title="Exporter tous les quiz et flashcards du semestre" aria-label="Exporter le semestre">${ICON_SHARE}</button>
-          <button class="ghost small" type="button" data-folder-archive="${folder.id}">${folder.archived ? "Désarchiver" : "Archiver"}</button>
+          ${folder.archived ? `<button class="ghost small" type="button" data-folder-archive="${folder.id}">Désarchiver</button>` : ""}
           <button class="icon" type="button" data-folder-delete="${folder.id}" title="Supprimer le semestre (les cours sont gardés)" aria-label="Supprimer le semestre">${ICON_TRASH}</button>
         </span>
       </summary>
@@ -1383,6 +1382,9 @@ function setStatus(selector, message, ok) {
   el.textContent = message;
   el.className = `status ${ok ? "ok" : "ko"}`;
   el.hidden = !message;
+  // Un message de réussite s'en va tout seul ; une erreur reste jusqu'à la prochaine action
+  clearTimeout(el._hide);
+  if (ok && message) el._hide = setTimeout(() => { el.hidden = true; }, 7000);
 }
 
 $("#settings-name-form").addEventListener("submit", async (e) => {
@@ -4913,6 +4915,9 @@ const WELCOME = [
 ];
 // Les nouveautés de chaque version (le carton « Quoi de neuf » ne s'affiche que si la version en a)
 const WHATS_NEW = {
+  "0.66.3": [
+    ["+", "Matières plus légères", "Plus de boutons en haut : un petit « + » en bas pour ajouter un cours ou un semestre. Les messages verts disparaissent tout seuls"],
+  ],
   "0.66.2": [
     ["〰", "Un petit « tic » sous le doigt", "Sur Mac avec un trackpad, la barre orange fait un tic très léger à chaque nombre"],
     ["▭", "Cartes, sur le téléphone", "Choisis combien de cartes réviser avec la barre : d'abord celles à revoir, puis celles où tu bloques"],
@@ -7931,3 +7936,17 @@ $("#live-choices").addEventListener("click", async (e) => {
     pollLive();
   }
 });
+
+// Matières : le petit « + » en bas, pour ajouter un cours ou un semestre
+$("#add-fab-btn").addEventListener("click", () => {
+  const open = !$("#add-fab").classList.contains("open");
+  $("#add-fab").classList.toggle("open", open);
+  $("#add-fab-btn").setAttribute("aria-expanded", String(open));
+});
+$("#add-fab").addEventListener("click", (e) => {
+  const b = e.target.closest("[data-add]");
+  if (!b) return;
+  $("#add-fab").classList.remove("open");
+  (b.dataset.add === "course" ? $("#new-course-btn") : $("#new-folder")).click();
+});
+$("#add-fab").addEventListener("mouseleave", () => $("#add-fab").classList.remove("open"));

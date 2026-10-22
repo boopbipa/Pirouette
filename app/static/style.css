@@ -2390,3 +2390,11 @@ body.focus .feedback, body.focus .feedback.ok, body.focus .feedback.ko, body.foc
 .m1-of { position: absolute; right: 14px; top: 50%; transform: translateY(-50%); font-size: 13px; color: var(--muted); pointer-events: none; }
 .quiz-count .m1 { flex: 1; background: var(--surface); }
 .m1.full .m1-of { color: rgba(255, 246, 238, .75); right: 22px; }
+
+/* Matières : le petit « + » en bas (ajouter un cours ou un semestre), qui s'ouvre au survol */
+.add-fab { position: relative; display: flex; align-items: center; justify-content: center; gap: 10px; margin: 22px 0 8px; min-height: 44px; }
+.add-fab-plus { width: 44px; height: 44px; border-radius: 50%; border: 1.5px dashed var(--border); background: transparent; color: var(--muted);
+  font-size: 24px; line-height: 1; display: grid; place-items: center; cursor: pointer; transition: transform .2s ease, color .15s, border-color .15s; padding: 0; }
+.add-fab-menu { position: absolute; left: calc(50% + 32px); display: flex; gap: 8px; white-space: nowrap; opacity: 0; transform: translateX(-8px); pointer-events: none; transition: opacity .18s ease, transform .18s ease; }
+.add-fab:hover .add-fab-plus, .add-fab.open .add-fab-plus { transform: rotate(45deg); color: var(--accent-ink); border-color: var(--accent); border-style: solid; }
+.add-fab:hover .add-fab-menu, .add-fab.open .add-fab-menu, .add-fab:focus-within .add-fab-menu { opacity: 1; transform: none; pointer-events: auto; }
