@@ -18,6 +18,11 @@ on:
 permissions:
   contents: read
 
+# Une nouvelle version annule la fabrication d'une plus ancienne encore en cours (inutile de la finir)
+concurrency:
+  group: fabrication-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   dmg:
     name: dmg (${{ matrix.label }})
