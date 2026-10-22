@@ -1,7 +1,7 @@
 // Hors connexion : la page elle-même est gardée sur l'appareil (les quiz et les cartes sont dans IndexedDB).
 // Réseau d'abord pour avoir la dernière version, la copie gardée sinon. Le service en ligne n'est jamais mis en cache.
 const CACHE = "pirouette-v1";
-const SHELL = ["./", "index.html", "style.css", "app.js", "config.js", "manifest.webmanifest", "icon.svg", "icon-192.png", "apple-touch-icon.png"];
+const SHELL = ["./", "index.html", "style.css", "app.js", "config.js", "manifest.webmanifest", "icon.svg", "icon-192.png", "icon-512.png", "apple-touch-icon.png"];
 
 self.addEventListener("install", (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()));

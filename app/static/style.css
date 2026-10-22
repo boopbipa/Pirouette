@@ -2305,3 +2305,7 @@ body.focus .feedback, body.focus .feedback.ok, body.focus .feedback.ko, body.foc
 .pair-steps ol { margin: 0 0 10px; padding-left: 20px; line-height: 1.6; font-size: 14px; }
 .pair-code { font: 700 26px/1 ui-monospace, "SF Mono", Menlo, monospace; letter-spacing: .1em; color: var(--accent-ink); margin: 4px 0 8px; }
 @media (max-width: 640px) { .pair-box { flex-direction: column; align-items: flex-start; } }
+
+/* L'icône de l'app (le chat qui fait la sieste) : dessinée en entier, plus de fond ni de marge autour */
+.app-icon, .home-brand .app-icon { padding: 0; background: none; border-radius: 22.5%; }
+.app-icon > svg { border-radius: 22.5%; box-shadow: 0 0 0 .5px rgba(0, 0, 0, .06), 0 4px 10px -4px rgba(120, 50, 20, .45); }

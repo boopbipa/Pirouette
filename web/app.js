@@ -344,7 +344,7 @@ function renderMissing() {
 }
 
 function logoSvg() {
-  return `<svg viewBox="0 0 100 100" aria-hidden="true"><path fill="currentColor" d="M14 78 Q14 46 40 40 L44 26 Q45 23.5 47 25.5 L54 33 Q60 32 66 33.5 L74 26 Q76 24 77 26.5 L79 40 Q90 50 90 66 Q90 78 80 78 Z"/><path d="M56 55 q4 4 8 0 M70 55 q4 4 8 0" fill="none" stroke="var(--accent)" stroke-width="3" stroke-linecap="round"/></svg>`;
+  return '<img src="icon.svg" alt="" width="92" height="92">';
 }
 
 function renderPair() {

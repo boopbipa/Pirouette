@@ -4729,6 +4729,9 @@ const WELCOME = [
 ];
 // Les nouveautés de chaque version (le carton « Quoi de neuf » ne s'affiche que si la version en a)
 const WHATS_NEW = {
+  "0.65.1": [
+    ["☾", "Une nouvelle icône", "Le chat qui fait la sieste : dans le Dock, sur Windows, dans l'app et sur ton iPhone"],
+  ],
   "0.65.0": [
     ["▯", "Sur ton iPhone et ton iPad", "Réglages › iPhone et iPad : scanne le code avec ton téléphone, et révise tes flashcards et tes quiz partout, même hors connexion. Tes réponses reviennent sur ton Mac"],
     ["⚖", "Le poids de tes révisions", "Réglages › Sauvegarde : combien pèsent tes quiz et tes flashcards"],
