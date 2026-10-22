@@ -330,7 +330,11 @@ async function loadCourses() {
   state.courseProgress = Object.fromEntries(progress.courses.map((c) => [c.id, c]));
   setCrumbs();
   $("#review-home-exam").hidden = !stats.next_exam;
-  if (stats.next_exam) $("#review-home-exam").innerHTML = examSentence(stats.next_exam);
+  if (stats.next_exam) {  // court, à droite de « Bonjour » ; la phrase entière au survol
+    const x = stats.next_exam, box = $("#review-home-exam");
+    box.innerHTML = x.days <= 0 ? "<b>Partiels en cours</b>" : `<b>Partiels dans ${plural(x.days, "jour", "jours")}</b>`;
+    box.title = `${x.course ? `${x.course} : ` : ""}${x.days <= 0 ? "semaine de partiels en cours" : `partiels le ${dayLong(x.date)}`}`;
+  }
   renderReviewSets();
 
   $("#course-count").textContent = courses.length ? `· ${courses.length}` : "";
@@ -1958,28 +1962,74 @@ const quizLabel = (q, number = null) => (number && !q.custom_title ? `Quiz ${num
 
 // Dans un cours, on gère ses quiz (aperçu des questions, renommer, supprimer) ; on les passe dans Réviser (`play`).
 function quizItem(q, course, number = null, { play = false } = {}) {
+  const label = quizLabel(q, number);
+  // Pour réviser : juste le titre et le nombre de questions ; un clic, puis combien de questions faire
+  if (play) {
+    return `
+    <li class="quiz-item play">
+      <button class="quiz-open" data-pick-quiz="${q.id}" data-count="${q.count}" aria-expanded="false">
+        <strong>${escapeHtml(label)}</strong>
+        <small class="muted">${plural(q.count, "question", "questions")}${q.course_name ? ` · ${escapeHtml(q.course_name)}` : ""}</small>
+      </button>
+      <div class="quiz-count" hidden></div>
+    </li>`;
+  }
   const outdated = course && q.course_version < course.version;
   const best = q.best_score ? `Meilleur score ${q.best_score.score}/${q.best_score.total}` : "Pas encore fait";
-  const label = quizLabel(q, number);
   return `
-    <li class="quiz-item${play ? " play" : ""}">
-      <button class="quiz-open" ${play ? `data-open-quiz="${q.id}"` : `data-preview-quiz="${q.id}" aria-expanded="false"`}>
+    <li class="quiz-item">
+      <button class="quiz-open" data-preview-quiz="${q.id}" aria-expanded="false">
         <strong>${escapeHtml(label)}</strong>
-        <small class="muted">${q.count} questions${play && q.course_name ? ` · ${escapeHtml(q.course_name)}` : ` · ${q.difficulty || "moyen"} · ${q.provider === "claude-app" ? "App Claude" : q.provider === "claude" ? "Claude" : "Local"} · ${formatDate(q.created_at)}`}</small>
+        <small class="muted">${q.count} questions · ${q.difficulty || "moyen"} · ${q.provider === "claude-app" ? "App Claude" : q.provider === "claude" ? "Claude" : "Local"} · ${formatDate(q.created_at)}</small>
         ${scopeNote(q.scope)}
         <small><span class="badge">${best}</span>${q.attempts > 1 ? ` <span class="muted">${q.attempts} essais</span>` : ""}
           ${outdated ? ` <span class="badge warn-badge" title="Le cours a été modifié depuis la création de ce quiz">cours mis à jour depuis</span>` : ""}</small>
       </button>
-      ${play ? (q.count > (state.quizSize || 10) + 2
-        ? `<span class="quiz-play-actions">
-            <button class="ghost small" data-open-quiz="${q.id}" data-full="1">Quiz entier (${q.count})</button>
-            <button class="primary small" data-open-quiz="${q.id}">${state.quizSize || 10} questions</button></span>`
-        : `<button class="primary small" data-open-quiz="${q.id}" data-full="1">Faire le quiz</button>`) : `
       <button class="icon" data-export-quiz="${q.id}" aria-label="Exporter ce quiz (fichier texte)" title="Exporter (fichier texte à envoyer)">${ICON_SHARE}</button>
       <button class="icon" data-rename-quiz="${q.id}" data-title="${escapeHtml(label)}" aria-label="Renommer ce quiz" title="Renommer">${ICON_EDIT}</button>
-      <button class="icon" data-delete-quiz="${q.id}" aria-label="Supprimer ce quiz" title="Supprimer">${ICON_TRASH}</button>`}
-      ${play ? "" : `<div class="quiz-preview" id="preview-${q.id}" hidden></div>`}
+      <button class="icon" data-delete-quiz="${q.id}" aria-label="Supprimer ce quiz" title="Supprimer">${ICON_TRASH}</button>
+      <div class="quiz-preview" id="preview-${q.id}" hidden></div>
     </li>`;
+}
+
+// Combien de questions ? De 5 au quiz entier (un petit quiz se lance directement, en entier)
+const QUIZ_MIN = 5;
+document.addEventListener("click", async (e) => {
+  const pick = e.target.closest("[data-pick-quiz]");
+  const go = e.target.closest("[data-count-go]");
+  if (pick) {
+    const total = Number(pick.dataset.count);
+    const box = pick.parentElement.querySelector(".quiz-count");
+    if (total <= QUIZ_MIN) return launchQuiz(pick.dataset.pickQuiz, total);
+    const open = box.hidden;
+    document.querySelectorAll(".quiz-count").forEach((b) => { b.hidden = true; b.previousElementSibling.setAttribute("aria-expanded", "false"); });
+    if (!open) return;
+    const start = Math.min(total, Math.max(QUIZ_MIN, state.quizSize || 10));
+    box.innerHTML = `<span class="muted">Combien de questions ?</span>
+      <input type="range" min="${QUIZ_MIN}" max="${total}" value="${start}" step="1" aria-label="Nombre de questions">
+      <b class="quiz-count-n">${start === total ? `toutes (${total})` : start}</b>
+      <button class="primary small" type="button" data-count-go="${pick.dataset.pickQuiz}">Commencer →</button>`;
+    box.hidden = false;
+    pick.setAttribute("aria-expanded", "true");
+  }
+  if (go) {
+    const range = go.parentElement.querySelector("input[type=range]");
+    launchQuiz(go.dataset.countGo, Number(range.value));
+  }
+});
+document.addEventListener("input", (e) => {
+  if (!e.target.matches(".quiz-count input[type=range]")) return;
+  const n = Number(e.target.value), max = Number(e.target.max);
+  e.target.parentElement.querySelector(".quiz-count-n").textContent = n === max ? `toutes (${max})` : n;
+});
+async function launchQuiz(id, n) {
+  try {
+    const quiz = await api(`/api/quizzes/${id}`);
+    const back = !$("#view-review-scope").hidden ? location.hash : null;
+    startQuiz(quiz, drawQuestions(quiz, n), { back, drawn: n < quiz.questions.length });
+  } catch (err) {
+    notify(err.message);
+  }
 }
 
 // ---------- Paquets : tous les quiz et flashcards d'un cours ou d'un semestre (.zip), à réimporter ----------
@@ -4477,10 +4527,11 @@ function foldJobs() {
 // Un grand quiz (banque de questions) : Pirouette en tire quelques-unes à chaque lancement, d'abord celles
 // ratées la dernière fois et celles jamais posées, puis les plus anciennes.
 api("/api/settings").then((s) => { state.quizSize = s.quiz_size; }).catch(() => {});
-function drawQuestions(quiz) {
+function drawQuestions(quiz, chosen = null) {
   const all = quiz.questions;
-  const size = state.quizSize ?? 10;
-  if (!size || all.length <= size + 2) return all;
+  const size = chosen ?? state.quizSize ?? 10;
+  if (chosen && chosen >= all.length) return shuffle(all);
+  if (!size || (!chosen && all.length <= size + 2)) return all;
   const stats = quiz.stats || {};
   const priority = (i) => {
     const stat = stats[i];
@@ -4494,10 +4545,10 @@ function drawQuestions(quiz) {
   return shuffle(picked);
 }
 
-function startQuiz(quiz, questions, { back = state.quizBack } = {}) {
+function startQuiz(quiz, questions, { back = state.quizBack, drawn: picked = false } = {}) {
   foldJobs();
   startQuizTimer(quiz);
-  const drawn = !questions;
+  const drawn = !questions || picked;
   questions = questions || drawQuestions(quiz);
   questions.forEach(mixChoices);
   state.quizBack = back || null;
@@ -4813,6 +4864,10 @@ const WELCOME = [
 ];
 // Les nouveautés de chaque version (le carton « Quoi de neuf » ne s'affiche que si la version en a)
 const WHATS_NEW = {
+  "0.65.4": [
+    ["☰", "Des quiz plus lisibles", "Réviser › Quiz : juste le titre et le nombre de questions ; un clic, et tu choisis combien en faire (de 5 au quiz entier)"],
+    ["●", "Les partiels à côté du bonjour", "Et la bulle des messages prend la forme de la tête du chat"],
+  ],
   "0.65.3": [
     ["▣", "QR code bien centré", "Le code à scanner pour ajouter un téléphone est centré, avec sa marge : l'appareil photo le trouve tout de suite"],
   ],

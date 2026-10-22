@@ -460,6 +460,7 @@ function renderSubject(id) {
   const due = todayCards([id]);
   const all = (current().deck[id]?.cards || []).map((card) => ({ course, card }));
   const quizzes = quizzesOf(id);
+  const pool = quizzes.reduce((n, q) => n + q.questions.length, 0);
   const m = mastery(id);
   app.innerHTML = `<header class="top sub"><a class="icon-btn" href="#/" aria-label="Retour">${ICON.back}</a></header>
     <h1 class="subject" style="--c:${colorOf(course)}"><span class="dot"></span>${esc(course.name)}</h1>
@@ -468,7 +469,10 @@ function renderSubject(id) {
       <button class="row" type="button" id="due" ${due.length ? "" : "disabled"}><span class="row-text"><b>Révision du jour</b><small>${due.length ? `<em>${due.length}</em> à revoir` : "Rien à revoir aujourd'hui"}</small></span>${ICON.chevron}</button>
       <button class="row" type="button" id="all"><span class="row-text"><b>Toutes les cartes</b><small>${plural(all.length, "carte", "cartes")}, dans le désordre</small></span>${ICON.chevron}</button>
     </nav>` : ""}
-    ${quizzes.length ? `<h2>Quiz</h2><nav class="list">${quizzes.map((q) => {
+    ${quizzes.length ? `<h2>Quiz</h2>
+    ${pool >= 6 ? `<button class="primary random-quiz" type="button" id="random">${Math.min(10, pool)} questions au hasard
+      <small>dans ${quizzes.length > 1 ? `les ${quizzes.length} quiz` : "le quiz"} de la matière</small></button>` : ""}
+    <nav class="list">${quizzes.map((q) => {
       const last = (q.attempts || []).at(-1);
       return `<button class="row" type="button" data-quiz="${esc(q.id)}"><span class="row-text"><b>${esc(q.title || "Quiz")}</b>
         <small>${plural(q.questions.length, "question", "questions")}${last ? ` · dernier : ${last.score}/${last.total}` : ""}</small></span>${ICON.chevron}</button>`;
@@ -477,6 +481,7 @@ function renderSubject(id) {
   $("#due")?.addEventListener("click", () => startCards(due, course.name));
   $("#all")?.addEventListener("click", () => startCards(shuffle(all), course.name, { free: true }));
   app.querySelectorAll("[data-quiz]").forEach((b) => b.addEventListener("click", () => startQuiz(current().quiz[b.dataset.quiz])));
+  $("#random")?.addEventListener("click", () => startRandom(quizzes, course.name));
 }
 
 // ---------- Séance de flashcards ----------
@@ -546,11 +551,19 @@ function rate(rating) {
 }
 
 // ---------- Séance de quiz ----------
+const asQuestions = (quiz) => quiz.questions.map((q, index) => ({ ...q, index, quiz_id: quiz.id,
+  choices: q.type === "vrai_faux" ? q.choices : shuffle(q.choices || []) }));
 function startQuiz(quiz) {
   if (!quiz?.questions?.length) return;
-  const questions = quiz.questions.map((q, index) => ({ ...q, index,
-    choices: q.type === "vrai_faux" ? q.choices : shuffle(q.choices || []) }));
-  session = { type: "quiz", quiz, questions: shuffle(questions).slice(0, 30), index: 0, ok: 0, back: location.hash || "#/" };
+  session = { type: "quiz", quiz, questions: shuffle(asQuestions(quiz)).slice(0, 30), index: 0, ok: 0, back: location.hash || "#/" };
+  drawQuestion();
+}
+// 10 questions au hasard dans tous les quiz de la matière : d'abord celles jamais posées ou ratées la dernière fois
+function startRandom(quizzes, name) {
+  const all = shuffle(quizzes.flatMap((quiz) => asQuestions(quiz).map((q) => ({ q, last: quiz.stats?.[q.index]?.last }))));
+  all.sort((a, b) => (a.last === true) - (b.last === true));
+  const questions = shuffle(all.slice(0, 10).map((x) => x.q));
+  session = { type: "quiz", quiz: null, title: name, questions, index: 0, ok: 0, back: location.hash || "#/" };
   drawQuestion();
 }
 const typed = (q) => q.type === "reponse_courte" || q.type === "texte_a_trous" || !q.choices?.length;
@@ -608,7 +621,7 @@ function answered(q, correct, { shown = false } = {}) {
   const s = session;
   s.ok += correct;
   s.answered = true;
-  addEvent("answers", { quiz_id: s.quiz.id, answers: [{ index: q.index, correct }] });
+  addEvent("answers", { quiz_id: q.quiz_id, answers: [{ index: q.index, correct }] });
   if (shown) { s.index += 1; return drawQuestion(); }
   showFeedback(q, correct, `<button class="primary next" type="button" id="next">${s.index + 1 < s.questions.length ? "Suivante" : "Voir le score"}</button>`);
   $("#next").addEventListener("click", () => { s.index += 1; drawQuestion(); });
@@ -618,7 +631,7 @@ function answered(q, correct, { shown = false } = {}) {
 function finish() {
   const s = session;
   const total = s.type === "cards" ? s.items.length : s.questions.length;
-  if (s.type === "quiz") addEvent("attempt", { quiz_id: s.quiz.id, score: s.ok, total });
+  if (s.type === "quiz" && s.quiz) addEvent("attempt", { quiz_id: s.quiz.id, score: s.ok, total });
   const pct = total ? Math.round((100 * s.ok) / total) : 0;
   app.innerHTML = `<section class="center-page finish"><div class="score-ring" style="--m:${pct}%"><span>${s.ok}<small>/${total}</small></span></div>
     <h1>${pct >= 80 ? "Bravo !" : pct >= 50 ? "Bien joué" : "Ça viendra"}</h1>

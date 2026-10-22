@@ -59,7 +59,10 @@
     <!-- Mes cours : cours et dossiers -->
     <section id="view-courses" class="view" hidden>
       <!-- En haut des matières : la salutation et la révision du jour de toutes les matières (l'ancien accueil) -->
-      <h1 class="hello" id="hello"></h1>
+      <div class="hello-row">
+        <h1 class="hello" id="hello"></h1>
+        <p class="exam-countdown" id="review-home-exam" hidden></p>
+      </div>
       <form class="name-prompt" id="name-prompt" hidden>
           <label for="name-input">Comment tu t'appelles ?</label>
           <input type="text" id="name-input" placeholder="Ton prénom" maxlength="40">
@@ -96,7 +99,6 @@
         <div class="section-title"><h2>Anciens quiz (sans cours)</h2></div>
         <ul id="orphan-list" class="quiz-list"></ul>
       </div>
-      <p class="exam-countdown exam-bottom" id="review-home-exam" hidden></p>
     </section>
 
     <!-- Défis entre amis (en ligne) : un compte, des amis, 10 questions à faire chacun -->
@@ -1427,7 +1429,7 @@
         <p class="status" id="chat-panel-status" hidden></p>
       </div>
     </div>
-    <button class="chat-bubble" id="chat-bubble" type="button" aria-label="Messages"><svg aria-hidden="true"><use href="#chat-cat"/></svg><span class="nav-badge chat-badge" id="chat-badge" hidden></span></button>
+    <button class="chat-bubble" id="chat-bubble" type="button" aria-label="Messages"><svg class="chat-shape" viewBox="0 0 100 100" aria-hidden="true"><path d="M50 7 C79 7 94 21 94 42 C99 54 99 70 92 80 C84 92 68 97 50 97 C32 97 16 92 8 80 C1 70 1 54 6 42 C6 21 21 7 50 7 Z"/></svg><svg class="chat-ic" aria-hidden="true"><use href="#chat-cat"/></svg><span class="nav-badge chat-badge" id="chat-badge" hidden></span></button>
   </div>
 
   <!-- Un message vient d'arriver : un petit mot cliquable en bas de l'écran -->

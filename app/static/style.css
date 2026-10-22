@@ -2322,3 +2322,30 @@ body.focus .feedback, body.focus .feedback.ok, body.focus .feedback.ko, body.foc
 .custom-seg { flex-wrap: wrap; }
 .custom-seg[hidden] { display: none; }
 .custom-block .toggle-row { margin-bottom: 10px; }
+
+/* Réviser › Quiz : le titre et le nombre de questions ; un clic ouvre le choix du nombre */
+.quiz-item.play .quiz-open { flex: 1 1 100%; }
+.quiz-count { flex: 1 1 100%; display: flex; align-items: center; gap: 14px; padding: 10px 16px; border-radius: 14px; background: var(--sunken); }
+.quiz-count[hidden] { display: none; }
+.quiz-count input[type=range] { flex: 1; min-width: 120px; accent-color: var(--accent); }
+.quiz-count-n { min-width: 74px; font-variant-numeric: tabular-nums; }
+@media (max-width: 600px) { .quiz-count { flex-wrap: wrap; } }
+
+/* La barre du haut : presque opaque, pour que le texte qui passe dessous (le titre d'une matière, en blanc en mode sombre)
+   ne fasse pas de halo flou ; les onglets en verre gardent un reflet discret en mode sombre */
+.topbar { background: color-mix(in srgb, var(--bg) 88%, transparent); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .scope-tabs { box-shadow: inset 0 .5px 0 rgba(255, 255, 255, .08), 0 0 0 .5px rgba(255, 255, 255, .06), 0 6px 18px -12px rgba(0, 0, 0, .5); }
+}
+:root[data-theme="dark"] .scope-tabs { box-shadow: inset 0 .5px 0 rgba(255, 255, 255, .08), 0 0 0 .5px rgba(255, 255, 255, .06), 0 6px 18px -12px rgba(0, 0, 0, .5); }
+
+/* Matières : les partiels à droite de « Bonjour, … », sur la même ligne */
+.hello-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin: 6px 0 16px; }
+.hello-row .hello { margin: 0; }
+.hello-row .exam-countdown { margin: 0; padding: 7px 14px; border-radius: 999px; font-size: 14px; }
+
+/* La bulle des messages : la forme de la tête du chat, sans les oreilles (joues rondes, bas plus large) */
+.chat-bubble { background: none; box-shadow: none; border-radius: 0; padding: 15px 14px 12px; filter: drop-shadow(0 8px 12px rgba(70, 35, 15, .45)); }
+.chat-bubble .chat-shape { position: absolute; inset: 0; width: 100%; height: 100%; fill: var(--accent); }
+.chat-bubble .chat-ic { position: relative; }
+.chat-bubble:hover .chat-shape { fill: color-mix(in srgb, var(--accent) 90%, #fff); }

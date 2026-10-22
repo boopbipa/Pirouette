@@ -146,3 +146,5 @@ input:focus { border-color: var(--accent); background: var(--surface); }
   box-shadow: 0 12px 30px -10px rgba(0, 0, 0, .4); }
 .toast[hidden] { display: none; }
 .android-tip { max-width: 380px; margin: 0 0 14px; }
+.random-quiz { width: 100%; display: grid; gap: 2px; text-align: center; margin-bottom: 12px; padding: 14px 20px; border-radius: 18px; }
+.random-quiz small { font-weight: 400; font-size: 13px; opacity: .85; }
