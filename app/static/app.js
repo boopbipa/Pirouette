@@ -4915,6 +4915,10 @@ const WELCOME = [
 ];
 // Les nouveautés de chaque version (le carton « Quoi de neuf » ne s'affiche que si la version en a)
 const WHATS_NEW = {
+  "0.66.4": [
+    ["+", "Le « + » des matières", "Il fait un quart de tour, et les choix sortent dessous"],
+    ["▯", "Le téléphone, plus simple", "Une seule séance du jour, préparée pour toi (cartes et questions de toutes tes matières), et une barre en bas : Aujourd'hui · Matières · Réglages"],
+  ],
   "0.66.3": [
     ["+", "Matières plus légères", "Plus de boutons en haut : un petit « + » en bas pour ajouter un cours ou un semestre. Les messages verts disparaissent tout seuls"],
   ],

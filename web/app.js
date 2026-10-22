@@ -333,8 +333,30 @@ function route() {
   if (!S.owner) return renderPair();
   if (session) return;  // une séance ne se coupe pas toute seule
   const [, page, id, sub] = location.hash.replace(/^#\/?/, "#/").split("/");
-  if (page === "m" && id) return renderSubject(decodeURIComponent(id), sub || "");
-  renderHome();
+  if (page === "m" && id) renderSubject(decodeURIComponent(id), sub || "");
+  else if (page === "matieres") renderSubjects();
+  else if (page === "reglages") renderSettings();
+  else renderHome();
+  tabBar(page === "m" || page === "matieres" ? "matieres" : page === "reglages" ? "reglages" : "");
+}
+
+// La barre du bas, comme les apps de l'iPhone : Aujourd'hui · Matières · Réglages (cachée pendant une séance)
+const TAB_ICONS = {
+  "": '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.3 5.3l1.4 1.4M17.3 17.3l1.4 1.4M5.3 18.7l1.4-1.4M17.3 6.7l1.4-1.4"/></svg>',
+  matieres: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"><rect x="3.5" y="3.5" width="7" height="7" rx="2"/><rect x="13.5" y="3.5" width="7" height="7" rx="2"/><rect x="3.5" y="13.5" width="7" height="7" rx="2"/><rect x="13.5" y="13.5" width="7" height="7" rx="2"/></svg>',
+  reglages: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2.2"/><circle cx="10" cy="17" r="2.2"/></svg>',
+};
+function tabBar(on) {
+  let bar = $("#tabbar");
+  if (!bar) {
+    bar = Object.assign(document.createElement("nav"), { id: "tabbar", className: "tabbar" });
+    document.body.append(bar);
+  }
+  const show = Boolean(S.owner && CONFIG.url && !session && S.docs?.meta);
+  bar.hidden = !show;
+  document.body.classList.toggle("with-tabbar", show);
+  bar.innerHTML = [["", "Aujourd'hui"], ["matieres", "Matières"], ["reglages", "Réglages"]].map(([t, label]) =>
+    `<a href="#/${t}" class="${t === on ? "on" : ""}" ${t === on ? 'aria-current="page"' : ""}>${TAB_ICONS[t]}<span>${label}</span></a>`).join("");
 }
 window.addEventListener("hashchange", () => { if (session) endSession(false); route(); });
 
@@ -411,6 +433,29 @@ function refreshSyncLine() {
   if (line) line.textContent = syncLine();
 }
 
+// ---------- Aujourd'hui : une seule séance, préparée pour toi (cartes du jour + quelques questions, toutes matières) ----------
+const DAILY_QUESTIONS = 7;
+function dailyQuestions(n = DAILY_QUESTIONS) {
+  // Jamais posées ou ratées la dernière fois d'abord, dans les matières non archivées
+  const active = new Set(courses().filter((c) => !c.archived).map((c) => c.id));
+  const pool = Object.values(current().quiz).filter((q) => active.has(q.course_id))
+    .flatMap((quiz) => asQuestions(quiz).map((q) => ({ q, last: quiz.stats?.[q.index]?.last })));
+  return shuffle(pool).sort((a, b) => (a.last === true) - (b.last === true)).slice(0, n).map((x) => x.q);
+}
+// Les cartes, et une question toutes les quelques cartes
+function interleave(cards, questions) {
+  const list = cards.map((x) => ({ kind: "card", ...x }));
+  const step = Math.max(2, Math.floor((cards.length + questions.length) / Math.max(1, questions.length)));
+  questions.forEach((q, i) => list.splice(Math.min(list.length, (i + 1) * step - 1), 0, { kind: "q", q }));
+  return list;
+}
+function doneToday() {
+  const day = dayOf(new Date());
+  const meta = Object.values(current().meta?.activity?.[day] || {}).reduce((n, c) => n + (c.cards || 0) + (c.questions || 0), 0);
+  const pending = [...S.remote, ...S.outbox].filter((e) => e.payload.at?.startsWith(day))
+    .reduce((n, e) => n + (e.kind === "card" ? 1 : e.kind === "answers" ? (e.payload.answers || []).length : 0), 0);
+  return meta + pending;
+}
 function renderHome() {
   const v = current();
   if (!v.meta) {
@@ -420,32 +465,79 @@ function renderHome() {
     $("#retry").addEventListener("click", () => syncNow());
     return;
   }
-  const due = todayCards();
+  const cards = todayCards();
+  const questions = cards.length ? dailyQuestions() : [];
+  const total = cards.length + questions.length, done = doneToday();
+  const pct = total ? Math.round((100 * done) / (done + total)) : 100;
+  // Le mélange des matières de la séance (les 3 plus présentes nommées)
+  const share = {};
+  for (const x of cards) share[x.course.id] = (share[x.course.id] || 0) + 1;
+  for (const q of questions) if (q.course) share[q.course.id] = (share[q.course.id] || 0) + 1;
+  const parts = Object.entries(share).map(([id, n]) => ({ course: courses().find((c) => c.id === id), n })).filter((x) => x.course)
+    .sort((a, b) => b.n - a.n);
+  const top = parts[0]?.course;
+  const exam = courses().filter((c) => c.exam && !c.archived).map((c) => daysBetween(today(), parseDay(c.exam))).filter((d) => d >= 0).sort((a, b) => a - b)[0];
+  const date = new Date().toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" });
+  const minutes = Math.max(1, Math.round(cards.length * 0.2 + questions.length * 0.5));
+  app.innerHTML = `<header class="home-head"><h1>${hello(v.meta.name)}</h1>
+      <p class="date"><span>${date.charAt(0).toUpperCase() + date.slice(1)}</span>${exam !== undefined ? `<span class="chip">Partiels dans ${plural(exam, "jour", "jours")}</span>` : ""}</p></header>
+    <section class="session-card">
+      <span class="ring big" style="--m:${pct}%"><i>${catSvg()}</i></span>
+      <h2>${total ? "Ta séance du jour" : "C'est fait pour aujourd'hui"}</h2>
+      <p>${total ? `${[cards.length ? plural(cards.length, "carte", "cartes") : "", questions.length ? plural(questions.length, "question", "questions") : ""].filter(Boolean).join(" · ")}<br>environ ${minutes} min`
+        : "Bravo ! Tes cartes reviennent demain."}</p>
+      ${parts.length ? `<div class="mix">${parts.map((x) => `<i style="flex:${x.n};background:${colorOf(x.course)}"></i>`).join("")}</div>
+        <div class="legend">${parts.slice(0, 3).map((x) => `<span><i style="background:${colorOf(x.course)}"></i>${esc(x.course.name)}</span>`).join("")}${parts.length > 3 ? `<span>+${parts.length - 3}</span>` : ""}</div>` : ""}
+      ${total ? `<button class="primary" type="button" id="go">Commencer</button>` : `<button class="primary" type="button" id="more">Encore 10 minutes</button>`}
+      ${total ? `<button class="link" type="button" id="more">ou encore 10 minutes après</button>` : ""}
+    </section>
+    ${top && cards.length ? `<div class="hint-card" style="--c:${colorOf(top)}"><i></i><span><b>${esc(top.name)}</b><small>c'est là que tu as le plus à revoir</small></span></div>` : ""}
+    ${courses().length ? "" : `<p class="muted center">Pas encore de matière : crée tes quiz et tes cartes sur ton ordinateur.</p>`}`;
+  $("#go")?.addEventListener("click", () => startSession(interleave(cards, questions), { title: "Séance du jour" }));
+  $("#more")?.addEventListener("click", () => {
+    // Une petite séance en plus : quelques cartes difficiles ou pas encore sues, et des questions
+    const extra = shuffle(courses().filter((c) => !c.archived).flatMap((course) => (current().deck[course.id]?.cards || [])
+      .filter((card) => isWeak(card) || card.status !== "known").map((card) => ({ course, card })))).slice(0, 8);
+    const list = interleave(extra, dailyQuestions(6));
+    if (!list.length) return toast("Rien de plus à revoir : profite !");
+    startSession(list, { title: "Encore 10 minutes", free: true });
+  });
+}
+function catSvg() {
+  return `<svg viewBox="0 0 100 100" aria-hidden="true"><path d="M14 78 Q14 46 40 40 L44 26 Q45 23.5 47 25.5 L54 33 Q60 32 66 33.5 L74 26 Q76 24 77 26.5 L79 40 Q90 50 90 66 Q90 78 80 78 Z" fill="var(--accent)"/><path d="M56 55 q4 4 8 0 M70 55 q4 4 8 0" fill="none" stroke="var(--surface)" stroke-width="3.5" stroke-linecap="round"/></svg>`;
+}
+
+// ---------- Matières ----------
+function renderSubjects() {
+  const v = current();
+  if (!v.meta) return renderHome();
   const list = courses();
   const folders = v.meta.folders || [];
-  const groups = [...folders.filter((f) => !f.archived).map((f) => ({ name: f.name, items: list.filter((c) => c.folder_id === f.id) })),
-    { name: folders.length ? "Sans semestre" : "", items: list.filter((c) => !folders.some((f) => f.id === c.folder_id)) }]
-    .filter((g) => g.items.length);
-  const archived = list.filter((c) => c.archived);
-  const row = (c) => {
-    const n = todayCards([c.id]).length, q = quizzesOf(c.id).length, m = mastery(c.id);
-    return `<a class="row" href="#/m/${encodeURIComponent(c.id)}" style="--c:${colorOf(c)}">
-      <span class="ring" style="--m:${m.pct}%"><i></i></span>
-      <span class="row-text"><b>${esc(c.name)}</b><small>${n ? `<em>${n}</em> à revoir` : m.cards ? "À jour" : ""}${q ? `${n || m.cards ? " · " : ""}${plural(q, "quiz", "quiz")}` : ""}</small></span>
-      ${ICON.chevron}</a>`;
+  const card = (c) => {
+    const n = todayCards([c.id]).length, m = mastery(c.id);
+    return `<a class="subject-card" href="#/m/${encodeURIComponent(c.id)}" style="--c:${colorOf(c)}">
+      <i class="sc-dot"></i><span class="sc-text"><b>${esc(c.name)}</b><small>${n ? `<em>${n}</em> à revoir` : m.cards ? "À jour" : plural(quizzesOf(c.id).length, "quiz", "quiz")}</small></span>
+      <span class="ring" style="--m:${m.pct}%"><i>${m.pct}%</i></span></a>`;
   };
-  app.innerHTML = `<header class="top"><h1>${hello(v.meta.name)}</h1>
-      <button class="icon-btn" type="button" id="sync" aria-label="Synchroniser">${ICON.sync}</button></header>
-    <section class="today ${due.length ? "" : "done"}">
-      <div><b>${due.length ? `${plural(due.length, "carte", "cartes")} aujourd'hui` : "Tout est à jour aujourd'hui"}</b>
-      <small>${due.length ? `environ ${Math.max(1, Math.round(due.length * 0.2))} min` : "Reviens demain, ou fais un quiz"}</small></div>
-      ${due.length ? `<button class="primary" type="button" id="go">Commencer</button>` : ""}
-    </section>
-    ${groups.map((g) => `${g.name ? `<h2>${esc(g.name)}</h2>` : `<h2>Matières</h2>`}<nav class="list">${g.items.map(row).join("")}</nav>`).join("")}
-    ${archived.length ? `<details class="archived"><summary>Semestres archivés · ${archived.length}</summary><nav class="list">${archived.map(row).join("")}</nav></details>` : ""}
-    ${list.length ? "" : `<p class="muted center">Pas encore de matière : crée tes quiz et tes cartes sur ton ordinateur.</p>`}
-    <footer class="foot"><span id="sync-line">${syncLine()}</span> · <button class="link" type="button" id="unpair">Dissocier</button></footer>`;
-  $("#go")?.addEventListener("click", () => startCards(due, "Révision du jour"));
+  const groups = [...folders.filter((f) => !f.archived).map((f) => ({ f, items: list.filter((c) => c.folder_id === f.id) })),
+    { f: null, items: list.filter((c) => !folders.some((f) => f.id === c.folder_id)) }].filter((g) => g.items.length);
+  const archived = list.filter((c) => c.archived);
+  const examOf = (f) => f?.exam_week ? ` · partiels le ${parseDay(f.exam_week).toLocaleDateString("fr-FR", { day: "numeric", month: "long" })}` : "";
+  app.innerHTML = `<header class="home-head"><h1>Matières</h1></header>
+    ${groups.map((g) => `<h2>${g.f ? esc(g.f.name) : folders.length ? "Sans semestre" : "Tes matières"}${examOf(g.f)}</h2>${g.items.map(card).join("")}`).join("")}
+    ${archived.length ? `<details class="archived"><summary>Semestres archivés · ${archived.length}</summary>${archived.map(card).join("")}</details>` : ""}
+    ${list.length ? "" : `<p class="muted center">Pas encore de matière : crée tes quiz et tes cartes sur ton ordinateur.</p>`}`;
+}
+
+// ---------- Réglages ----------
+function renderSettings() {
+  app.innerHTML = `<header class="home-head"><h1>Réglages</h1></header>
+    <nav class="list">
+      <div class="row static"><span class="row-text"><b>Synchronisation</b><small id="sync-line">${syncLine()}</small></span>
+        <button class="icon-btn" type="button" id="sync" aria-label="Synchroniser">${ICON.sync}</button></div>
+      <button class="row" type="button" id="unpair"><span class="row-text"><b class="danger">Dissocier cet appareil</b><small>il ne verra plus tes quiz ni tes cartes</small></span></button>
+    </nav>
+    <p class="muted small center" style="margin-top:22px">Tes quiz et tes cartes se créent et se modifient sur ton ordinateur ; ici, tu révises. Tes réponses y reviennent toutes seules.</p>`;
   $("#sync").addEventListener("click", () => syncNow());
   $("#unpair").addEventListener("click", async () => {
     if (!confirm("Dissocier cet appareil de ton ordinateur ? Tes réponses pas encore envoyées seraient perdues.")) return;
@@ -488,7 +580,7 @@ function renderSubject(id, tab = "") {
       ${all.length >= 2 ? `<div class="m1" id="deck"></div>` : ""}<button class="primary random-quiz" type="button" id="cards-go"></button>
       <p class="muted small center">D'abord les cartes à revoir aujourd'hui${due.length ? ` (${due.length})` : ""}, puis celles où tu bloques, puis les autres.</p>`;
   }
-  app.innerHTML = `<header class="top sub"><a class="icon-btn" href="#/" aria-label="Retour">${ICON.back}</a></header>
+  app.innerHTML = `<header class="top sub"><a class="icon-btn" href="#/matieres" aria-label="Retour">${ICON.back}</a></header>
     <h1 class="subject" style="--c:${colorOf(course)}"><span class="dot"></span>${esc(course.name)}</h1>
     <nav class="seg" role="tablist">${[["", "Aujourd'hui"], ["quiz", "Quiz"], ["cartes", "Cartes"]].map(([t, label]) =>
       `<a role="tab" href="${href(t)}" class="${t === tab ? "on" : ""}" aria-selected="${t === tab}">${label}</a>`).join("")}</nav>
@@ -570,21 +662,29 @@ function m1Bar(box, { min, max, value, onChange, unit = ["question", "questions"
   set(value);
 }
 
-// ---------- Séance de flashcards ----------
+// ---------- Séances : une liste de cartes et de questions, dans l'ordre ----------
+function startSession(list, { title = "", free = false, quiz = null } = {}) {
+  if (!list.length) return;
+  session = { list: list.slice(0, 200), index: 0, ok: 0, title, free, quiz, back: location.hash || "#/" };
+  tabBar();
+  draw();
+}
+function draw() {
+  const s = session;
+  const item = s.list[s.index];
+  if (!item) return finish();
+  if (item.kind === "card") drawCard(item);
+  else drawQuestion(item.q);
+}
 function startCards(items, title, { free = false } = {}) {
-  if (!items.length) return;
-  session = { type: "cards", items: items.slice(0, 200), index: 0, ok: 0, title, free, back: location.hash || "#/" };
-  drawCard();
+  startSession(items.map((x) => ({ kind: "card", ...x })), { title, free });
 }
 function sessionHead() {
-  const s = session, total = s.type === "cards" ? s.items.length : s.questions.length;
+  const s = session, total = s.list.length;
   return `<header class="session-top"><button class="icon-btn" type="button" id="quit" aria-label="Arrêter">${ICON.close}</button>
     <div class="bar"><i style="width:${(100 * s.index) / total}%"></i></div><span class="count">${Math.min(s.index + 1, total)}/${total}</span></header>`;
 }
-function drawCard() {
-  const s = session;
-  if (s.index >= s.items.length) return finish();
-  const { course, card } = s.items[s.index];
+function drawCard({ course, card }) {
   app.innerHTML = `${sessionHead()}
     <div class="stage"><div class="flash" id="flash" style="--c:${colorOf(course)}" role="button" tabindex="0" aria-label="Retourner la carte">
       <div class="face front"><span class="tag"><i></i>${esc(course.name)}</span><div class="txt">${rich(card.front)}</div><small class="hint">Touche pour voir la réponse</small></div>
@@ -627,13 +727,13 @@ function drawCard() {
   });
 }
 function rate(rating) {
-  const s = session, { course, card } = s.items[s.index];
+  const s = session, { course, card } = s.list[s.index];
   if (!s.free || isDue(card, today()) || isNew(card)) {
     addEvent("card", { course_id: course.id, card_id: card.id, rating, new: isNew(card) });
   }
   s.ok += rating === "good";
   s.index += 1;
-  drawCard();
+  draw();
 }
 
 // ---------- Séance de quiz ----------
@@ -642,22 +742,17 @@ const asQuestions = (quiz) => quiz.questions.map((q, index) => ({ ...q, index, q
   choices: q.type === "vrai_faux" ? q.choices : shuffle(q.choices || []) }));
 function startQuiz(quiz) {
   if (!quiz?.questions?.length) return;
-  session = { type: "quiz", quiz, questions: shuffle(asQuestions(quiz)).slice(0, 30), index: 0, ok: 0, back: location.hash || "#/" };
-  drawQuestion();
+  startSession(shuffle(asQuestions(quiz)).slice(0, 30).map((q) => ({ kind: "q", q })), { quiz });
 }
 // 10 questions au hasard dans tous les quiz de la matière : d'abord celles jamais posées ou ratées la dernière fois
 function startRandom(quizzes, name, count = 10) {
   const all = shuffle(quizzes.flatMap((quiz) => asQuestions(quiz).map((q) => ({ q, last: quiz.stats?.[q.index]?.last }))));
   all.sort((a, b) => (a.last === true) - (b.last === true));
-  const questions = shuffle(all.slice(0, count).map((x) => x.q));
-  session = { type: "quiz", quiz: null, title: name, questions, index: 0, ok: 0, back: location.hash || "#/" };
-  drawQuestion();
+  startSession(shuffle(all.slice(0, count).map((x) => x.q)).map((q) => ({ kind: "q", q })), { title: name });
 }
 const typed = (q) => q.type === "reponse_courte" || q.type === "texte_a_trous" || !q.choices?.length;
-function drawQuestion() {
+function drawQuestion(q) {
   const s = session;
-  if (s.index >= s.questions.length) return finish();
-  const q = s.questions[s.index];
   const stem = q.type === "texte_a_trous" ? esc(q.question).replace(BLANK, '<span class="blank">______</span>') : rich(q.question);
   app.innerHTML = `${sessionHead()}
     <section class="question">${q.course ? `<span class="tag q-tag" style="--c:${colorOf(q.course)}"><i></i>${esc(q.course.name)}</span>` : ""}<p class="q">${stem}</p>
@@ -709,28 +804,29 @@ function answered(q, correct, { shown = false } = {}) {
   s.ok += correct;
   s.answered = true;
   addEvent("answers", { quiz_id: q.quiz_id, answers: [{ index: q.index, correct }] });
-  if (shown) { s.index += 1; return drawQuestion(); }
-  showFeedback(q, correct, `<button class="primary next" type="button" id="next">${s.index + 1 < s.questions.length ? "Suivante" : "Voir le score"}</button>`);
-  $("#next").addEventListener("click", () => { s.index += 1; drawQuestion(); });
+  if (shown) { s.index += 1; return draw(); }
+  showFeedback(q, correct, `<button class="primary next" type="button" id="next">${s.index + 1 < s.list.length ? "Suivante" : "Voir le score"}</button>`);
+  $("#next").addEventListener("click", () => { s.index += 1; draw(); });
 }
 
 // ---------- Fin de séance ----------
 function finish() {
   const s = session;
-  const total = s.type === "cards" ? s.items.length : s.questions.length;
-  if (s.type === "quiz" && s.quiz) addEvent("attempt", { quiz_id: s.quiz.id, score: s.ok, total });
+  const total = s.list.length;
+  const kinds = new Set(s.list.map((x) => x.kind));
+  if (s.quiz) addEvent("attempt", { quiz_id: s.quiz.id, score: s.ok, total });
   const pct = total ? Math.round((100 * s.ok) / total) : 0;
   app.innerHTML = `<section class="center-page finish"><div class="score-ring" style="--m:${pct}%"><span>${s.ok}<small>/${total}</small></span></div>
     <h1>${pct >= 80 ? "Bravo !" : pct >= 50 ? "Bien joué" : "Ça viendra"}</h1>
-    <p class="muted">${s.type === "cards" ? `${plural(s.ok, "carte sue", "cartes sues")} sur ${total}` : `${plural(s.ok, "bonne réponse", "bonnes réponses")} sur ${total}`}</p>
+    <p class="muted">${kinds.size > 1 ? `${plural(s.ok, "réussite", "réussites")} sur ${total}` : kinds.has("card") ? `${plural(s.ok, "carte sue", "cartes sues")} sur ${total}` : `${plural(s.ok, "bonne réponse", "bonnes réponses")} sur ${total}`}</p>
     <button class="primary" type="button" id="back">Terminer</button></section>`;
   $("#back").addEventListener("click", () => endSession(false));
 }
 function endSession(ask) {
   if (!session) return;
   const started = session.index > 0 || session.answered;
-  if (ask && started && session.index < (session.items || session.questions).length) {
-    const text = session.type === "quiz"
+  if (ask && started && session.index < session.list.length) {
+    const text = session.list.every((x) => x.kind === "q")
       ? "Quitter le quiz ? Ta progression dans ce quiz sera perdue (tes réponses déjà données comptent quand même pour tes révisions)."
       : "Arrêter la séance ? Les cartes déjà notées sont gardées.";
     if (!confirm(text)) return;
