@@ -42,7 +42,7 @@
       <div class="hero">
         <h1 class="greeting" id="greeting">On révise ?</h1>
         <p class="hero-sub" id="hero-sub"></p>
-        <p class="setup-banner" id="setup-banner" hidden>Pour créer quiz et flashcards : <a href="#/reglages">branche l'app Claude dans Réglages</a> (l'IA locale y est aussi, en option).</p>
+        <p class="setup-banner" id="setup-banner" hidden>Pour créer quiz et flashcards : <a href="#/reglages">branche l'app Claude dans Réglages</a>.</p>
         <form class="name-prompt" id="name-prompt" hidden>
           <label for="name-input">Comment tu t'appelles ?</label>
           <input type="text" id="name-input" placeholder="Ton prénom" maxlength="40">
@@ -163,14 +163,14 @@
 
     <section id="view-review-scope" class="view" hidden>
       <h1 id="review-scope-title"></h1>
-      <!-- Une matière à plusieurs cours : réviser toute la matière ou un seul cours -->
-      <div class="chips chapter-chips review-files" id="review-files" role="radiogroup" aria-label="Cours à réviser" hidden></div>
       <nav class="filters scope-tabs" id="scope-tabs" role="tablist" aria-label="Réviser">
         <a role="tab" data-scope-tab="">Réviser</a>
         <a role="tab" data-scope-tab="planning">Rétroplanning</a>
         <a role="tab" data-scope-tab="suivi">Suivi</a>
         <a role="tab" data-scope-tab="gerer" hidden>Gérer</a>
       </nav>
+      <!-- Une matière à plusieurs cours : réviser toute la matière ou un seul cours -->
+      <div class="chips chapter-chips review-files" id="review-files" role="radiogroup" aria-label="Cours à réviser" hidden></div>
 
       <div id="scope-main" data-mode="jour">
         <!-- En haut, la révision du jour (le mélange conseillé) ; dessous, trois accès distincts : flashcards, quiz, partiel -->
@@ -748,10 +748,6 @@
       <div class="course-head">
         <div class="course-title">
           <h1 id="course-name"></h1>
-          <div class="title-chips">
-            <select id="course-folder" class="chip" data-icon="folder" aria-label="Semestre du cours"></select>
-            <button type="button" class="exam-chip" id="course-exam-chip" hidden></button>
-          </div>
         </div>
         <div class="more">
           <label class="ghost small button-like add-course-file" for="file-input" id="add-course-file"
@@ -762,6 +758,7 @@
           <input type="file" id="course-import-input" accept=".zip,application/zip,.txt,.csv,.tsv,.md,text/plain" hidden>
           <div class="plus-menu more-menu" id="course-more-menu" role="menu" hidden>
             <button type="button" role="menuitem" id="rename-course"><strong>Renommer la matière</strong></button>
+            <button type="button" role="menuitem" id="course-semester"><strong>Changer de semestre</strong></button>
             <button type="button" role="menuitem" id="course-exam"><strong>Semaine des partiels</strong></button>
             <button type="button" role="menuitem" id="course-import"><strong>Importer quiz et flashcards</strong></button>
             <button type="button" role="menuitem" id="course-export"><strong>Exporter quiz et flashcards</strong></button>
@@ -1373,6 +1370,13 @@
         <button class="ghost" type="button" id="move-file-cancel">Annuler</button>
       </div>
     </form>
+  </dialog>
+
+  <!-- Semestre d'une matière (menu Options de « Gérer ») -->
+  <dialog id="semester-dialog" class="report-dialog">
+    <h2>Semestre</h2>
+    <div class="field"><select id="course-folder" class="chip" data-icon="folder" aria-label="Semestre de la matière"></select></div>
+    <div class="actions"><button class="primary" type="button" id="semester-done">OK</button></div>
   </dialog>
 
   <!-- Nouveau cours -->

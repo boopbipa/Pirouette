@@ -1430,9 +1430,6 @@ async function openCourse(id, tab, { keepScroll = false } = {}) {
   $("#course-name").textContent = course.name;
   setCrumbs(courseCrumbs(course));
   renderFolderPick(course);
-  const chip = $("#course-exam-chip");
-  chip.hidden = !course.exam || course.exam.days <= -7;
-  if (course.exam) chip.innerHTML = `${ICON_CALENDAR}<span>${examLabel(course.exam.date)}</span>`;
   renderTiles(course);
   // Cours tout neuf, sans fichier ni carte : on invite d'abord à importer le cours.
   const empty = !course.files.length && !course.quizzes.length && !course.cards.total;
@@ -1541,7 +1538,10 @@ async function renderTiles(course) {
   $("#fold-chapitres-count").textContent = shown ? `· ${shown}` : "";
   // « Prêt à créer » : seulement pour un cours qui vient d'être ajouté (encore ni quiz ni flashcards)
   const mine = data.chapters.filter((ch) => !focus || fileOf(ch) === focus);
-  renderReady(course, course.files.length && mine.length && !mine.some((ch) => ch.questions || ch.cards));
+  // (les quiz et cartes hors chapitre comptent aussi : un cours qui en a n'est plus « tout neuf »)
+  const made = mine.some((ch) => ch.questions || ch.cards) || course.quizzes.some((q) => inFocus(q.scope, q.sources))
+    || (course.files.length === 1 && course.cards.total > 0);
+  renderReady(course, course.files.length && mine.length && !made);
   $("#chapter-list").innerHTML = data.chapters.map((ch, i) => {
     // Plusieurs fichiers : seulement les chapitres du cours affiché
     if (focus && fileOf(ch) !== focus) return "";
@@ -4559,6 +4559,10 @@ const WELCOME = [
 ];
 // Les nouveautés de chaque version (le carton « Quoi de neuf » ne s'affiche que si la version en a)
 const WHATS_NEW = {
+  "0.62.1": [
+    ["≡", "Onglets toujours à la même place", "Réviser · Rétroplanning · Suivi · Gérer, juste sous le titre de la matière"],
+    ["✦", "En-tête de « Gérer » allégé", "Le semestre se change dans Options ; la date des partiels n'encombre plus le haut"],
+  ],
   "0.62.0": [
     ["▦", "Matières : réviser et gérer au même endroit", "« Mes cours » et « Réviser » ne font plus qu'un. Un clic sur une matière : on révise ; l'onglet « Gérer » (ou le crayon) pour ses cours, quiz et flashcards"],
     ["✎", "Matière › cours", "Une matière (Neurosciences…) contient des cours : un fichier déposé = un cours"],
@@ -5942,7 +5946,11 @@ $("#course-exam").addEventListener("click", () => {
   $("#course-more-menu").hidden = true;
   openExamDialog({ course: state.course });
 });
-$("#course-exam-chip").addEventListener("click", () => openExamDialog({ course: state.course }));
+$("#course-semester").addEventListener("click", () => {
+  $("#course-more-menu").hidden = true;
+  $("#semester-dialog").showModal();
+});
+$("#semester-done").addEventListener("click", () => $("#semester-dialog").close());
 
 // ---------- Mises à jour de l'app ----------
 // Au lancement : s'il existe une version plus récente, une petite fenêtre propose de l'installer en un clic.
