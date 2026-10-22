@@ -577,6 +577,7 @@ async function openSettings() {
   state.course = null;
   renderThemeChoice(settings.theme || "auto");
   $("#settings-name").value = settings.name;
+  showSettingsName(settings.name);
   const claude = settings.claude;
   $("#settings-key-state").innerHTML = claude.configured
     ? `<span class="ok-text">✓ Clé enregistrée</span> <span class="muted">(${escapeHtml(claude.hint)} · modèle ${escapeHtml(claude.model)})</span>`
@@ -1259,7 +1260,21 @@ $("#settings-name-form").addEventListener("submit", async (e) => {
   e.preventDefault();
   const settings = await api("/api/settings", jsonBody("PUT", { name: $("#settings-name").value }));
   state.profile = { name: settings.name, asked: true };
+  showSettingsName(settings.name);
   setStatus("#settings-name-status", settings.name ? `Enchanté, ${settings.name} !` : "Prénom retiré.", true);
+});
+function showSettingsName(name) {
+  $("#settings-name-show").hidden = !name;
+  $("#settings-name-row").hidden = Boolean(name);
+  $("#settings-name-text").textContent = name || "";
+}
+$("#settings-name-edit").innerHTML = ICON_EDIT;
+$("#settings-name-edit").addEventListener("click", () => {
+  $("#settings-name-show").hidden = true;
+  $("#settings-name-row").hidden = false;
+  $("#settings-name-status").hidden = true;
+  $("#settings-name").focus();
+  $("#settings-name").select();
 });
 
 $("#settings-key-form").addEventListener("submit", async (e) => {
@@ -4559,6 +4574,9 @@ const WELCOME = [
 ];
 // Les nouveautés de chaque version (le carton « Quoi de neuf » ne s'affiche que si la version en a)
 const WHATS_NEW = {
+  "0.62.2": [
+    ["✎", "Ton prénom dans Réglages", "Une fois enregistré, il s'affiche simplement, avec un crayon pour le changer"],
+  ],
   "0.62.1": [
     ["≡", "Onglets toujours à la même place", "Réviser · Rétroplanning · Suivi · Gérer, juste sous le titre de la matière"],
     ["✦", "En-tête de « Gérer » allégé", "Le semestre se change dans Options ; la date des partiels n'encombre plus le haut"],

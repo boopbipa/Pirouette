@@ -460,8 +460,10 @@
 
       <form class="card" id="settings-name-form">
         <h2>Ton prénom</h2>
-        <p class="muted small-text">Affiché sur l'accueil (« À toi de jouer, … »).</p>
-        <div class="inline-row">
+        <!-- Prénom déjà donné : juste le prénom et un crayon ; le champ revient pour le modifier -->
+        <p class="name-show" id="settings-name-show" hidden><span id="settings-name-text"></span>
+          <button class="icon" type="button" id="settings-name-edit" title="Modifier le prénom" aria-label="Modifier le prénom"></button></p>
+        <div class="inline-row" id="settings-name-row">
           <input type="text" id="settings-name" maxlength="40" placeholder="Ton prénom">
           <button class="primary" type="submit">Enregistrer</button>
         </div>
