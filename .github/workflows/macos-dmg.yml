@@ -212,11 +212,11 @@ jobs:
   release:
     name: Page de téléchargement
     needs: [dmg, windows]
-    # Le Mac est publié même si la version Windows a échoué (elle rejoindra la version suivante)
-    if: ${{ always() && needs.dmg.result == 'success' }}
-    # Même machine que la version Apple Silicon : les étiquettes « ubuntu-latest » puis « macos-latest » sont restées
-    # des heures sans machine disponible (publication annulée), alors que macos-14 en trouve tout de suite
-    runs-on: macos-14
+    # Le Mac est publié même si la version Windows a échoué (elle rejoindra la version suivante), et même si GitHub
+    # n'a trouvé aucun Mac Apple Silicon (manque de machines chez GitHub) : la version Intel sert alors aux deux
+    if: ${{ always() && needs.dmg.result != 'cancelled' }}
+    # Un Mac Intel : les Mac Apple Silicon de GitHub manquent parfois pendant des heures (file d'attente)
+    runs-on: macos-15-intel
     permissions:
       contents: write
     steps:
@@ -235,8 +235,16 @@ jobs:
           VERSION=$(python3 -c "import re; print(re.search(r'__version__ = \"(.+)\"', open('app/__init__.py').read()).group(1))")
           TAG="v${VERSION}"
           # Noms sans numéro de version : les liens .../releases/latest/download/… restent valables d'une version à l'autre
-          cp dmg/*-Apple-Silicon.dmg Pirouette-Apple-Silicon.dmg
+          ls dmg/*-Intel.dmg >/dev/null 2>&1 || { echo "::error::Pas de version Mac fabriquée"; exit 1; }
           cp dmg/*-Intel.dmg Pirouette-Intel.dmg
+          if ls dmg/*-Apple-Silicon.dmg >/dev/null 2>&1; then
+            cp dmg/*-Apple-Silicon.dmg Pirouette-Apple-Silicon.dmg
+          else
+            # Pas de Mac Apple Silicon disponible chez GitHub : la version Intel (qui marche aussi sur ces Mac, via
+            # Rosetta) les met à jour en attendant ; la prochaine version redonnera la version Apple Silicon.
+            echo "::warning title=Apple Silicon::aucun Mac Apple Silicon disponible chez GitHub, version Intel publiée à la place"
+            cp dmg/*-Intel.dmg Pirouette-Apple-Silicon.dmg
+          fi
           FILES="Pirouette-Apple-Silicon.dmg Pirouette-Intel.dmg"
           if ls dmg/*-Windows-Setup.exe >/dev/null 2>&1; then
             cp dmg/*-Windows-Setup.exe Pirouette-Windows-Setup.exe
