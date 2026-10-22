@@ -1,4 +1,4 @@
-// Pirouette sur l'iPhone et l'iPad : tes quiz et tes flashcards, copiés en ligne par ton Mac (voir app/sync.py).
+// Pirouette sur le téléphone et la tablette (iPhone, iPad, Android…) : tes quiz et tes flashcards, copiés en ligne par ton ordinateur (voir app/sync.py).
 // Cette page lit la copie, la garde sur l'appareil (elle marche hors connexion) et envoie chaque réponse en ligne :
 // le Mac la reprend à sa prochaine synchro. Rien ne s'écrit jamais dans les quiz ou les cartes depuis ici.
 "use strict";
@@ -165,7 +165,7 @@ async function token() {
     await keepSession(await request("/auth/v1/token?grant_type=refresh_token", { method: "POST", auth: false,
       body: { refresh_token: S.session.refresh_token } }));
   } catch (err) {
-    if (err.status === 400 || err.status === 401) await forget("Ta connexion a expiré : jumelle à nouveau cet appareil depuis ton Mac.");
+    if (err.status === 400 || err.status === 401) await forget("Ta connexion a expiré : jumelle à nouveau cet appareil depuis ton ordinateur.");
     throw err;
   }
   return S.session.access_token;
@@ -231,7 +231,7 @@ async function syncNow({ quiet = false } = {}) {
     if (!quiet && !session) route();
   } catch (err) {
     if (!err.offline && !quiet) toast(err.message);
-    if (err.status === 401 || err.status === 403) await forget("Cet appareil n'est plus jumelé : refais-le depuis ton Mac.");
+    if (err.status === 401 || err.status === 403) await forget("Cet appareil n'est plus jumelé : refais-le depuis ton ordinateur.");
   } finally {
     S.syncing = false;
     document.body.classList.remove("syncing");
@@ -364,11 +364,13 @@ function renderPair() {
       ${pretty ? `<div class="big-code">${esc(pretty)}</div>` : ""}
       <button class="link" type="button" id="here">Ou continuer dans Safari</button>
     </div>` : ""}
+    ${/Android/.test(navigator.userAgent) && !installed ? `<p class="muted small android-tip">Astuce : menu <b>⋮</b> › <b>Installer l'application</b>
+      pour avoir Pirouette sur ton écran d'accueil.</p>` : ""}
     <form class="pair-form" id="pair-form" ${ios && !installed ? "hidden" : ""}>
-      <label for="code">Le code affiché sur ton Mac</label>
+      <label for="code">Le code affiché sur ton ordinateur</label>
       <input id="code" autocomplete="one-time-code" autocapitalize="characters" spellcheck="false" placeholder="ABCD-1234" value="${esc(pretty)}" maxlength="12">
       <button class="primary" type="submit">Jumeler</button>
-      <p class="muted small">Sur ton Mac : Pirouette › Réglages › iPhone et iPad › Ajouter un appareil.</p>
+      <p class="muted small">Sur ton ordinateur : Pirouette › Réglages › Téléphone et tablette › Ajouter un téléphone ou une tablette.</p>
     </form>
   </section>`;
   $("#here")?.addEventListener("click", () => { $(".install").hidden = true; $("#pair-form").hidden = false; });
@@ -413,7 +415,7 @@ function renderHome() {
   const v = current();
   if (!v.meta) {
     app.innerHTML = `<section class="center-page"><div class="logo-tile">${logoSvg()}</div><h1>Presque prêt</h1>
-      <p class="muted">Ouvre Pirouette sur ton Mac : il envoie tes quiz et tes cartes dans un instant.</p>
+      <p class="muted">Ouvre Pirouette sur ton ordinateur : il envoie tes quiz et tes cartes dans un instant.</p>
       <button class="primary" type="button" id="retry">Réessayer</button></section>`;
     $("#retry").addEventListener("click", () => syncNow());
     return;
@@ -441,12 +443,12 @@ function renderHome() {
     </section>
     ${groups.map((g) => `${g.name ? `<h2>${esc(g.name)}</h2>` : `<h2>Matières</h2>`}<nav class="list">${g.items.map(row).join("")}</nav>`).join("")}
     ${archived.length ? `<details class="archived"><summary>Semestres archivés · ${archived.length}</summary><nav class="list">${archived.map(row).join("")}</nav></details>` : ""}
-    ${list.length ? "" : `<p class="muted center">Pas encore de matière : crée tes quiz et tes cartes sur ton Mac.</p>`}
+    ${list.length ? "" : `<p class="muted center">Pas encore de matière : crée tes quiz et tes cartes sur ton ordinateur.</p>`}
     <footer class="foot"><span id="sync-line">${syncLine()}</span> · <button class="link" type="button" id="unpair">Dissocier</button></footer>`;
   $("#go")?.addEventListener("click", () => startCards(due, "Révision du jour"));
   $("#sync").addEventListener("click", () => syncNow());
   $("#unpair").addEventListener("click", async () => {
-    if (!confirm("Dissocier cet appareil de ton Mac ? Tes réponses pas encore envoyées seraient perdues.")) return;
+    if (!confirm("Dissocier cet appareil de ton ordinateur ? Tes réponses pas encore envoyées seraient perdues.")) return;
     try { await request("/rest/v1/sync_devices", { method: "DELETE", params: { device: `eq.${S.session.user_id}` } }); } catch {}
     forget("Cet appareil n'est plus jumelé.");
   });
@@ -503,23 +505,32 @@ function drawCard() {
     </div>`;
   $("#quit").addEventListener("click", () => endSession(true));
   const flash = $("#flash");
-  const reveal = () => { flash.classList.add("flipped"); $("#rates").hidden = false; };
-  flash.addEventListener("click", () => { if (!flash.classList.contains("flipped")) reveal(); });
+  // Une touche retourne la carte ; une fois la réponse vue, on peut la retourner autant qu'on veut, et noter
+  let revealed = false, moved = 0;
+  const back = "rotateY(180deg)";
+  flash.addEventListener("click", () => {
+    if (moved > 10) return;
+    flash.classList.toggle("flipped");
+    revealed = true;
+    $("#rates").hidden = false;
+    flash.querySelector(".hint").textContent = "Touche pour retourner la carte";
+  });
   app.querySelectorAll("[data-rate]").forEach((b) => b.addEventListener("click", () => rate(b.dataset.rate)));
   // Glisser : à droite « je savais », à gauche « je ne savais pas » (une fois la réponse vue)
   let x0 = null;
-  flash.addEventListener("touchstart", (e) => { x0 = e.touches[0].clientX; }, { passive: true });
+  flash.addEventListener("touchstart", (e) => { x0 = e.touches[0].clientX; moved = 0; }, { passive: true });
   flash.addEventListener("touchmove", (e) => {
-    if (x0 === null || !flash.classList.contains("flipped")) return;
+    if (x0 === null || !revealed) return;
     const dx = e.touches[0].clientX - x0;
-    flash.style.transform = `translateX(${dx}px) rotate(${dx / 25}deg) rotateY(180deg)`;
+    moved = Math.abs(dx);
+    flash.style.transform = `translateX(${dx}px) rotate(${dx / 25}deg) ${flash.classList.contains("flipped") ? back : ""}`;
     flash.dataset.lean = dx > 40 ? "good" : dx < -40 ? "again" : "";
   }, { passive: true });
   flash.addEventListener("touchend", (e) => {
     if (x0 === null) return;
     const dx = e.changedTouches[0].clientX - x0;
     x0 = null;
-    if (flash.classList.contains("flipped") && Math.abs(dx) > 90) return rate(dx > 0 ? "good" : "again");
+    if (revealed && Math.abs(dx) > 90) return rate(dx > 0 ? "good" : "again");
     flash.style.transform = "";
     flash.dataset.lean = "";
   });
@@ -596,6 +607,7 @@ function showFeedback(q, correct, extra = "") {
 function answered(q, correct, { shown = false } = {}) {
   const s = session;
   s.ok += correct;
+  s.answered = true;
   addEvent("answers", { quiz_id: s.quiz.id, answers: [{ index: q.index, correct }] });
   if (shown) { s.index += 1; return drawQuestion(); }
   showFeedback(q, correct, `<button class="primary next" type="button" id="next">${s.index + 1 < s.questions.length ? "Suivante" : "Voir le score"}</button>`);
@@ -616,7 +628,13 @@ function finish() {
 }
 function endSession(ask) {
   if (!session) return;
-  if (ask && session.index > 0 && session.index < (session.items || session.questions).length && !confirm("Arrêter la séance ? Ce que tu as déjà fait est gardé.")) return;
+  const started = session.index > 0 || session.answered;
+  if (ask && started && session.index < (session.items || session.questions).length) {
+    const text = session.type === "quiz"
+      ? "Quitter le quiz ? Ta progression dans ce quiz sera perdue (tes réponses déjà données comptent quand même pour tes révisions)."
+      : "Arrêter la séance ? Les cartes déjà notées sont gardées.";
+    if (!confirm(text)) return;
+  }
   const back = session.back;
   session = null;
   view = null;

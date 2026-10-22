@@ -1508,6 +1508,85 @@ def _pick(pick: str):
     return list(chosen), keep
 
 
+# ---------- Faire un quiz : sur toute la matière ou certains chapitres, autant de questions qu'on veut, avec ou sans cartes ----------
+def _custom_pool(course: str, folder: str, file: str):
+    """Les questions et les cartes de la portée, chacune avec les chapitres d'où elle vient, et la liste des chapitres."""
+    ids = _scope(course, folder)
+    courses = {c["id"]: c for c in store.list_courses() if c["id"] in ids}
+    questions, cards = [], []
+    for summary in store.list_quizzes():
+        owner = courses.get(summary.get("course_id"))
+        if owner is None:
+            continue
+        quiz = store.get_quiz(summary["id"])
+        if file and _file_of(owner, quiz) != file:
+            continue
+        quiz.setdefault("course_name", owner["name"])
+        for i in range(len(quiz["questions"])):
+            item = _question_item({"quiz": quiz, "index": i, "stat": (quiz.get("stats") or {}).get(str(i))})
+            questions.append((owner["id"], quiz.get("scope") or [], item))
+    today = date.today()
+    for owner, deck in store._decks(list(courses)):
+        for card in deck:
+            if not file or _file_of(owner, card) == file:
+                cards.append((owner["id"], card.get("scope") or [], _card_item({"course": owner, "card": card})))
+    chapters = []
+    for owner in courses.values():
+        for key, title in _units(owner, ""):
+            if file and not key.startswith(file):
+                continue
+            match = lambda pool: sum(1 for cid, scope, _ in pool if cid == owner["id"] and _same_title(title, scope))  # noqa: E731
+            n_q, n_c = match(questions), match(cards)
+            if n_q or n_c:
+                chapters.append({"course_id": owner["id"], "course": owner["name"], "title": title, "questions": n_q, "cards": n_c})
+    return questions, cards, chapters, today
+
+
+@app.get("/api/custom-quiz")
+async def custom_quiz_info(course: str = "", folder: str = "", file: str = "") -> dict:
+    questions, cards, chapters, _ = await run_in_threadpool(_custom_pool, course, folder, file)
+    return {"chapters": chapters, "questions": len(questions), "cards": len(cards)}
+
+
+class CustomChapter(BaseModel):
+    course_id: str
+    title: str
+
+
+class CustomQuizIn(BaseModel):
+    course: str = ""
+    folder: str = ""
+    file: str = ""
+    chapters: list[CustomChapter] = []   # aucun : toute la matière
+    questions: int = 10                  # 0 : toutes
+    cards: int = 0                       # 0 : pas de flashcards
+
+
+@app.post("/api/custom-quiz")
+async def custom_quiz(body: CustomQuizIn) -> dict:
+    """D'abord les questions jamais posées ou ratées la dernière fois, puis les autres ; pour les cartes, d'abord celles
+    à revoir. Le tout au hasard, les cartes glissées entre les questions."""
+    questions, cards, _, today = await run_in_threadpool(_custom_pool, body.course, body.folder, body.file)
+    chosen = [(c.course_id, c.title) for c in body.chapters]
+    inside = lambda cid, scope: not chosen or any(cid == k and _same_title(t, scope) for k, t in chosen)  # noqa: E731
+    asked = [item for cid, scope, item in questions if inside(cid, scope)]
+    deck = [item for cid, scope, item in cards if inside(cid, scope)]
+    random.shuffle(asked)
+    asked.sort(key=lambda i: bool((i["stat"] or {}).get("last")))  # jamais posées ou ratées d'abord
+    asked = asked[:body.questions] if body.questions > 0 else asked
+    random.shuffle(asked)
+    picked = []
+    if body.cards > 0:
+        random.shuffle(deck)
+        deck.sort(key=lambda i: not (srs.is_new(i["card"]) or srs.is_due(i["card"], today) or srs.is_weak(i["card"])))
+        picked = deck[:body.cards]
+        random.shuffle(picked)
+    items = _interleave(picked, asked)
+    if not items:
+        raise HTTPException(400, "Rien à demander avec ces choix : essaie d'autres chapitres.")
+    return {"items": items, "cards": len(picked), "questions": len(asked)}
+
+
 @app.get("/api/review/catalog")
 async def review_catalog() -> dict:
     """Pour la fenêtre « Que veux-tu réviser ? » : chaque cours (hors semestres archivés) et ses fichiers, avec

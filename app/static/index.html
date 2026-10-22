@@ -262,9 +262,10 @@
         <div class="scope-section" id="scope-quizzes-box" data-mode="quiz">
           <div class="quiz-mix" id="quiz-mix" hidden>
             <div>
-              <strong id="quiz-mix-title">10 questions au hasard</strong>
+              <strong id="quiz-mix-title">Faire un quiz</strong>
               <p class="muted small-text" id="quiz-mix-text"></p>
             </div>
+            <button class="ghost" type="button" id="quiz-mix-custom">Choisir…</button>
             <button class="primary" type="button" id="quiz-mix-start">Commencer →</button>
           </div>
           <ul class="quiz-list" id="scope-quizzes"></ul>
@@ -723,9 +724,9 @@
       </div>
 
       <div class="card" id="devices-card">
-        <h2>iPhone et iPad</h2>
+        <h2>Téléphone et tablette</h2>
         <div id="sync-login" hidden>
-          <p class="muted small-text">Pour retrouver tes quiz et tes flashcards sur ton iPhone ou ton iPad, connecte-toi d'abord
+          <p class="muted small-text">Pour retrouver tes quiz et tes flashcards sur ton téléphone ou ta tablette, connecte-toi d'abord
             à ton compte Pirouette (onglet Défis).</p>
           <a class="ghost small" href="#/defis">Me connecter</a>
         </div>
@@ -733,18 +734,19 @@
         <div id="sync-main" hidden>
           <label class="toggle-row first">
             <input type="checkbox" id="sync-on">
-            <span><strong>Mes quiz et mes flashcards, aussi sur iPhone et iPad</strong>
+            <span><strong>Mes quiz et mes flashcards, aussi sur mon téléphone et ma tablette</strong>
               <small class="muted">Une copie part sur ton compte, mise à jour toute seule. Tes cours (PDF, textes) restent sur ce Mac.</small></span>
           </label>
           <p class="muted small-text sync-state" id="sync-state"></p>
           <ul class="device-list" id="device-list"></ul>
-          <button class="primary small" type="button" id="sync-pair">+ Ajouter un iPhone ou un iPad</button>
+          <button class="primary small" type="button" id="sync-pair">+ Ajouter un téléphone ou une tablette</button>
           <div class="pair-box" id="pair-box" hidden>
             <div class="pair-qr" id="pair-qr"></div>
             <div class="pair-steps">
               <ol>
-                <li>Scanne ce code avec l'appareil photo de ton iPhone ou de ton iPad.</li>
-                <li>Dans Safari : <b>Partager</b> › <b>Sur l'écran d'accueil</b>.</li>
+                <li>Scanne ce code avec l'appareil photo de ton téléphone ou de ta tablette.</li>
+                <li>Ajoute la page à l'écran d'accueil : sur iPhone et iPad, <b>Partager</b> › <b>Sur l'écran d'accueil</b> ;
+                  sur Android, <b>⋮</b> › <b>Installer l'application</b>.</li>
                 <li>Ouvre Pirouette depuis l'écran d'accueil et tape :</li>
               </ol>
               <div class="pair-code" id="pair-code"></div>
@@ -1327,6 +1329,35 @@
   </dialog>
 
   <!-- Semaine des partiels -->
+  <dialog id="custom-dialog" class="report-dialog custom-dialog">
+    <form id="custom-form">
+      <h2>Faire un quiz</h2>
+      <p class="muted small-text" id="custom-scope"></p>
+      <div class="custom-block" id="custom-chapters-block">
+        <div class="custom-head"><strong>Chapitres</strong>
+          <button class="link-button" type="button" id="custom-all">Tout cocher</button></div>
+        <div class="custom-chapters" id="custom-chapters"></div>
+      </div>
+      <div class="custom-block">
+        <div class="custom-head"><strong>Questions</strong><small class="muted" id="custom-q-left"></small></div>
+        <div class="filters mini custom-seg" id="custom-q" role="radiogroup" aria-label="Nombre de questions"></div>
+      </div>
+      <div class="custom-block">
+        <label class="toggle-row first">
+          <input type="checkbox" id="custom-cards-on">
+          <span><strong>Ajouter des flashcards</strong>
+            <small class="muted" id="custom-c-left">Glissées entre les questions, d'abord celles à revoir</small></span>
+        </label>
+        <div class="filters mini custom-seg" id="custom-c" role="radiogroup" aria-label="Nombre de flashcards" hidden></div>
+      </div>
+      <p class="status" id="custom-status" hidden></p>
+      <div class="actions">
+        <button class="primary" type="submit" id="custom-go">Commencer</button>
+        <button class="ghost" type="button" id="custom-cancel">Annuler</button>
+      </div>
+    </form>
+  </dialog>
+
   <dialog id="exam-dialog" class="report-dialog">
     <form id="exam-form">
       <h2>Semaine des partiels</h2>

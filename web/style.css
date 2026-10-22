@@ -145,3 +145,4 @@ input:focus { border-color: var(--accent); background: var(--surface); }
   background: var(--text); color: var(--bg); padding: 11px 18px; border-radius: 999px; font-size: 15px; max-width: calc(100vw - 40px);
   box-shadow: 0 12px 30px -10px rgba(0, 0, 0, .4); }
 .toast[hidden] { display: none; }
+.android-tip { max-width: 380px; margin: 0 0 14px; }

@@ -647,7 +647,7 @@ const PREFS = [
     icon: '<rect x="4" y="6" width="12" height="15" rx="2"/><path d="M8 3h10a2 2 0 0 1 2 2v12"/>' },
   { id: "claude", label: "App Claude", desc: "Branche Claude pour créer quiz et flashcards à partir de tes cours.",
     cards: ["claude-app-card", "settings-key-form", "local-ai"], icon: '<path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z"/>' },
-  { id: "appareils", label: "iPhone et iPad", desc: "Tes quiz et tes flashcards, aussi sur ton téléphone et ta tablette.", cards: ["devices-card"],
+  { id: "appareils", label: "Téléphone et tablette", desc: "Tes quiz et tes flashcards, aussi sur ton iPhone, ton iPad ou ton Android.", cards: ["devices-card"],
     icon: '<rect x="7" y="3" width="10" height="18" rx="2.5"/><path d="M11 18h2"/>' },
   { id: "apparence", label: "Apparence", desc: "Clair ou sombre, et la couleur de l'app.", cards: ["theme-card", "appearance-card"],
     icon: '<circle cx="12" cy="12" r="8"/><path d="M12 4a8 8 0 0 1 0 16z" fill="currentColor"/>' },
@@ -687,7 +687,11 @@ function showPref(id) {
 }
 $("#prefs-side").addEventListener("click", (e) => {
   const item = e.target.closest("[data-pref]");
-  if (item) { history.replaceState(null, "", `#/reglages/${item.dataset.pref}`); showPref(item.dataset.pref); }
+  if (!item) return;
+  history.replaceState(null, "", `#/reglages/${item.dataset.pref}`);
+  showPref(item.dataset.pref);
+  // Toujours depuis le haut : la colonne et le titre restent à la même place d'une rubrique à l'autre
+  window.scrollTo({ top: 0 });
 });
 const isDesktop = () => Boolean(window.pywebview?.api);
 
@@ -4020,10 +4024,10 @@ function renderScopeQuizzes() {
   const all = state.scopeQuizzes || [];
   const total = all.reduce((n, q) => n + q.count, 0);
   const size = state.quizSize || 10;
-  $("#quiz-mix").hidden = total <= size;
-  $("#quiz-mix-title").textContent = `${size} questions au hasard`;
-  $("#quiz-mix-text").textContent = `Piochées dans ${all.length > 1 ? `les ${all.length} quiz` : "le quiz"} de `
-    + `${state.reviewFile ? `« ${fileLabel(state.reviewFile)} »` : "la matière"} (${total} questions), tous chapitres confondus.`;
+  $("#quiz-mix").hidden = !total;
+  $("#quiz-mix-title").textContent = "Faire un quiz";
+  $("#quiz-mix-text").textContent = `${Math.min(size, total)} questions au hasard dans ${state.reviewFile ? `« ${fileLabel(state.reviewFile)} »` : "toute la matière"}`
+    + ` (${total} en tout). « Choisir… » : les chapitres, le nombre de questions, et des flashcards si tu veux.`;
   $("#scope-quizzes").innerHTML = all.length ? all.map((q) => quizItem(q, null, null, { play: true })).join("")
     : `<li class="empty muted">Pas encore de quiz : crée-les depuis l'onglet « Gérer ».</li>`;
 }
@@ -4033,6 +4037,86 @@ $("#quiz-mix-start").addEventListener("click", () => {
   const f = state.reviewFile;
   startSession({ mode: "quiz", ...reviewScope(), questions: "1", ...(f ? { file: f.id } : {}) },
     { title: `Quiz au hasard · ${f ? fileLabel(f) : state.reviewScope.name}`, back: state.reviewScope.hash });
+});
+
+// « Faire un quiz » à la carte : les chapitres (tous par défaut), le nombre de questions, et des flashcards en plus
+const CUSTOM_Q = [5, 10, 20, 30], CUSTOM_C = [5, 10, 20];
+async function openCustomQuiz() {
+  const f = state.reviewFile;
+  const where = { ...reviewScope(), ...(f ? { file: f.id } : {}) };
+  let info;
+  try { info = await api(`/api/custom-quiz?${new URLSearchParams(where)}`); } catch (err) { return notify(err.message); }
+  let saved = {};
+  try { saved = JSON.parse(localStorage.getItem("pirouette.customQuiz") || "{}"); } catch {}
+  state.custom = { where, info, picked: new Set(), q: saved.q ?? 10, c: saved.c ?? 10, cards: Boolean(saved.cards) && info.cards > 0 };
+  $("#custom-scope").textContent = `${f ? fileLabel(f) : state.reviewScope.name} · ${plural(info.questions, "question", "questions")}`
+    + `${info.cards ? ` et ${plural(info.cards, "flashcard", "flashcards")}` : ""}`;
+  $("#custom-chapters-block").hidden = info.chapters.length < 2;
+  const several = new Set(info.chapters.map((c) => c.course_id)).size > 1;
+  $("#custom-chapters").innerHTML = info.chapters.map((c, i) => `<label class="custom-chapter">
+    <input type="checkbox" data-custom-ch="${i}"><span>${several ? `<small class="muted">${escapeHtml(c.course)} · </small>` : ""}${escapeHtml(c.title)}</span>
+    <small class="muted">${[c.questions ? plural(c.questions, "question", "questions") : "", c.cards ? plural(c.cards, "carte", "cartes") : ""].filter(Boolean).join(" · ")}</small></label>`).join("");
+  $("#custom-cards-on").checked = state.custom.cards;
+  $("#custom-cards-on").disabled = !info.cards;
+  $("#custom-status").hidden = true;
+  renderCustom();
+  $("#custom-dialog").showModal();
+}
+function renderCustom() {
+  const c = state.custom;
+  const chosen = c.picked.size ? [...c.picked].map((i) => c.info.chapters[i]) : null;
+  const nq = chosen ? chosen.reduce((n, x) => n + x.questions, 0) : c.info.questions;
+  const nc = chosen ? chosen.reduce((n, x) => n + x.cards, 0) : c.info.cards;
+  $("#custom-all").textContent = c.picked.size === c.info.chapters.length ? "Tout décocher" : "Tout cocher";
+  $("#custom-q-left").textContent = chosen ? `${nq} dans ces chapitres` : "toute la matière";
+  const seg = (list, value, total, attr) => [...list.filter((n) => n < total), 0].map((n) =>
+    `<button type="button" role="radio" class="${(n === value || (n === 0 && !list.filter((m) => m < total).includes(value))) ? "active" : ""}" ${attr}="${n}">${n ? n : `Toutes (${total})`}</button>`).join("");
+  $("#custom-q").innerHTML = nq ? seg(CUSTOM_Q, c.q, nq, "data-custom-q") : `<span class="muted small-text">Pas de question dans ces chapitres</span>`;
+  $("#custom-c").hidden = !c.cards;
+  $("#custom-c").innerHTML = seg(CUSTOM_C, c.c, nc, "data-custom-c");
+  $("#custom-c-left").textContent = c.info.cards ? `Glissées entre les questions, d'abord celles à revoir${chosen ? ` (${nc} dans ces chapitres)` : ""}`
+    : "Pas de flashcards ici pour l'instant";
+  $("#custom-go").disabled = !nq && !(c.cards && nc);
+}
+const customValue = (box) => Number(box.querySelector(".active")?.dataset.customQ ?? box.querySelector(".active")?.dataset.customC ?? 0);
+$("#quiz-mix-custom").addEventListener("click", openCustomQuiz);
+$("#custom-cancel").addEventListener("click", () => $("#custom-dialog").close());
+$("#custom-chapters").addEventListener("change", (e) => {
+  const i = Number(e.target.dataset.customCh);
+  if (e.target.checked) state.custom.picked.add(i); else state.custom.picked.delete(i);
+  renderCustom();
+});
+$("#custom-all").addEventListener("click", () => {
+  const c = state.custom, all = c.picked.size !== c.info.chapters.length;
+  c.picked = new Set(all ? c.info.chapters.map((_, i) => i) : []);
+  document.querySelectorAll("[data-custom-ch]").forEach((box) => (box.checked = all));
+  renderCustom();
+});
+$("#custom-q").addEventListener("click", (e) => {
+  const b = e.target.closest("[data-custom-q]");
+  if (b) { state.custom.q = Number(b.dataset.customQ); renderCustom(); }
+});
+$("#custom-c").addEventListener("click", (e) => {
+  const b = e.target.closest("[data-custom-c]");
+  if (b) { state.custom.c = Number(b.dataset.customC); renderCustom(); }
+});
+$("#custom-cards-on").addEventListener("change", (e) => { state.custom.cards = e.target.checked; renderCustom(); });
+$("#custom-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const c = state.custom;
+  const body = { ...c.where, chapters: [...c.picked].map((i) => ({ course_id: c.info.chapters[i].course_id, title: c.info.chapters[i].title })),
+    questions: customValue($("#custom-q")), cards: c.cards ? customValue($("#custom-c")) || 9999 : 0 };  // 0 question : toutes
+  try { localStorage.setItem("pirouette.customQuiz", JSON.stringify({ q: c.q, c: c.c, cards: c.cards })); } catch {}
+  let data;
+  try {
+    data = await api("/api/custom-quiz", jsonBody("POST", body));
+  } catch (err) {
+    return setStatus("#custom-status", err.message, false);
+  }
+  $("#custom-dialog").close();
+  const chapter = c.picked.size === 1 ? ` · ${shortChapter(c.info.chapters[[...c.picked][0]].title)}` : "";
+  runSession(data.items, { title: `Quiz · ${state.reviewFile ? fileLabel(state.reviewFile) : state.reviewScope.name}${chapter}`,
+    back: state.reviewScope.hash });
 });
 
 // Le bandeau « Révision du jour » : son bouton lance la séance (celle du plan s'il y en a un) ; ailleurs, il montre ses réglages
@@ -4729,6 +4813,10 @@ const WELCOME = [
 ];
 // Les nouveautés de chaque version (le carton « Quoi de neuf » ne s'affiche que si la version en a)
 const WHATS_NEW = {
+  "0.65.2": [
+    ["?", "Faire un quiz à la carte", "Dans une matière, onglet Quiz › Choisir… : toute la matière ou certains chapitres, le nombre de questions, et des flashcards en plus si tu veux"],
+    ["▯", "Téléphone et tablette", "La page marche aussi sur Android et sur les tablettes Windows. Sur le téléphone : la carte se retourne autant qu'on veut, et quitter un quiz demande confirmation"],
+  ],
   "0.65.1": [
     ["☾", "Une nouvelle icône", "Le chat qui fait la sieste : dans le Dock, sur Windows, dans l'app et sur ton iPhone"],
   ],
@@ -6963,7 +7051,7 @@ $("#online-friends").addEventListener("click", async (e) => {
 });
 
 
-// ---------- iPhone et iPad : une copie en ligne des quiz et des cartes (voir app/sync.py et web/) ----------
+// ---------- Téléphone et tablette : une copie en ligne des quiz et des cartes (voir app/sync.py et web/) ----------
 const octets = (n) => n < 1e6 ? `${Math.max(1, Math.round(n / 1000))} Ko` : `${(n / 1e6).toFixed(1).replace(".", ",")} Mo`;
 function sinceText(iso) {
   const minutes = Math.round((Date.now() - new Date(iso)) / 60000);

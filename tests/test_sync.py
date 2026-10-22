@@ -88,3 +88,28 @@ def test_data_size_counts_quizzes_and_cards(tmp_path, fake):
     store, _, _ = mac_with_cards(tmp_path, fake)
     size = sync.data_size(store)
     assert (size["quizzes"], size["questions"], size["cards"]) == (1, 1, 2) and size["bytes"] > 100
+
+
+def test_custom_quiz_picks_chapters_questions_and_cards(tmp_path, monkeypatch):
+    from fastapi.testclient import TestClient
+    from app import main
+    store = Store(tmp_path / "data")
+    monkeypatch.setattr(main, "store", store)
+    course = store.create_course("Neuro")
+    course["files"] = [{"id": "f1", "name": "neuro.pdf", "chapters": [{"title": "Chapitre 1 : Le neurone"}, {"title": "Chapitre 2 : La myéline"}]}]
+    store._save_course(course)
+    q = {"type": "vrai_faux", "kind": "notion", "question": "?", "choices": ["Vrai", "Faux"], "answer": "Vrai",
+         "explanation": "", "source": "", "key_terms": []}
+    store.save_quiz({"id": "a1b2c3d4e5f6", "title": "Neurone", "course_id": course["id"], "scope": ["Chapitre 1 : Le neurone"], "questions": [q] * 4})
+    store.save_quiz({"id": "b1b2c3d4e5f6", "title": "Myéline", "course_id": course["id"], "scope": ["Chapitre 2 : La myéline"], "questions": [q] * 6})
+    store.save_doc(course["id"], "cards", {"cards": [{"id": f"k{i}", "front": "a", "back": "b", "scope": ["Chapitre 2 : La myéline"]} for i in range(5)]})
+    client = TestClient(main.app)
+    info = client.get(f"/api/custom-quiz?course={course['id']}").json()
+    assert info["questions"] == 10 and info["cards"] == 5
+    assert [(c["title"], c["questions"], c["cards"]) for c in info["chapters"]] == [("Chapitre 1 : Le neurone", 4, 0), ("Chapitre 2 : La myéline", 6, 5)]
+    whole = client.post("/api/custom-quiz", json={"course": course["id"], "questions": 0}).json()
+    assert (whole["questions"], whole["cards"]) == (10, 0)  # toute la matière, toutes les questions
+    one = client.post("/api/custom-quiz", json={"course": course["id"], "questions": 3, "cards": 2,
+                                                "chapters": [{"course_id": course["id"], "title": "Chapitre 2 : La myéline"}]}).json()
+    assert (one["questions"], one["cards"]) == (3, 2)
+    assert all(i["quiz_id"] == "b1b2c3d4e5f6" for i in one["items"] if i["kind"] == "question")

@@ -1,7 +1,7 @@
 {
   "name": "Pirouette",
   "short_name": "Pirouette",
-  "description": "Tes quiz et tes flashcards Pirouette, sur ton iPhone et ton iPad.",
+  "description": "Tes quiz et tes flashcards Pirouette, sur ton téléphone et ta tablette.",
   "lang": "fr",
   "start_url": "./",
   "scope": "./",
