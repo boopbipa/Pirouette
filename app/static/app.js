@@ -180,7 +180,9 @@ async function api(url, options = {}) {
     const body = await response.json().catch(() => ({}));
     throw new Error(body.detail || `Erreur ${response.status}`);
   }
-  return response.json();
+  const data = await response.json();
+  if (url.startsWith("/api/courses")) noteColors(data);
+  return data;
 }
 const jsonBody = (method, data) => ({ method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) });
 
@@ -363,9 +365,17 @@ function renderTodayBar(profile, progress) {
 }
 $("#today-go").addEventListener("click", () => startSession({ mode: "today" }, { title: "Révision du jour", back: "#/cours" }));
 
-// Une couleur par matière, adoucie, toujours la même (tirée de son identifiant)
-const SUBJECT_COLORS = ["#B4532A", "#5B7A99", "#6E8B6A", "#8E7499", "#A88A5C", "#4F8A8B", "#A0606E"];
+// Une couleur par matière, adoucie : le serveur donne à chaque nouvelle matière la couleur la moins prise
+// (autant de couleurs que storage.SUBJECT_COLORS). Sans numéro connu, on la tire de l'identifiant.
+const SUBJECT_COLORS = ["#B4532A", "#5B7A99", "#6E8B6A", "#8E7499", "#A88A5C", "#4F8A8B", "#A0606E", "#8A8A45", "#5F649C", "#7D6B5D"];
+const courseColors = {};
+function noteColors(data) {
+  for (const c of Array.isArray(data) ? data : [data]) {
+    if (c && typeof c === "object" && c.id && Number.isInteger(c.color)) courseColors[c.id] = SUBJECT_COLORS[c.color % SUBJECT_COLORS.length];
+  }
+}
 function subjectColor(id) {
+  if (courseColors[id]) return courseColors[id];
   let h = 0;
   for (const ch of String(id || "")) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
   return SUBJECT_COLORS[h % SUBJECT_COLORS.length];
@@ -4715,6 +4725,10 @@ const WELCOME = [
 ];
 // Les nouveautés de chaque version (le carton « Quoi de neuf » ne s'affiche que si la version en a)
 const WHATS_NEW = {
+  "0.64.2": [
+    ["●", "Une couleur par matière", "Chaque matière a maintenant sa propre couleur (elles ne se répètent qu'au-delà de 10 matières)"],
+    ["☺", "Amis plus clairs", "Une ligne courte par ami (un clic pour lui écrire), une recherche quand la liste s'allonge, et l'ajout rangé derrière « + Ajouter »"],
+  ],
   "0.64.1": [
     ["＋", "Des captures dans tes retours", "Feedback : joins des captures d'écran ou des fichiers (glisse-les, choisis-les, ou colle une capture avec ⌘V)"],
   ],
@@ -6859,6 +6873,8 @@ async function playChallenge(id, back) {
   startQuiz(quiz, shuffle(c.questions), { back });
 }
 
+// Les amis : en haut les invitations reçues, puis une ligne courte par ami (un clic : lui écrire ; ⋯ : le retirer),
+// et les invitations envoyées sur une seule ligne. Au-delà de 6 amis, une recherche.
 async function renderFriends() {
   let data;
   try {
@@ -6866,15 +6882,52 @@ async function renderFriends() {
   } catch (err) {
     return setStatus("#online-friend-status", err.message, false);
   }
-  const row = (f, actions) => `<li><span>${escapeHtml(f.pseudo)}</span><span class="friend-actions">${actions}</span></li>`;
-  $("#online-friends").innerHTML = [
-    ...data.received.map((f) => row(f, `<small class="muted">t'invite</small>
-      <button class="primary small" type="button" data-accept-friend="${f.id}">Accepter</button>`)),
-    ...data.friends.map((f) => row(f, `<button class="primary small" type="button" data-chat-friend="${f.id}">Écrire</button>
-      <button class="link-button" type="button" data-remove-friend="${f.id}">Retirer</button>`)),
-    ...data.sent.map((f) => row(f, `<small class="muted">invitation envoyée</small>`)),
-  ].join("") || `<li class="empty muted">Pas encore d'amis : envoie-leur ton code ami.</li>`;
+  state.friendsData = data;
+  const code = msg.me?.friend_code || state.online?.profile?.friend_code;
+  $("#friend-my-code").textContent = code || "";
+  $("#friend-my-code-line").hidden = !code;
+  $("#friend-search").hidden = data.friends.length <= 6;
+  if (!data.friends.length && !data.received.length) toggleFriendAdd(true);
+  drawFriends();
 }
+function drawFriends() {
+  const data = state.friendsData;
+  if (!data) return;
+  const q = $("#friend-search").hidden ? "" : $("#friend-search").value.trim().toLowerCase();
+  const friends = data.friends.filter((f) => f.pseudo.toLowerCase().includes(q))
+    .sort((a, b) => a.pseudo.localeCompare(b.pseudo, "fr"));
+  const parts = [];
+  if (data.received.length && !q) {
+    parts.push(`<li class="friend-head">Invitations · ${data.received.length}</li>`,
+      ...data.received.map((f) => `<li class="friend-row asks">${avatar(f.pseudo)}<span class="friend-name">${escapeHtml(f.pseudo)}</span>
+        <button class="primary small" type="button" data-accept-friend="${f.id}">Accepter</button></li>`));
+  }
+  if (data.friends.length) {
+    if (data.received.length && !q) parts.push(`<li class="friend-head">Amis · ${data.friends.length}</li>`);
+    parts.push(...friends.map((f) => `<li class="friend-row">
+      <button class="friend-open" type="button" data-chat-friend="${f.id}" title="Écrire à ${escapeHtml(f.pseudo)}">${avatar(f.pseudo)}<span class="friend-name">${escapeHtml(f.pseudo)}</span></button>
+      <button class="icon friend-more" type="button" data-remove-friend="${f.id}" title="Retirer de mes amis" aria-label="Retirer ${escapeHtml(f.pseudo)}">⋯</button></li>`));
+    if (q && !friends.length) parts.push(`<li class="empty muted">Personne ne s'appelle comme ça.</li>`);
+  }
+  if (data.sent.length && !q) {
+    parts.push(`<li class="friend-sent muted">En attente : ${data.sent.map((f) => escapeHtml(f.pseudo)).join(", ")}</li>`);
+  }
+  $("#online-friends").innerHTML = parts.join("") || `<li class="empty muted">Pas encore d'amis : envoie-leur ton code ami.</li>`;
+}
+function toggleFriendAdd(open = $("#friend-add").hidden) {
+  $("#friend-add").hidden = !open;
+  $("#friend-add-toggle").setAttribute("aria-expanded", String(open));
+  $("#friend-add-toggle").classList.toggle("on", open);
+  if (open) setTimeout(() => $("#online-friend-code").focus(), 0);
+}
+$("#friend-add-toggle").addEventListener("click", () => toggleFriendAdd());
+$("#friend-search").addEventListener("input", drawFriends);
+$("#online-friend-code").addEventListener("keydown", (e) => { if (e.key === "Enter") $("#online-add").click(); });
+$("#friend-copy").addEventListener("click", async () => {
+  await copyText($("#friend-my-code").textContent);
+  $("#friend-copy").textContent = "Copié ✓";
+  setTimeout(() => ($("#friend-copy").textContent = "Copier"), 1500);
+});
 $("#online-add").addEventListener("click", async () => {
   try {
     const r = await api("/api/online/friends", jsonBody("POST", { text: $("#online-friend-code").value }));
@@ -6980,6 +7033,11 @@ document.querySelectorAll("[data-panel-tab]").forEach((b) => b.addEventListener(
   if (b.dataset.panelTab === "amis") renderFriends();
 }));
 $("#chat-panel-close").addEventListener("click", () => togglePanel(false));
+// Un clic ailleurs (hors de la bulle, de son panneau et des fenêtres qu'elle ouvre) referme le panneau
+document.addEventListener("pointerdown", (e) => {
+  if ($("#chat-panel").hidden || e.target.closest("#chat-dock, dialog, .modal, #msg-toast")) return;
+  togglePanel(false);
+});
 $("#chat-panel-login").addEventListener("click", () => { togglePanel(false); location.hash = "#/defis"; });
 // La carte « Amis » de la page Défis vit maintenant dans le panneau
 $("#chat-friends").append($("#online-friends-card"));

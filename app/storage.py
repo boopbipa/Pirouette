@@ -69,6 +69,7 @@ def _check_id(value: str, length: int = 12) -> str:
 
 
 # Ce qui fait le contenu d'une carte (le reste est son suivi : statut, intervalle, dates…)
+SUBJECT_COLORS = 10  # nombre de couleurs de matière (la palette est dans app.js)
 CARD_CONTENT = {"id", "front", "back", "source", "scope", "origin", "created_at", "figure", "image"}
 
 class Store:
@@ -287,9 +288,14 @@ class Store:
             raise NotFound(course_id)
         return path
 
+    def _free_color(self, taken: list) -> int:
+        """La couleur la moins prise par les autres matières : deux matières n'ont la même que s'il y en a plus que de couleurs."""
+        return min(range(SUBJECT_COLORS), key=lambda i: (taken.count(i), i))
+
     def create_course(self, name: str) -> dict:
+        taken = [_read(p).get("color") for p in self.courses_dir.glob("*/course.json")]
         course = {"id": _new_id(), "name": name.strip() or "Nouveau cours", "created_at": _now(),
-                  "updated_at": _now(), "version": 0, "files": []}
+                  "updated_at": _now(), "version": 0, "files": [], "color": self._free_color(taken)}
         _write(self.courses_dir / course["id"] / "course.json", course)
         return course
 
@@ -302,8 +308,13 @@ class Store:
     def list_courses(self) -> list[dict]:
         quizzes = self.list_quizzes()
         courses = []
-        for path in self.courses_dir.glob("*/course.json"):
-            course = _read(path)
+        found = sorted((_read(p) for p in self.courses_dir.glob("*/course.json")), key=lambda c: c.get("created_at") or "")
+        taken = [c.get("color") for c in found if isinstance(c.get("color"), int)]
+        for course in found:
+            if not isinstance(course.get("color"), int):  # matières d'avant les couleurs : on leur en donne une libre
+                course["color"] = self._free_color(taken)
+                taken.append(course["color"])
+                self._save_course(course)
             own = [q for q in quizzes if q.get("course_id") == course["id"]]
             deck = self.get_doc(course["id"], "cards") or {}
             courses.append(course | {"quiz_count": len(own), "card_count": len(deck.get("cards", []))})
