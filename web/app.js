@@ -638,6 +638,7 @@ function rate(rating) {
 
 // ---------- Séance de quiz ----------
 const asQuestions = (quiz) => quiz.questions.map((q, index) => ({ ...q, index, quiz_id: quiz.id,
+  course: courses().find((c) => c.id === quiz.course_id),
   choices: q.type === "vrai_faux" ? q.choices : shuffle(q.choices || []) }));
 function startQuiz(quiz) {
   if (!quiz?.questions?.length) return;
@@ -659,7 +660,7 @@ function drawQuestion() {
   const q = s.questions[s.index];
   const stem = q.type === "texte_a_trous" ? esc(q.question).replace(BLANK, '<span class="blank">______</span>') : rich(q.question);
   app.innerHTML = `${sessionHead()}
-    <section class="question"><p class="q">${stem}</p>
+    <section class="question">${q.course ? `<span class="tag q-tag" style="--c:${colorOf(q.course)}"><i></i>${esc(q.course.name)}</span>` : ""}<p class="q">${stem}</p>
       ${typed(q) ? `<form id="typed" class="typed"><input id="answer" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Ta réponse">
           <button class="primary" type="submit">Valider</button><button class="link" type="button" id="dunno">Je ne sais pas</button></form>`
         : `<div class="choices">${q.choices.map((c, i) => `<button class="choice" type="button" data-i="${i}">${rich(c)}</button>`).join("")}</div>`}
