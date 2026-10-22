@@ -148,3 +148,26 @@ input:focus { border-color: var(--accent); background: var(--surface); }
 .android-tip { max-width: 380px; margin: 0 0 14px; }
 .random-quiz { width: 100%; display: grid; gap: 2px; text-align: center; margin-bottom: 12px; padding: 14px 20px; border-radius: 18px; }
 .random-quiz small { font-weight: 400; font-size: 13px; opacity: .85; }
+
+/* Une matière : Aujourd'hui · Quiz · Cartes */
+.seg { display: grid; grid-template-columns: repeat(3, 1fr); padding: 3px; border-radius: 12px; background: var(--surface); box-shadow: var(--shadow); margin: 4px 0 16px; }
+.seg a { text-align: center; padding: 8px 0; border-radius: 9px; font-size: 14px; color: var(--muted); text-decoration: none; }
+.seg a.on { background: var(--sunken); color: var(--text); font-weight: 600; }
+.hero { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 6px; padding: 26px 20px 22px; margin-bottom: 14px;
+  border-radius: 24px; background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 16%, var(--surface)), var(--surface)); box-shadow: var(--shadow); }
+.hero h2 { all: unset; font: 700 21px var(--display); letter-spacing: -.02em; margin-top: 8px; }
+.hero p { margin: 0 0 12px; color: var(--muted); font-size: 14px; }
+.hero .primary { padding: 13px 34px; }
+.hero .ghost { text-decoration: none; color: var(--text); }
+.ring.big { width: 78px; height: 78px; }
+.ring.big i { width: 62px; height: 62px; display: grid; place-items: center; font-style: normal; font-weight: 700; font-size: 16px; background: var(--surface); }
+/* La barre épaisse à poignée */
+.m1 { position: relative; height: 46px; border-radius: 14px; background: var(--surface); box-shadow: var(--shadow); overflow: hidden; touch-action: none;
+  user-select: none; -webkit-user-select: none; margin-bottom: 10px; }
+.m1-fill { position: absolute; inset: 0 auto 0 0; background: linear-gradient(90deg, color-mix(in srgb, var(--accent) 85%, #000), var(--accent)); transition: width .12s ease; }
+.m1.dragging .m1-fill { transition: none; }
+.m1-grip { position: absolute; right: 7px; top: 50%; width: 5px; height: 22px; margin-top: -11px; border-radius: 3px; background: rgba(255, 246, 238, .95); box-shadow: 0 1px 4px rgba(0, 0, 0, .3); }
+.m1-text { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); font-weight: 600; font-size: 15px; color: #FFF6EE; pointer-events: none; white-space: nowrap; }
+.m1-of { position: absolute; right: 14px; top: 50%; transform: translateY(-50%); font-size: 13px; color: var(--muted); pointer-events: none; }
+.m1.full .m1-of { color: rgba(255, 246, 238, .75); right: 22px; }
+.random-quiz { display: block; text-align: center; margin-bottom: 14px; }

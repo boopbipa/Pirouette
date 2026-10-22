@@ -332,8 +332,8 @@ function route() {
   if (!CONFIG.url) return renderMissing();
   if (!S.owner) return renderPair();
   if (session) return;  // une séance ne se coupe pas toute seule
-  const [, page, id] = location.hash.replace(/^#\/?/, "#/").split("/");
-  if (page === "m" && id) return renderSubject(decodeURIComponent(id));
+  const [, page, id, sub] = location.hash.replace(/^#\/?/, "#/").split("/");
+  if (page === "m" && id) return renderSubject(decodeURIComponent(id), sub || "");
   renderHome();
 }
 window.addEventListener("hashchange", () => { if (session) endSession(false); route(); });
@@ -454,34 +454,88 @@ function renderHome() {
   });
 }
 
-function renderSubject(id) {
+// Une matière : trois onglets pour réviser, comme sur l'ordinateur — Aujourd'hui, Quiz, Cartes
+const isWeak = (card) => Boolean(card.reviews) && (card.last_rating === "again" || card.status === "review"
+  || (card.lapses || 0) >= 2 || (card.ease ?? SRS.START) <= 2.1);
+function renderSubject(id, tab = "") {
   const course = courses().find((c) => c.id === id);
   if (!course) { location.hash = "#/"; return; }
+  if (!["quiz", "cartes"].includes(tab)) tab = "";
   const due = todayCards([id]);
   const all = (current().deck[id]?.cards || []).map((card) => ({ course, card }));
+  const weak = all.filter((x) => isWeak(x.card));
   const quizzes = quizzesOf(id);
   const pool = quizzes.reduce((n, q) => n + q.questions.length, 0);
   const m = mastery(id);
+  const href = (t) => `#/m/${encodeURIComponent(id)}${t ? `/${t}` : ""}`;
+  const row = (attr, title, sub, disabled = false) => `<button class="row" type="button" ${attr} ${disabled ? "disabled" : ""}>
+    <span class="row-text"><b>${title}</b><small>${sub}</small></span>${ICON.chevron}</button>`;
+  let body = "";
+  if (!tab) {
+    body = `<section class="hero">
+        <span class="ring big" style="--m:${m.pct}%;--c:${colorOf(course)}"><i>${due.length ? `${m.pct}%` : "✓"}</i></span>
+        <h2>${due.length ? "Ta révision du jour" : "C'est fait pour aujourd'hui"}</h2>
+        <p>${due.length ? `${plural(due.length, "carte", "cartes")} · environ ${Math.max(1, Math.round(due.length * 0.2))} min` : "Reviens demain, ou fais un quiz"}</p>
+        ${due.length ? `<button class="primary" type="button" id="due">Commencer →</button>` : pool ? `<a class="ghost" href="${href("quiz")}">Faire un quiz</a>` : ""}
+      </section>
+      ${weak.length ? `<nav class="list">${row('id="weak"', "Là où tu bloques", plural(weak.length, "carte", "cartes"))}</nav>` : ""}`;
+  } else if (tab === "quiz") {
+    body = !quizzes.length ? `<p class="muted center">Pas encore de quiz dans cette matière.</p>` : `
+      ${pool >= 2 ? `<div class="m1" id="mix"></div><button class="primary random-quiz" type="button" id="random"></button>` : ""}
+      <nav class="list">${quizzes.map((q) => row(`data-quiz="${esc(q.id)}"`, esc(q.title || "Quiz"), plural(q.questions.length, "question", "questions"))).join("")}</nav>`;
+  } else {
+    body = !all.length ? `<p class="muted center">Pas encore de flashcards dans cette matière.</p>` : `<nav class="list decks">
+      ${row('id="due"', "À revoir aujourd'hui", due.length ? plural(due.length, "carte", "cartes") : "Rien à revoir : tout est à jour", !due.length)}
+      ${row('id="weak"', "Là où je bloque", weak.length ? plural(weak.length, "carte", "cartes") : "Aucune carte difficile", !weak.length)}
+      ${row('id="all"', "Tout le paquet", `${plural(all.length, "carte", "cartes")}, mélangées`)}</nav>`;
+  }
   app.innerHTML = `<header class="top sub"><a class="icon-btn" href="#/" aria-label="Retour">${ICON.back}</a></header>
     <h1 class="subject" style="--c:${colorOf(course)}"><span class="dot"></span>${esc(course.name)}</h1>
-    ${m.cards ? `<p class="muted">${m.pct} % des cartes sues${course.exam ? ` · partiels le ${new Date(parseDay(course.exam)).toLocaleDateString("fr-FR", { day: "numeric", month: "long" })}` : ""}</p>` : ""}
-    ${all.length ? `<h2>Flashcards</h2><nav class="list">
-      <button class="row" type="button" id="due" ${due.length ? "" : "disabled"}><span class="row-text"><b>Révision du jour</b><small>${due.length ? `<em>${due.length}</em> à revoir` : "Rien à revoir aujourd'hui"}</small></span>${ICON.chevron}</button>
-      <button class="row" type="button" id="all"><span class="row-text"><b>Toutes les cartes</b><small>${plural(all.length, "carte", "cartes")}, dans le désordre</small></span>${ICON.chevron}</button>
-    </nav>` : ""}
-    ${quizzes.length ? `<h2>Quiz</h2>
-    ${pool >= 6 ? `<button class="primary random-quiz" type="button" id="random">${Math.min(10, pool)} questions au hasard
-      <small>dans ${quizzes.length > 1 ? `les ${quizzes.length} quiz` : "le quiz"} de la matière</small></button>` : ""}
-    <nav class="list">${quizzes.map((q) => {
-      const last = (q.attempts || []).at(-1);
-      return `<button class="row" type="button" data-quiz="${esc(q.id)}"><span class="row-text"><b>${esc(q.title || "Quiz")}</b>
-        <small>${plural(q.questions.length, "question", "questions")}${last ? ` · dernier : ${last.score}/${last.total}` : ""}</small></span>${ICON.chevron}</button>`;
-    }).join("")}</nav>` : ""}
-    ${!all.length && !quizzes.length ? `<p class="muted center">Rien dans cette matière pour l'instant.</p>` : ""}`;
+    <nav class="seg" role="tablist">${[["", "Aujourd'hui"], ["quiz", "Quiz"], ["cartes", "Cartes"]].map(([t, label]) =>
+      `<a role="tab" href="${href(t)}" class="${t === tab ? "on" : ""}" aria-selected="${t === tab}">${label}</a>`).join("")}</nav>
+    ${body}`;
   $("#due")?.addEventListener("click", () => startCards(due, course.name));
+  $("#weak")?.addEventListener("click", () => startCards(shuffle(weak), `${course.name} · là où je bloque`, { free: true }));
   $("#all")?.addEventListener("click", () => startCards(shuffle(all), course.name, { free: true }));
   app.querySelectorAll("[data-quiz]").forEach((b) => b.addEventListener("click", () => startQuiz(current().quiz[b.dataset.quiz])));
-  $("#random")?.addEventListener("click", () => startRandom(quizzes, course.name));
+  if ($("#mix")) {
+    const min = Math.min(5, pool);
+    let n = Math.min(pool, Math.max(min, S.mixValue || 10));
+    m1Bar($("#mix"), { min, max: pool, value: n, onChange: (v) => {
+      n = S.mixValue = v;
+      $("#random").textContent = `${plural(v, "question", "questions")} au hasard →`;
+    } });
+    $("#random").addEventListener("click", () => startRandom(quizzes, course.name, n));
+  }
+}
+
+// La barre épaisse à poignée (comme sur l'ordinateur) : on la fait glisser n'importe où
+function m1Bar(box, { min, max, value, onChange }) {
+  box.setAttribute("role", "slider");
+  box.innerHTML = `<span class="m1-fill"><span class="m1-grip"></span></span><span class="m1-text"></span><span class="m1-of">sur ${max}</span>`;
+  const set = (v) => {
+    v = Math.max(min, Math.min(max, Math.round(v)));
+    const share = max === min ? 1 : (v - min) / (max - min);
+    box.querySelector(".m1-fill").style.width = `calc(${(share * 100).toFixed(2)}% * .7 + 30%)`;
+    box.querySelector(".m1-text").textContent = v === max ? `Toutes (${v})` : plural(v, "question", "questions");
+    box.classList.toggle("full", share > .7);
+    box.setAttribute("aria-valuenow", v);
+    onChange(v);
+  };
+  const fromX = (x) => {
+    const r = box.getBoundingClientRect();
+    set(min + Math.max(0, Math.min(1, ((x - r.left) / r.width - .3) / .7)) * (max - min));
+  };
+  box.addEventListener("pointerdown", (e) => {
+    box.setPointerCapture(e.pointerId);
+    box.classList.add("dragging");
+    fromX(e.clientX);
+  });
+  box.addEventListener("pointermove", (e) => { if (box.classList.contains("dragging")) fromX(e.clientX); });
+  const stop = () => box.classList.remove("dragging");
+  box.addEventListener("pointerup", stop);
+  box.addEventListener("pointercancel", stop);
+  set(value);
 }
 
 // ---------- Séance de flashcards ----------
@@ -559,10 +613,10 @@ function startQuiz(quiz) {
   drawQuestion();
 }
 // 10 questions au hasard dans tous les quiz de la matière : d'abord celles jamais posées ou ratées la dernière fois
-function startRandom(quizzes, name) {
+function startRandom(quizzes, name, count = 10) {
   const all = shuffle(quizzes.flatMap((quiz) => asQuestions(quiz).map((q) => ({ q, last: quiz.stats?.[q.index]?.last }))));
   all.sort((a, b) => (a.last === true) - (b.last === true));
-  const questions = shuffle(all.slice(0, 10).map((x) => x.q));
+  const questions = shuffle(all.slice(0, count).map((x) => x.q));
   session = { type: "quiz", quiz: null, title: name, questions, index: 0, ok: 0, back: location.hash || "#/" };
   drawQuestion();
 }

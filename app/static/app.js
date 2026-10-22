@@ -168,7 +168,7 @@ function setCrumbs(crumbs = []) {
 const COURSES_CRUMB = { label: "Mes matières", href: "#/cours" };
 const TAB_NAMES = { chapitres: "Chapitres", quiz: "Quiz", cartes: "Flashcards", fichiers: "Fichiers" };
 function courseCrumbs(course, tab = null, ...more) {
-  const list = [COURSES_CRUMB, { label: course.name, href: `#/reviser/cours/${course.id}` }, { label: "Gérer", href: `#/cours/${course.id}` }];
+  const list = [COURSES_CRUMB, { label: course.name, href: `#/reviser/cours/${course.id}` }, { label: "Mes cours", href: `#/cours/${course.id}` }];
   if (tab) list.push({ label: TAB_NAMES[tab], href: `#/cours/${course.id}/${tab}` });
   return [...list, ...more.map((label) => ({ label }))];
 }
@@ -400,7 +400,7 @@ function courseCard(c) {
         <small>${status}</small>
       </span>
       ${p?.cards ? `<span class="mastery-ring" style="--m:${mastery}%" title="${p.known} cartes sues sur ${p.cards}"><span>${mastery}</span></span>` : ""}
-      <span class="course-edit" data-course-manage="${c.id}" title="Gérer cette matière" role="button">${ICON_EDIT}</span>
+      <span class="course-edit" data-course-manage="${c.id}" title="Mes cours de cette matière" role="button">${ICON_EDIT}</span>
       <span class="card-glare" aria-hidden="true"></span>
     </a>`;
 }
@@ -468,7 +468,7 @@ $("#new-folder").addEventListener("click", async () => {
   loadCourses();
 });
 
-// Le crayon d'une matière : sa page « Gérer » (et pas la révision)
+// Le crayon d'une matière : sa page « Mes cours » (et pas la révision)
 $("#view-courses").addEventListener("click", (e) => {
   const manage = e.target.closest("[data-course-manage]");
   if (!manage || drag.justDropped) return;
@@ -1583,9 +1583,7 @@ async function openCourse(id, tab, { keepScroll = false } = {}) {
   const empty = !course.files.length && !course.quizzes.length && !course.cards.total;
   $("#start-drop").hidden = !empty;
   $("#course-tree").hidden = empty;
-  document.querySelectorAll("[data-manage-tab]").forEach((a) => {
-    a.href = `#/reviser/cours/${course.id}${a.dataset.manageTab ? `/${a.dataset.manageTab}` : ""}`;
-  });
+  $("#manage-back").href = `#/reviser/cours/${course.id}`;
   renderQuizPanel(course);
   renderFiles(course);
   await loadDeck();
@@ -1992,6 +1990,46 @@ function quizItem(q, course, number = null, { play = false } = {}) {
     </li>`;
 }
 
+// La barre épaisse (comme le volume de l'iPhone) : on la fait glisser n'importe où, une poignée au bout de l'orange.
+// Clavier : flèches. `onChange(n)` à chaque changement.
+function m1Bar(box, { min, max, value, onChange = () => {}, unit = ["question", "questions"] }) {
+  box.classList.add("m1");
+  box.setAttribute("role", "slider");
+  box.tabIndex = 0;
+  box.setAttribute("aria-valuemin", min);
+  box.setAttribute("aria-valuemax", max);
+  box.innerHTML = `<span class="m1-fill"><span class="m1-grip"></span></span><span class="m1-text"></span><span class="m1-of">sur ${max}</span>`;
+  const set = (n) => {
+    n = Math.max(min, Math.min(max, Math.round(n)));
+    box.dataset.value = n;
+    box.setAttribute("aria-valuenow", n);
+    // le remplissage part de la gauche : au minimum, il reste assez large pour lire « 5 questions »
+    const share = max === min ? 1 : (n - min) / (max - min);
+    box.querySelector(".m1-fill").style.width = `calc(${(share * 100).toFixed(2)}% * .72 + 28%)`;
+    box.querySelector(".m1-text").textContent = n === max ? `Toutes (${n})` : plural(n, ...unit);
+    box.classList.toggle("full", share > .7);
+    onChange(n);
+  };
+  const fromX = (x) => {
+    const r = box.getBoundingClientRect();
+    const share = Math.max(0, Math.min(1, ((x - r.left) / r.width - .28) / .72));
+    set(min + share * (max - min));
+  };
+  box.onpointerdown = (e) => {
+    box.setPointerCapture(e.pointerId);
+    box.classList.add("dragging");
+    fromX(e.clientX);
+    box.onpointermove = (ev) => fromX(ev.clientX);
+    box.onpointerup = () => { box.classList.remove("dragging"); box.onpointermove = null; };
+  };
+  box.onkeydown = (e) => {
+    const step = { ArrowRight: 1, ArrowUp: 1, ArrowLeft: -1, ArrowDown: -1 }[e.key];
+    if (step) { e.preventDefault(); set(Number(box.dataset.value) + step); }
+  };
+  set(value);
+  return () => Number(box.dataset.value);
+}
+
 // Combien de questions ? De 5 au quiz entier (un petit quiz se lance directement, en entier)
 const QUIZ_MIN = 5;
 document.addEventListener("click", async (e) => {
@@ -2005,22 +2043,15 @@ document.addEventListener("click", async (e) => {
     document.querySelectorAll(".quiz-count").forEach((b) => { b.hidden = true; b.previousElementSibling.setAttribute("aria-expanded", "false"); });
     if (!open) return;
     const start = Math.min(total, Math.max(QUIZ_MIN, state.quizSize || 10));
-    box.innerHTML = `<span class="muted">Combien de questions ?</span>
-      <input type="range" min="${QUIZ_MIN}" max="${total}" value="${start}" step="1" aria-label="Nombre de questions">
-      <b class="quiz-count-n">${start === total ? `toutes (${total})` : start}</b>
-      <button class="primary small" type="button" data-count-go="${pick.dataset.pickQuiz}">Commencer →</button>`;
+    box.innerHTML = `<div class="m1"></div>
+      <button class="primary" type="button" data-count-go="${pick.dataset.pickQuiz}">Commencer →</button>`;
+    m1Bar(box.querySelector(".m1"), { min: QUIZ_MIN, max: total, value: start });
     box.hidden = false;
     pick.setAttribute("aria-expanded", "true");
   }
   if (go) {
-    const range = go.parentElement.querySelector("input[type=range]");
-    launchQuiz(go.dataset.countGo, Number(range.value));
+    launchQuiz(go.dataset.countGo, Number(go.parentElement.querySelector(".m1").dataset.value));
   }
-});
-document.addEventListener("input", (e) => {
-  if (!e.target.matches(".quiz-count input[type=range]")) return;
-  const n = Number(e.target.value), max = Number(e.target.max);
-  e.target.parentElement.querySelector(".quiz-count-n").textContent = n === max ? `toutes (${max})` : n;
 });
 async function launchQuiz(id, n) {
   try {
@@ -3872,9 +3903,9 @@ $("#pick-go").addEventListener("click", async () => {
     { title: mode === "today" ? title : `${PICK_MODES[mode]} · ${title}`, back: "#/cours" });
 });
 
-// … puis, pour ce choix, trois onglets : Réviser (plan, séance, quiz, partiel), Rétroplanning et Suivi.
-const SCOPE_TABS = { "": "Réviser", planning: "Rétroplanning", suivi: "Suivi" };
-// Une matière : un onglet de plus, « Gérer » (ses cours, chapitres, quiz et flashcards)
+// … puis, pour ce choix, des onglets pour réviser : Aujourd'hui (la révision du jour), Quiz, Cartes, et Suivi (avec le
+// rétroplanning). Une matière a aussi « Mes cours », à part, à droite du titre : ajouter et modifier ses cours.
+const SCOPE_TABS = { "": "Aujourd'hui", quiz: "Quiz", cartes: "Cartes", suivi: "Suivi" };
 
 async function openReviewScope(kind, id = "", sub = "") {
   if (kind === "cours" && sub === "partiel") return openPartielPrep(id);
@@ -3895,31 +3926,32 @@ async function openReviewScope(kind, id = "", sub = "") {
     owner = parent ? null : { course: id };  // un cours rangé dans un semestre suit le plan du semestre
   }
   const base = `#/reviser/${kind}${id ? `/${id}` : ""}`;
-  const tab = sub in SCOPE_TABS ? sub : "";
+  const tab = sub === "planning" ? "suivi" : sub in SCOPE_TABS ? sub : "";
   if (state.reviewScope?.base !== base) state.deckChapter = null;  // autre cours : tous les chapitres
   state.reviewScope = { params, name, hash: location.hash, base, single: kind === "cours", owner, parent };
   $("#review-scope-title").textContent = name;
   $("#review-scope-dot").hidden = kind !== "cours";
   if (kind === "cours") $("#review-scope-dot").style.background = subjectColor(id);
   renderReviewFiles();
+  $("#scope-manage").hidden = kind !== "cours";
+  if (kind === "cours") $("#scope-manage").href = `#/cours/${id}`;
   document.querySelectorAll("[data-scope-tab]").forEach((a) => {
     const t = a.dataset.scopeTab;
-    if (t === "gerer") { a.hidden = kind !== "cours"; a.href = `#/cours/${id}`; return; }
     a.href = base + (t ? `/${t}` : "");
     a.classList.toggle("active", t === tab);
     a.setAttribute("aria-selected", String(t === tab));
   });
   $("#scope-tabs").hidden = !owner && !parent && kind !== "cours";  // « Tous mes cours » : pas de plan
-  $("#scope-main").hidden = tab !== "";
-  $("#view-review-scope").dataset.place = tab || $("#scope-main").dataset.mode;
-  $("#scope-planning").hidden = tab !== "planning";
+  $("#scope-main").hidden = tab === "suivi";
+  if (tab !== "suivi") setScopeMode(tab || "jour");
+  $("#view-review-scope").dataset.place = tab || "jour";
+  $("#scope-planning").hidden = tab !== "suivi";
   $("#scope-suivi").hidden = tab !== "suivi";
   setCardMode(cardMode());
   $("#mix-questions").checked = mixQuestions();
   setCrumbs([COURSES_CRUMB, ...(tab ? [{ label: name, href: base }, { label: SCOPE_TABS[tab] }] : [{ label: name }])]);
   show("review-scope");
-  if (tab === "planning") await renderRetro();
-  else if (tab === "suivi") await renderProgress();
+  if (tab === "suivi") await Promise.all([renderProgress(), renderRetro()]);
   else await renderScopeMain();
 }
 
@@ -3951,8 +3983,7 @@ async function renderScopeMain() {
   ring.style.setProperty("--m", `${cardsTotal ? Math.round((100 * cardsKnown) / cardsTotal) : 0}%`);
   ring.style.setProperty("--c", scope.single ? subjectColor(reviewScope().course) : "var(--accent)");
   ring.querySelector("span").textContent = `${cardsTotal ? Math.round((100 * cardsKnown) / cardsTotal) : 0}%`;
-  $("#review-exam").hidden = !data.exam || data.exam.days <= -7;
-  if (data.exam) $("#review-exam").innerHTML = examSentence(data.exam);
+  $("#review-exam").hidden = true;  // les partiels sont rappelés sur la page Matières, à côté du bonjour
 
   // Plan de révision
   $("#plan-card").hidden = !plan;
@@ -4044,7 +4075,7 @@ function renderDecks() {
     ${badge ? `<em>${badge}</em>` : ""}<span class="deck-pile" aria-hidden="true"><i></i><i></i><i>${CARD_BACK}</i></span>
     <b>${title}</b><small>${text}</small></button>`;
   $("#card-decks").innerHTML = !data.all.total
-    ? `<p class="muted">Pas encore de flashcards : crée-les depuis l'onglet « Gérer ».</p>`
+    ? `<p class="muted">Pas encore de flashcards : crée-les depuis « Mes cours ».</p>`
     : deck("due", "À revoir aujourd'hui", n.due ? "Les cartes que la répétition espacée te ramène" : "Rien à revoir : tout est à jour", n.due, n.due || "")
       + deck("weak", "Là où je bloque", n.weak ? `Les ${plural(n.weak, "carte", "cartes")} que tu rates le plus` : "Aucune carte difficile pour l'instant", n.weak, "")
       + deck("all", "Tout le paquet", `${plural(n.total, "carte", "cartes")}, mélangées${ch ? ` · ${escapeHtml(shortChapter(ch.title))}` : ""}`, n.total, "");
@@ -4075,18 +4106,28 @@ function renderScopeQuizzes() {
   const total = all.reduce((n, q) => n + q.count, 0);
   const size = state.quizSize || 10;
   $("#quiz-mix").hidden = !total;
-  $("#quiz-mix-title").textContent = "Faire un quiz";
-  $("#quiz-mix-text").textContent = `${Math.min(size, total)} questions au hasard dans ${state.reviewFile ? `« ${fileLabel(state.reviewFile)} »` : "toute la matière"}`
-    + ` (${total} en tout). « Choisir… » : les chapitres, le nombre de questions, et des flashcards si tu veux.`;
+  $(".quiz-mix-more").hidden = !total;
+  if (total) {
+    const min = Math.min(QUIZ_MIN, total);
+    state.mixCount = m1Bar($("#quiz-mix-bar"), { min, max: total, value: Math.min(total, Math.max(min, state.mixValue || size)),
+      onChange: (n) => { state.mixValue = n; } });
+  }
+  $("#quiz-mix-text").textContent = `Au hasard dans ${state.reviewFile ? `« ${fileLabel(state.reviewFile)} »` : "toute la matière"}, `
+    + `d'abord les questions ratées ou jamais vues. `;
   $("#scope-quizzes").innerHTML = all.length ? all.map((q) => quizItem(q, null, null, { play: true })).join("")
-    : `<li class="empty muted">Pas encore de quiz : crée-les depuis l'onglet « Gérer ».</li>`;
+    : `<li class="empty muted">Pas encore de quiz : crée-les depuis « Mes cours ».</li>`;
 }
 
 // Quelques questions au hasard dans tous les quiz du choix (un cours ou toute la matière)
-$("#quiz-mix-start").addEventListener("click", () => {
+$("#quiz-mix-start").addEventListener("click", async () => {
   const f = state.reviewFile;
-  startSession({ mode: "quiz", ...reviewScope(), questions: "1", ...(f ? { file: f.id } : {}) },
-    { title: `Quiz au hasard · ${f ? fileLabel(f) : state.reviewScope.name}`, back: state.reviewScope.hash });
+  try {
+    const data = await api("/api/custom-quiz", jsonBody("POST", { ...reviewScope(), ...(f ? { file: f.id } : {}),
+      questions: state.mixCount ? state.mixCount() : 10, cards: 0 }));
+    runSession(data.items, { title: `Quiz au hasard · ${f ? fileLabel(f) : state.reviewScope.name}`, back: state.reviewScope.hash });
+  } catch (err) {
+    notify(err.message);
+  }
 });
 
 // « Faire un quiz » à la carte : les chapitres (tous par défaut), le nombre de questions, et des flashcards en plus
@@ -4218,7 +4259,7 @@ async function renderMastery() {
   $("#mastery-card").hidden = false;
   const several = withChapters.length > 1;
   state.chapterRows = {};
-  $("#mastery-list").innerHTML = !withChapters.length ? `<p class="muted">Pas encore de chapitres : ajoute un cours depuis l'onglet « Gérer ».</p>` : withChapters.map((c) => `
+  $("#mastery-list").innerHTML = !withChapters.length ? `<p class="muted">Pas encore de chapitres : ajoute un cours depuis « Mes cours ».</p>` : withChapters.map((c) => `
     ${several ? `<h3>${escapeHtml(c.course)}</h3>` : ""}
     <ul class="mastery-rows">${c.chapters.map((ch, i) => {
       // Plusieurs fichiers (« PARTIE 2 » dans chacun) : le nom du fichier sépare les groupes.
@@ -4462,21 +4503,19 @@ function setScopeMode(mode) {
     b.classList.toggle("active", b.dataset.scopeMode === mode);
     b.setAttribute("aria-selected", String(b.dataset.scopeMode === mode));
   });
-  try { localStorage.setItem("pirouette.scopeMode", mode); } catch {}
 }
 $("#scope-modes").addEventListener("click", (e) => {
   const button = e.target.closest("[data-scope-mode]");
   if (button) setScopeMode(button.dataset.scopeMode);
 });
-try { setScopeMode(localStorage.getItem("pirouette.scopeMode") || "jour"); } catch { setScopeMode("jour"); }
+setScopeMode("jour");
 
 // ---- Onglet Suivi ----
 async function renderProgress() {
   const [data] = await Promise.all([api(`/api/progress?${new URLSearchParams(reviewScope())}`), renderMastery()]);
   const { week } = data;
   const pctText = (v) => (v === null ? "—" : `${v} %`);
-  $("#review-exam").hidden = !data.exam || data.exam.days <= -7;
-  if (data.exam) $("#review-exam").innerHTML = examSentence(data.exam);
+  $("#review-exam").hidden = true;  // les partiels sont rappelés sur la page Matières, à côté du bonjour
   $("#pg-cards").textContent = week.cards;
   $("#pg-cards-success").textContent = pctText(week.cards_success);
   $("#pg-questions-success").textContent = pctText(week.questions_success);
@@ -4864,6 +4903,11 @@ const WELCOME = [
 ];
 // Les nouveautés de chaque version (le carton « Quoi de neuf » ne s'affiche que si la version en a)
 const WHATS_NEW = {
+  "0.66.0": [
+    ["☀︎", "Une matière, quatre onglets", "Aujourd'hui (ta révision du jour), Quiz, Cartes et Suivi (avec le rétroplanning). Moins de choses à l'écran, chaque bouton fait ce qu'il dit"],
+    ["✎", "« Mes cours », à part", "À droite du nom de la matière : ajouter, modifier ou réorganiser ses cours, chapitres, quiz et flashcards"],
+    ["▬", "Une barre à faire glisser", "Pour choisir combien de questions : glisse dans la barre orange. Aussi sur le téléphone, qui a maintenant les mêmes onglets"],
+  ],
   "0.65.4": [
     ["☰", "Des quiz plus lisibles", "Réviser › Quiz : juste le titre et le nombre de questions ; un clic, et tu choisis combien en faire (de 5 au quiz entier)"],
     ["●", "Les partiels à côté du bonjour", "Et la bulle des messages prend la forme de la tête du chat"],
@@ -6732,8 +6776,7 @@ function reviseFrom(mode) {
   try {
     if (focus) localStorage.setItem(`pirouette.reviewFile.${state.course.id}`, focus.id);
   } catch {}
-  setScopeMode(mode);
-  go(`#/reviser/cours/${state.course.id}`);
+  go(`#/reviser/cours/${state.course.id}${mode === "jour" ? "" : `/${mode}`}`);
 }
 $("#cards-revise").addEventListener("click", (e) => {
   e.preventDefault();  // un bouton dans le titre du dépliant ne le replie pas

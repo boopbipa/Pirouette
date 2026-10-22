@@ -2349,3 +2349,49 @@ body.focus .feedback, body.focus .feedback.ok, body.focus .feedback.ko, body.foc
 .chat-bubble .chat-shape { position: absolute; inset: 0; width: 100%; height: 100%; fill: var(--accent); }
 .chat-bubble .chat-ic { position: relative; }
 .chat-bubble:hover .chat-shape { fill: color-mix(in srgb, var(--accent) 90%, #fff); }
+
+/* ---------- Page d'une matière : Aujourd'hui · Quiz · Cartes · Suivi, et « Mes cours » à part ---------- */
+.scope-head { display: flex; align-items: center; gap: 14px; }
+.scope-head .subject-title { flex: 1; min-width: 0; margin-bottom: 0; }
+.manage-link { display: inline-flex; align-items: center; gap: 7px; padding: 8px 15px; border-radius: 999px; border: 1px solid var(--border);
+  color: var(--text); text-decoration: none; font-size: 14px; white-space: nowrap; cursor: pointer; }
+.manage-link svg { width: 15px; height: 15px; }
+.manage-link:hover { border-color: var(--text); }
+.manage-back { display: inline-block; margin: 2px 0 14px; color: var(--muted); text-decoration: none; font-size: 14px; cursor: pointer; }
+.manage-back:hover { color: var(--text); }
+#scope-modes { display: none; }
+/* Aujourd'hui : la révision du jour au centre, en grand */
+#scope-main .today-hero { flex-direction: column; text-align: center; gap: 12px; padding: 30px 24px 22px; cursor: default;
+  background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 16%, var(--surface)), var(--surface)); }
+#scope-main .today-hero .hero-ring { width: 84px; height: 84px; }
+#scope-main .today-hero h2 { font-size: 22px; }
+#scope-main .today-hero .hero-actions { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+#scope-main .today-hero #hero-start { padding: 12px 30px; font-size: 16px; }
+#scope-main .today-hero #hero-all { font-size: 13px; color: var(--muted); }
+.scope-sec-title { font-size: 17px; margin: 26px 0 10px; }
+/* Quiz : la barre et « Au hasard », puis la liste */
+#scope-main .quiz-mix { display: flex; align-items: center; gap: 14px; padding: 14px; margin-bottom: 6px; border-radius: 18px; background: var(--surface);
+  box-shadow: var(--shadow); border: 0; }
+#scope-main .quiz-mix .m1 { flex: 1; }
+.quiz-mix-more { margin: 0 4px 14px; font-size: 13px; }
+.quiz-mix-more .link-button { font-size: 13px; }
+.partiel-row { flex-direction: row; align-items: center; gap: 14px; padding: 14px 18px; margin-top: 14px; }
+.partiel-row h2 { font-size: 15px; }
+.partiel-row .revise-count, .partiel-row .small-text { display: none; }
+.partiel-row button { margin: 0 0 0 auto; align-self: center; }
+
+/* La barre épaisse à poignée (nombre de questions) */
+.m1 { position: relative; height: 44px; border-radius: 14px; background: var(--sunken); overflow: hidden; cursor: ew-resize; user-select: none;
+  touch-action: none; outline: none; }
+.m1:focus-visible { box-shadow: 0 0 0 2px var(--accent); }
+.m1-fill { position: absolute; inset: 0 auto 0 0; background: linear-gradient(90deg, color-mix(in srgb, var(--accent) 85%, #000), var(--accent));
+  transition: width .12s ease; }
+.m1.dragging .m1-fill { transition: none; }
+.m1-grip { position: absolute; right: 7px; top: 50%; width: 5px; height: 22px; margin-top: -11px; border-radius: 3px; background: rgba(255, 246, 238, .95);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, .3); transition: transform .15s ease; }
+.m1:hover .m1-grip, .m1.dragging .m1-grip { transform: scaleY(1.15); }
+.m1-text { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); font-weight: 600; font-size: 15px; color: #FFF6EE; pointer-events: none;
+  white-space: nowrap; }
+.m1-of { position: absolute; right: 14px; top: 50%; transform: translateY(-50%); font-size: 13px; color: var(--muted); pointer-events: none; }
+.quiz-count .m1 { flex: 1; background: var(--surface); }
+.m1.full .m1-of { color: rgba(255, 246, 238, .75); right: 22px; }
