@@ -2300,8 +2300,8 @@ body.focus .feedback, body.focus .feedback.ok, body.focus .feedback.ko, body.foc
 .device-ic { width: 30px; height: 30px; border-radius: 9px; background: var(--surface); display: grid; place-items: center; color: var(--accent); }
 .device-ic svg { width: 18px; height: 18px; }
 .pair-box { display: flex; gap: 22px; align-items: center; margin-top: 16px; padding: 18px; border-radius: 16px; background: var(--sunken); }
-.pair-qr { flex: none; background: #fff; border-radius: 12px; padding: 6px; line-height: 0; box-shadow: var(--shadow); }
-.pair-qr svg { width: 168px; height: 168px; }
+.pair-qr { flex: none; background: #fff; border-radius: 12px; padding: 0; line-height: 0; box-shadow: var(--shadow); overflow: hidden; }
+.pair-qr svg { width: 184px; height: 184px; display: block; shape-rendering: crispEdges; }
 .pair-steps ol { margin: 0 0 10px; padding-left: 20px; line-height: 1.6; font-size: 14px; }
 .pair-code { font: 700 26px/1 ui-monospace, "SF Mono", Menlo, monospace; letter-spacing: .1em; color: var(--accent-ink); margin: 4px 0 8px; }
 @media (max-width: 640px) { .pair-box { flex-direction: column; align-items: flex-start; } }

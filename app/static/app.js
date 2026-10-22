@@ -4813,6 +4813,9 @@ const WELCOME = [
 ];
 // Les nouveautés de chaque version (le carton « Quoi de neuf » ne s'affiche que si la version en a)
 const WHATS_NEW = {
+  "0.65.3": [
+    ["▣", "QR code bien centré", "Le code à scanner pour ajouter un téléphone est centré, avec sa marge : l'appareil photo le trouve tout de suite"],
+  ],
   "0.65.2": [
     ["?", "Faire un quiz à la carte", "Dans une matière, onglet Quiz › Choisir… : toute la matière ou certains chapitres, le nombre de questions, et des flashcards en plus si tu veux"],
     ["▯", "Téléphone et tablette", "La page marche aussi sur Android et sur les tablettes Windows. Sur le téléphone : la carte se retourne autant qu'on veut, et quitter un quiz demande confirmation"],

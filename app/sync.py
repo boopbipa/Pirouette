@@ -156,7 +156,8 @@ class Sync:
         await self.online._call("POST", "/rest/v1/sync_pairs", json={"code": code},
                                 headers={"Prefer": "return=minimal"})
         url = f"{WEB_URL}#jumeler={code}"
-        qr = segno.make(url, error="m").svg_inline(scale=5, border=2, dark="#1D1D1F", light="#FFFFFF")
+        # viewBox (sans taille fixe) : le code garde ses proportions quelle que soit sa taille à l'écran ; 4 modules de marge
+        qr = segno.make(url, error="m").svg_inline(border=4, omitsize=True, dark="#1D1D1F", light="#FFFFFF")
         return {"code": f"{code[:4]}-{code[4:]}", "url": url, "web": WEB_URL, "qr": qr}
 
     async def devices(self) -> list[dict]:
