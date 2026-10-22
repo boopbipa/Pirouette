@@ -2008,6 +2008,8 @@ function m1Bar(box, { min, max, value, onChange = () => {}, unit = ["question", 
     box.querySelector(".m1-fill").style.width = `calc(${(share * 100).toFixed(2)}% * .72 + 28%)`;
     box.querySelector(".m1-text").textContent = n === max ? `Toutes (${n})` : plural(n, ...unit);
     box.classList.toggle("full", share > .7);
+    if (box.dataset.ready && n !== Number(box.dataset.last)) haptic();
+    box.dataset.last = n;
     onChange(n);
   };
   const fromX = (x) => {
@@ -2027,7 +2029,15 @@ function m1Bar(box, { min, max, value, onChange = () => {}, unit = ["question", 
     if (step) { e.preventDefault(); set(Number(box.dataset.value) + step); }
   };
   set(value);
+  box.dataset.ready = "1";
   return () => Number(box.dataset.value);
+}
+// Un « tic » très léger du trackpad sur Mac (voir desktop.py), au plus toutes les 25 ms
+function haptic() {
+  const now = Date.now();
+  if (now - (haptic.last || 0) < 25) return;
+  haptic.last = now;
+  window.pywebview?.api?.haptic?.().catch?.(() => {});
 }
 
 // Combien de questions ? De 5 au quiz entier (un petit quiz se lance directement, en entier)
@@ -4903,6 +4913,10 @@ const WELCOME = [
 ];
 // Les nouveautés de chaque version (le carton « Quoi de neuf » ne s'affiche que si la version en a)
 const WHATS_NEW = {
+  "0.66.2": [
+    ["〰", "Un petit « tic » sous le doigt", "Sur Mac avec un trackpad, la barre orange fait un tic très léger à chaque nombre"],
+    ["▭", "Cartes, sur le téléphone", "Choisis combien de cartes réviser avec la barre : d'abord celles à revoir, puis celles où tu bloques"],
+  ],
   "0.66.1": [
     ["●", "Une bulle toute ronde", "Dans le bouton des messages, la bulle prend la forme du chat (sans les oreilles)"],
   ],

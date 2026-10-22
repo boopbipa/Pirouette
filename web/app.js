@@ -484,10 +484,9 @@ function renderSubject(id, tab = "") {
       ${pool >= 2 ? `<div class="m1" id="mix"></div><button class="primary random-quiz" type="button" id="random"></button>` : ""}
       <nav class="list">${quizzes.map((q) => row(`data-quiz="${esc(q.id)}"`, esc(q.title || "Quiz"), plural(q.questions.length, "question", "questions"))).join("")}</nav>`;
   } else {
-    body = !all.length ? `<p class="muted center">Pas encore de flashcards dans cette matière.</p>` : `<nav class="list decks">
-      ${row('id="due"', "À revoir aujourd'hui", due.length ? plural(due.length, "carte", "cartes") : "Rien à revoir : tout est à jour", !due.length)}
-      ${row('id="weak"', "Là où je bloque", weak.length ? plural(weak.length, "carte", "cartes") : "Aucune carte difficile", !weak.length)}
-      ${row('id="all"', "Tout le paquet", `${plural(all.length, "carte", "cartes")}, mélangées`)}</nav>`;
+    body = !all.length ? `<p class="muted center">Pas encore de flashcards dans cette matière.</p>` : `
+      ${all.length >= 2 ? `<div class="m1" id="deck"></div>` : ""}<button class="primary random-quiz" type="button" id="cards-go"></button>
+      <p class="muted small center">D'abord les cartes à revoir aujourd'hui${due.length ? ` (${due.length})` : ""}, puis celles où tu bloques, puis les autres.</p>`;
   }
   app.innerHTML = `<header class="top sub"><a class="icon-btn" href="#/" aria-label="Retour">${ICON.back}</a></header>
     <h1 class="subject" style="--c:${colorOf(course)}"><span class="dot"></span>${esc(course.name)}</h1>
@@ -498,6 +497,19 @@ function renderSubject(id, tab = "") {
   $("#weak")?.addEventListener("click", () => startCards(shuffle(weak), `${course.name} · là où je bloque`, { free: true }));
   $("#all")?.addEventListener("click", () => startCards(shuffle(all), course.name, { free: true }));
   app.querySelectorAll("[data-quiz]").forEach((b) => b.addEventListener("click", () => startQuiz(current().quiz[b.dataset.quiz])));
+  if ($("#cards-go")) {
+    // Les cartes à revoir d'abord, puis les difficiles, puis les autres (mélangées)
+    const dueIds = new Set(due.map((x) => x.card.id));
+    const order = [...due, ...shuffle(weak.filter((x) => !dueIds.has(x.card.id))),
+      ...shuffle(all.filter((x) => !dueIds.has(x.card.id) && !isWeak(x.card)))];
+    let n = Math.min(all.length, Math.max(due.length, S.deckValue || 10));
+    const label = (v) => { $("#cards-go").textContent = `${v === all.length ? "Tout le paquet" : plural(v, "carte", "cartes")} →`; };
+    if ($("#deck")) {
+      m1Bar($("#deck"), { min: Math.min(5, all.length), max: all.length, value: n, unit: ["carte", "cartes"],
+        onChange: (v) => { n = S.deckValue = v; label(v); } });
+    } else label(n);
+    $("#cards-go").addEventListener("click", () => startCards(order.slice(0, n), course.name, { free: true }));
+  }
   if ($("#mix")) {
     const min = Math.min(5, pool);
     let n = Math.min(pool, Math.max(min, S.mixValue || 10));
@@ -509,17 +521,37 @@ function renderSubject(id, tab = "") {
   }
 }
 
+// Un petit « tic » à chaque cran : vibration très courte sur Android ; sur iPhone (iOS 18 et plus), le seul moyen
+// est un interrupteur caché qu'on bascule (Safari le fait « cliquer » sous le doigt)
+function tick() {
+  const now = Date.now();
+  if (now - (tick.last || 0) < 30) return;
+  tick.last = now;
+  if (navigator.vibrate) { navigator.vibrate(4); return; }
+  if (!tick.label) {
+    tick.label = Object.assign(document.createElement("label"), { ariaHidden: "true" });
+    tick.label.style.cssText = "position:fixed;width:1px;height:1px;opacity:0;pointer-events:none;overflow:hidden";
+    const input = Object.assign(document.createElement("input"), { type: "checkbox", tabIndex: -1 });
+    input.setAttribute("switch", "");
+    tick.label.append(input);
+    document.body.append(tick.label);
+  }
+  tick.label.click();
+}
+
 // La barre épaisse à poignée (comme sur l'ordinateur) : on la fait glisser n'importe où
-function m1Bar(box, { min, max, value, onChange }) {
+function m1Bar(box, { min, max, value, onChange, unit = ["question", "questions"] }) {
   box.setAttribute("role", "slider");
   box.innerHTML = `<span class="m1-fill"><span class="m1-grip"></span></span><span class="m1-text"></span><span class="m1-of">sur ${max}</span>`;
   const set = (v) => {
     v = Math.max(min, Math.min(max, Math.round(v)));
     const share = max === min ? 1 : (v - min) / (max - min);
     box.querySelector(".m1-fill").style.width = `calc(${(share * 100).toFixed(2)}% * .7 + 30%)`;
-    box.querySelector(".m1-text").textContent = v === max ? `Toutes (${v})` : plural(v, "question", "questions");
+    box.querySelector(".m1-text").textContent = v === max ? `${unit[1] === "cartes" ? "Tout le paquet" : "Toutes"} (${v})` : plural(v, ...unit);
     box.classList.toggle("full", share > .7);
     box.setAttribute("aria-valuenow", v);
+    if (box.dataset.last && Number(box.dataset.last) !== v) tick();
+    box.dataset.last = v;
     onChange(v);
   };
   const fromX = (x) => {

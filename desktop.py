@@ -108,6 +108,20 @@ class DesktopApi:
         threading.Thread(target=close, daemon=True).start()
         threading.Timer(4, lambda: os._exit(0)).start()
 
+    def haptic(self) -> None:
+        """Un « tic » très léger du trackpad (Mac à trackpad Force Touch), quand la barre orange passe d'un nombre
+        à l'autre. Sans trackpad Force Touch, ou ailleurs que sur Mac, il ne se passe rien."""
+        if sys.platform != "darwin":
+            return
+        try:
+            from AppKit import NSHapticFeedbackManager
+            from PyObjCTools import AppHelper
+
+            # 1 : « alignement » (le plus léger, celui des repères qui s'aimantent) ; 1 : tout de suite
+            AppHelper.callAfter(lambda: NSHapticFeedbackManager.defaultPerformer().performFeedbackPattern_performanceTime_(1, 1))
+        except Exception:
+            pass
+
     def import_legacy_data(self) -> dict:
         """Récupère les cours d'une ancienne version (le dossier « data » à côté de run.sh)."""
         import webview
