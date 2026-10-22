@@ -2344,11 +2344,6 @@ body.focus .feedback, body.focus .feedback.ok, body.focus .feedback.ko, body.foc
 .hello-row .hello { margin: 0; }
 .hello-row .exam-countdown { margin: 0; padding: 7px 14px; border-radius: 999px; font-size: 14px; }
 
-/* La bulle des messages : la forme de la tête du chat, sans les oreilles (joues rondes, bas plus large) */
-.chat-bubble { background: none; box-shadow: none; border-radius: 0; padding: 15px 14px 12px; filter: drop-shadow(0 8px 12px rgba(70, 35, 15, .45)); }
-.chat-bubble .chat-shape { position: absolute; inset: 0; width: 100%; height: 100%; fill: var(--accent); }
-.chat-bubble .chat-ic { position: relative; }
-.chat-bubble:hover .chat-shape { fill: color-mix(in srgb, var(--accent) 90%, #fff); }
 
 /* ---------- Page d'une matière : Aujourd'hui · Quiz · Cartes · Suivi, et « Mes cours » à part ---------- */
 .scope-head { display: flex; align-items: center; gap: 14px; }

@@ -4903,6 +4903,9 @@ const WELCOME = [
 ];
 // Les nouveautés de chaque version (le carton « Quoi de neuf » ne s'affiche que si la version en a)
 const WHATS_NEW = {
+  "0.66.1": [
+    ["●", "Une bulle toute ronde", "Dans le bouton des messages, la bulle prend la forme du chat (sans les oreilles)"],
+  ],
   "0.66.0": [
     ["☀︎", "Une matière, quatre onglets", "Aujourd'hui (ta révision du jour), Quiz, Cartes et Suivi (avec le rétroplanning). Moins de choses à l'écran, chaque bouton fait ce qu'il dit"],
     ["✎", "« Mes cours », à part", "À droite du nom de la matière : ajouter, modifier ou réorganiser ses cours, chapitres, quiz et flashcards"],
@@ -4910,7 +4913,7 @@ const WHATS_NEW = {
   ],
   "0.65.4": [
     ["☰", "Des quiz plus lisibles", "Réviser › Quiz : juste le titre et le nombre de questions ; un clic, et tu choisis combien en faire (de 5 au quiz entier)"],
-    ["●", "Les partiels à côté du bonjour", "Et la bulle des messages prend la forme de la tête du chat"],
+    ["●", "Les partiels à côté du bonjour", "Sur la page Matières, en un coup d'œil"],
   ],
   "0.65.3": [
     ["▣", "QR code bien centré", "Le code à scanner pour ajouter un téléphone est centré, avec sa marge : l'appareil photo le trouve tout de suite"],

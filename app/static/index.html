@@ -20,7 +20,7 @@
     <!-- L'icône de l'app : le chat qui fait la sieste -->
     <symbol id="app-icon" viewBox="0 0 100 100"><g clip-path="url(#pcl)"><rect width="100" height="100" fill="url(#pbg)"/><g transform="translate(-62 -16) scale(1.62)"><path d="M14 78 Q14 46 40 40 L44 26 Q45 23.5 47 25.5 L54 33 Q60 32 66 33.5 L74 26 Q76 24 77 26.5 L79 40 Q90 50 90 66 Q90 78 80 78 Z" fill="#FFF6EE"/><path d="M56 55 q4.0 4.0 8 0" fill="none" stroke="#B9532A" stroke-width="3" stroke-linecap="round"/><path d="M70 55 q4.0 4.0 8 0" fill="none" stroke="#B9532A" stroke-width="3" stroke-linecap="round"/><path d="M64.8 60 Q67 59.2 69.2 60 Q69 61.9 67 62.7 Q65 61.9 64.8 60 Z" fill="#E9A48C"/></g><rect width="100" height="100" fill="url(#phl)"/></g></symbol>
     <symbol id="logo" viewBox="0 0 100 100"><path fill="currentColor" d="M17 47 C15 36 15 22 18.5 11.5 C19.5 10 21 10 22.5 11 C29 15.5 36 21 41.5 26.5 C47 25.2 53 25.2 58.5 26.5 C64 21 71 15.5 77.5 11 C79 10 80.5 10 81.5 11.5 C85 22 85 36 83 47 C87 55 87.5 63 84 71 C78 83 65 89 50 89 C35 89 22 83 16 71 C12.5 63 13 55 17 47 Z"/></symbol>
-    <symbol id="chat-cat" viewBox="0 0 100 100"><path fill="currentColor" d="M22 16 H78 A14 14 0 0 1 92 30 V62 A14 14 0 0 1 78 76 H46 L26 92 V76 H22 A14 14 0 0 1 8 62 V30 A14 14 0 0 1 22 16 Z"/></symbol>
+    <symbol id="chat-cat" viewBox="0 0 100 100"><path fill="currentColor" d="M50 13 C76 13 91 25 91 41 C95 50 95 61 89 69 C82 78 68 81 50 81 C46 81 42 81 39 80 L22 92 C20 93.5 18.5 92.5 19.3 90.4 L24.5 76.5 C16 73 10.5 69 8 63 C5 55 6 47 9 41 C9 25 24 13 50 13 Z"/></symbol>
   </svg>
   <header class="topbar">
     <a href="#/" class="brand"><span class="app-icon"><svg viewBox="0 0 100 100" aria-hidden="true"><use href="#app-icon"/></svg><span class="beta-badge">bêta</span></span><span class="brand-name">Pirouette</span></a>
@@ -1421,7 +1421,7 @@
         <p class="status" id="chat-panel-status" hidden></p>
       </div>
     </div>
-    <button class="chat-bubble" id="chat-bubble" type="button" aria-label="Messages"><svg class="chat-shape" viewBox="0 0 100 100" aria-hidden="true"><path d="M50 7 C79 7 94 21 94 42 C99 54 99 70 92 80 C84 92 68 97 50 97 C32 97 16 92 8 80 C1 70 1 54 6 42 C6 21 21 7 50 7 Z"/></svg><svg class="chat-ic" aria-hidden="true"><use href="#chat-cat"/></svg><span class="nav-badge chat-badge" id="chat-badge" hidden></span></button>
+    <button class="chat-bubble" id="chat-bubble" type="button" aria-label="Messages"><svg aria-hidden="true"><use href="#chat-cat"/></svg><span class="nav-badge chat-badge" id="chat-badge" hidden></span></button>
   </div>
 
   <!-- Un message vient d'arriver : un petit mot cliquable en bas de l'écran -->
