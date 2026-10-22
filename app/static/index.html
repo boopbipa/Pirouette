@@ -23,8 +23,7 @@
     <a href="#/" class="brand"><span class="app-icon"><svg aria-hidden="true"><use href="#logo"/></svg><span class="beta-badge">bêta</span></span><span class="brand-name">Pirouette</span></a>
     <nav class="nav-pill" aria-label="Menu">
       <a href="#/" data-nav="accueil">Accueil</a>
-      <a href="#/cours" data-nav="cours">Mes cours</a>
-      <a href="#/reviser" data-nav="reviser">Réviser</a>
+      <a href="#/cours" data-nav="cours">Matières</a>
       <a href="#/defis" data-nav="defis" hidden>Défis</a>
       <a href="#/reglages" data-nav="reglages">Réglages</a>
       <button type="button" class="nav-feedback" id="feedback-btn" title="Une idée, un bug ? Écris-moi">
@@ -64,28 +63,31 @@
     <!-- Mes cours : cours et dossiers -->
     <section id="view-courses" class="view" hidden>
       <div class="page-head">
-        <h1>Mes cours <span class="muted count" id="course-count"></span></h1>
+        <h1>Mes matières <span class="muted count" id="course-count"></span></h1>
         <div class="head-actions">
           <input type="file" id="pack-input" accept=".zip,application/zip" hidden>
-          <button class="primary new-course-big" type="button" id="new-course-btn">+ Nouveau cours</button>
+          <button class="ghost" type="button" id="pick-open">Réviser une sélection…</button>
+          <button class="primary new-course-big" type="button" id="new-course-btn">+ Ajouter un cours</button>
         </div>
       </div>
       <p class="status" id="courses-status" hidden></p>
-      <p class="muted small-text" id="folders-help" hidden>Glisse un cours sur un semestre pour l'y ranger (ou choisis son semestre depuis la page du cours).</p>
+      <!-- Sélections enregistrées (plusieurs cours, de matières différentes) : un clic pour réviser -->
+      <div class="review-sets" id="review-sets" hidden></div>
       <div class="course-grid drop-zone" data-drop-folder="">
         <div id="course-list" class="contents"></div>
       </div>
-      <p class="empty-state muted" id="courses-empty" hidden>Pas encore de cours : clique sur « + Nouveau cours » et dépose ton premier fichier.</p>
+      <p class="empty-state muted" id="courses-empty" hidden>Pas encore de cours : « + Ajouter un cours ».</p>
       <div id="folder-list"></div>
       <button class="add-folder-row" type="button" id="new-folder">+ Nouveau semestre</button>
       <div id="archived" hidden>
-        <div class="section-title"><h2>Archivés</h2><span class="muted small-text">Les semestres passés, rangés à part</span></div>
+        <div class="section-title"><h2>Archivés</h2></div>
         <div id="archived-list"></div>
       </div>
       <div id="orphans" hidden>
         <div class="section-title"><h2>Anciens quiz (sans cours)</h2></div>
         <ul id="orphan-list" class="quiz-list"></ul>
       </div>
+      <p class="exam-countdown exam-bottom" id="review-home-exam" hidden></p>
     </section>
 
     <!-- Défis entre amis (en ligne) : un compte, des amis, 10 questions à faire chacun -->
@@ -159,20 +161,6 @@
       </div>
     </section>
 
-    <!-- Réviser : d'abord quoi réviser, puis la révision du jour, les points faibles et le suivi -->
-    <section id="view-review" class="view" hidden>
-      <div class="page-head">
-        <h1>Réviser</h1>
-        <div class="head-actions"><button class="primary" type="button" id="pick-open">Choisir des cours…</button></div>
-      </div>
-      <!-- Sélections enregistrées (plusieurs cours ou fichiers, de matières différentes) : un clic pour réviser -->
-      <div class="review-sets" id="review-sets" hidden></div>
-      <p class="muted">Ou choisis un cours, ou tout un semestre :</p>
-      <div class="review-pick" id="review-pick"></div>
-      <!-- La date des partiels, en bas de Réviser -->
-      <p class="exam-countdown exam-bottom" id="review-home-exam" hidden></p>
-    </section>
-
     <section id="view-review-scope" class="view" hidden>
       <h1 id="review-scope-title"></h1>
       <!-- Une matière à plusieurs cours : réviser toute la matière ou un seul cours -->
@@ -181,6 +169,7 @@
         <a role="tab" data-scope-tab="">Réviser</a>
         <a role="tab" data-scope-tab="planning">Rétroplanning</a>
         <a role="tab" data-scope-tab="suivi">Suivi</a>
+        <a role="tab" data-scope-tab="gerer" hidden>Gérer</a>
       </nav>
 
       <div id="scope-main" data-mode="jour">
@@ -201,7 +190,7 @@
         <div class="card plan-card" id="plan-card" data-mode="jour" hidden>
           <div id="plan-setup" hidden>
             <h2>Ton plan de révision</h2>
-            <p class="muted">Choisis ton rythme : Pirouette te rappelle chaque séance et commence par les cartes où tu bloques.</p>
+            <p class="muted">Pirouette te rappelle chaque séance.</p>
             <div class="plan-form">
               <span>Une séance</span>
               <select id="plan-every" class="chip" aria-label="Rythme des séances">
@@ -241,7 +230,6 @@
         <!-- Flashcards seules : un paquet (du jour, où je bloque, tout), pour tout le cours ou un chapitre -->
         <div class="card cards-mode" data-mode="cartes">
           <h2>Flashcards</h2>
-          <p class="muted small-text">Rien que des cartes, à retourner puis à glisser. Choisis un paquet :</p>
           <div class="chips chapter-chips" id="cards-chapters" role="radiogroup" aria-label="Chapitre"></div>
           <div class="decks" id="card-decks"></div>
           <div class="option-row decks-options">
@@ -261,14 +249,13 @@
             </div>
             <button class="primary" type="button" id="quiz-mix-start">Commencer →</button>
           </div>
-          <p class="muted small-text">Un grand quiz se fait en entier, ou sur 10 questions (d'abord celles ratées ou jamais vues).</p>
           <ul class="quiz-list" id="scope-quizzes"></ul>
         </div>
 
         <div class="card revise-card" data-mode="partiel">
           <h2>Mode partiel</h2>
           <p class="revise-count" id="partiel-summary">Un partiel blanc</p>
-          <p class="muted small-text">Tes quiz et tes flashcards mélangés, corrigés à la fin, avec une note sur 20.</p>
+          <p class="muted small-text">Quiz et flashcards mélangés, noté sur 20.</p>
           <div class="partiel-pick" id="partiel-pick" hidden>
             <select id="partiel-course" aria-label="Cours du partiel"></select>
           </div>
@@ -278,7 +265,6 @@
         <!-- Là où tu bloques : replié tout en bas, à déplier si besoin -->
         <details class="card hard-card fold-card" id="hard-card" data-mode="jour" hidden>
           <summary><span>Là où tu bloques <span class="muted" id="hard-count"></span></span></summary>
-          <p class="muted small-text">Les cartes que tu oublies le plus souvent. Chaque séance du plan commence par elles.</p>
           <ol class="hard-list" id="hard-list"></ol>
           <button class="ghost small" type="button" id="start-weak">Revoir ces cartes</button>
         </details>
@@ -352,7 +338,7 @@
             </div>
           </div>
           <div class="course-progress" id="course-progress-box">
-            <h3>Par cours</h3>
+            <h3>Par matière</h3>
             <div class="table-wrap"><table>
               <thead><tr><th>Cours</th><th>Cartes sues</th><th>Du jour</th><th>À retravailler</th><th>Cartes (30 j)</th><th>Quiz (30 j)</th><th>Dernière révision</th></tr></thead>
               <tbody id="course-progress"></tbody>
@@ -551,7 +537,7 @@
             <div class="accent-preview" id="preview-light"><span class="pv-label">Clair</span>
               <div class="pv-top"><svg class="pv-logo" aria-hidden="true"><use href="#logo"/></svg>Pirouette</div>
               <div class="pv-greet"><span class="pv-icon"><svg aria-hidden="true"><use href="#logo"/></svg></span>On révise ?</div>
-              <p class="stats-line"><strong>4</strong> cours · <strong>12</strong> quiz faits</p>
+              <p class="stats-line"><strong>4</strong> matières · <strong>12</strong> quiz faits</p>
               <div class="course-card"><strong>Biologie, chap. 4</strong><span class="muted">2 fichiers · 3 quiz</span></div>
               <div class="pv-row"><span class="pill">3 / 10</span><span class="badge">Meilleur score 8/10</span></div>
               <div class="progress"><div class="pv-bar"></div></div>
@@ -559,7 +545,7 @@
             <div class="accent-preview pv-dark" id="preview-dark"><span class="pv-label">Sombre</span>
               <div class="pv-top"><svg class="pv-logo" aria-hidden="true"><use href="#logo"/></svg>Pirouette</div>
               <div class="pv-greet"><span class="pv-icon"><svg aria-hidden="true"><use href="#logo"/></svg></span>On révise ?</div>
-              <p class="stats-line"><strong>4</strong> cours · <strong>12</strong> quiz faits</p>
+              <p class="stats-line"><strong>4</strong> matières · <strong>12</strong> quiz faits</p>
               <div class="course-card"><strong>Biologie, chap. 4</strong><span class="muted">2 fichiers · 3 quiz</span></div>
               <div class="pv-row"><span class="pill">3 / 10</span><span class="badge">Meilleur score 8/10</span></div>
               <div class="progress"><div class="pv-bar"></div></div>
@@ -768,34 +754,46 @@
           </div>
         </div>
         <div class="more">
-          <button class="primary small" type="button" id="prepare-open" hidden
-                  title="Claude crée un quiz et des flashcards pour chaque chapitre de ce cours">Tout préparer</button>
           <label class="ghost small button-like add-course-file" for="file-input" id="add-course-file"
                  title="Un autre cours de cette matière (CM2, TD…) : ses chapitres, quiz et flashcards s'ajoutent à ceux-ci, rien n'est remplacé">+ Ajouter un cours</label>
           <button class="ghost small manage-btn" type="button" id="course-more" aria-haspopup="menu">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
-            Gérer le cours <span class="caret" aria-hidden="true">▾</span></button>
+            Options <span class="caret" aria-hidden="true">▾</span></button>
           <input type="file" id="course-import-input" accept=".zip,application/zip,.txt,.csv,.tsv,.md,text/plain" hidden>
           <div class="plus-menu more-menu" id="course-more-menu" role="menu" hidden>
-            <button type="button" role="menuitem" id="rename-course"><strong>Renommer le cours</strong></button>
+            <button type="button" role="menuitem" id="rename-course"><strong>Renommer la matière</strong></button>
             <button type="button" role="menuitem" id="course-exam"><strong>Semaine des partiels</strong></button>
             <button type="button" role="menuitem" id="course-import"><strong>Importer quiz et flashcards</strong></button>
             <button type="button" role="menuitem" id="course-export"><strong>Exporter quiz et flashcards</strong></button>
             <button type="button" role="menuitem" id="reset-stats"><strong>Réinitialiser les statistiques</strong></button>
-            <button type="button" role="menuitem" id="delete-course" class="danger"><strong>Supprimer le cours</strong></button>
+            <button type="button" role="menuitem" id="delete-course" class="danger"><strong>Supprimer la matière</strong></button>
           </div>
         </div>
       </div>
 
       <label class="dropzone start-drop" id="start-drop" for="file-input" hidden>
         <svg class="tile-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 16V4M7 9l5-5 5 5"/><path d="M4 16v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/></svg>
-        <strong>Importe ton cours pour commencer</strong>
-        <span class="muted">Glisse ton fichier ici ou clique pour le choisir : Pirouette le lit, repère les chapitres,
-          puis te propose des quiz et des flashcards. PDF, Word, PowerPoint, Pages, Keynote, texte.</span>
+        <strong>Ajoute ton premier cours</strong>
+        <span class="muted">Glisse le fichier ici, ou clique. PDF, Word, PowerPoint, Pages, Keynote, texte.</span>
         <span class="primary small fake-button">Choisir un fichier</span>
       </label>
 
+      <nav class="filters scope-tabs" id="manage-tabs" role="tablist" aria-label="Matière">
+        <a role="tab" data-manage-tab="">Réviser</a>
+        <a role="tab" data-manage-tab="planning">Rétroplanning</a>
+        <a role="tab" data-manage-tab="suivi">Suivi</a>
+        <a role="tab" class="active" aria-selected="true">Gérer</a>
+      </nav>
       <p class="status" id="course-status" hidden></p>
+      <!-- Un cours tout juste ajouté (ni quiz ni flashcards) : un seul bouton, Claude découpe puis crée tout -->
+      <div class="ready-card" id="ready-card" hidden>
+        <div class="ready-ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z"/><path d="M19 15l.7 2 2 .7-2 .7-.7 2-.7-2-2-.7 2-.7z"/></svg></div>
+        <h2 id="ready-title"></h2>
+        <p class="muted" id="ready-text">Claude le découpe en chapitres, puis crée quiz et flashcards.</p>
+        <button class="primary ready-go" type="button" id="ready-go">Créer avec Claude</button>
+        <div class="ready-steps" id="ready-steps"><span data-step="1"><i>1</i>Copier</span><span data-step="2"><i>2</i>Coller dans Claude</span><span data-step="3"><i>3</i>C'est prêt</span></div>
+        <button class="link-button" type="button" id="ready-options">Options</button>
+      </div>
       <!-- Nouvelle version d'un fichier : Claude regarde ce qui a changé, ajoute sur les nouveautés, corrige ou
            supprime les questions et cartes dépassées (outils pirouette_mise_a_jour / pirouette_corriger) -->
       <div class="card news-card" id="news-card" hidden>
@@ -823,7 +821,7 @@
           </summary>
           <div class="fold-body">
             <div class="fold-tools">
-              <p class="muted small-text tree-hint">Ton cours a avancé ? « Nouvelle version » : seuls les passages nouveaux auront de nouvelles questions.</p>
+              <p class="muted small-text tree-hint">Le cours a avancé ? « Nouvelle version ».</p>
             </div>
             <p id="upload-status" class="status" hidden></p>
             <ul id="file-list" class="file-list source-list"></ul>
@@ -836,16 +834,6 @@
           <p id="chapters-status" class="status" hidden></p>
         </details>
 
-        <!-- Cours importé d'un seul bloc : Pirouette propose de le découper en chapitres (rien n'est fait sans l'accord) -->
-        <div class="split-offer" id="split-offer" hidden>
-          <p><strong id="split-offer-title">Ce cours est d'un seul bloc.</strong>
-            <span class="muted">Le découper en chapitres permet de créer quiz et flashcards chapitre par chapitre.</span></p>
-          <div class="split-actions">
-            <button class="primary small" type="button" id="split-app" title="Claude découpe le cours, puis crée quiz et flashcards chapitre par chapitre">Avec l'app Claude (+ quiz et cartes)</button>
-            <button class="ghost small" type="button" id="split-auto" title="Sans IA : les titres évidents (« Chapitre 2 », « II. »…)">Découpage rapide</button>
-            <button class="link-button" type="button" id="split-keep">Garder en un seul bloc</button>
-          </div>
-        </div>
         <!-- Chapitres, quiz et flashcards se replient d'un coup (beaucoup de cours = une longue page) -->
         <button type="button" class="tree-toggle" id="tree-toggle" aria-expanded="true" aria-controls="tree-branches">
           <span class="tree-chev" aria-hidden="true"></span><span id="tree-toggle-text">Replier</span></button>
@@ -880,7 +868,7 @@
               <button class="ghost small fold-action" type="button" id="cards-revise" hidden>Réviser →</button></summary>
             <div class="fold-body">
               <div class="fold-tools">
-                <p class="muted small-text" id="cards-help">Ton classeur : clique sur une carte pour la retourner, « Modifier » pour la corriger. Le cadre montre où tu en es : argent (nouvelle), or (en cours), holographique (acquise).</p>
+                <p class="muted small-text" id="cards-help">Clique sur une carte pour la retourner. Argent : nouvelle · or : en cours · holo : acquise.</p>
                 <span class="head-actions">
                   <button class="ghost small" type="button" data-import>Importer</button>
                   <button class="ghost small" type="button" id="cards-export">Exporter</button>
@@ -901,10 +889,6 @@
         </div>
       </div>
 
-      <div class="revise-strip" id="course-revise">
-        <span id="course-revise-text"></span>
-        <a class="button primary small" id="course-revise-link" href="#/reviser">Réviser ce cours →</a>
-      </div>
       </div>
 
     </section>
@@ -1033,8 +1017,7 @@
           </label>
         </div>
         <div class="app-request" id="app-request" hidden>
-          <p class="small-text">Copie cette demande et colle-la dans l'app Claude : il lit ton cours dans Pirouette et y
-            enregistre le résultat. Pas besoin de garder Pirouette ouverte.</p>
+          <p class="small-text">Colle-la dans l'app Claude.</p>
           <p class="app-request-text" id="app-request-text"></p>
           <div class="actions">
             <button class="primary small" type="button" id="app-request-copy">Copier la demande</button>
@@ -1217,7 +1200,7 @@
       <div class="actions">
         <button id="retry-btn" class="primary">Refaire le quiz</button>
         <button id="retry-wrong-btn" class="ghost">Refaire mes erreurs</button>
-        <button id="back-course-btn" class="ghost">Retour au cours</button>
+        <button id="back-course-btn" class="ghost">Retour à la matière</button>
       </div>
       <div class="filters results-filter" role="tablist" aria-label="Questions affichées">
         <button role="tab" data-results="all">Tout</button>
@@ -1365,8 +1348,8 @@
   <!-- Messages : ajouter à mes cours ce qu'on m'a envoyé -->
   <dialog id="take-dialog" class="report-dialog">
     <form id="take-form" method="dialog">
-      <h2 id="take-title">Ajouter à mes cours</h2>
-      <div class="field"><label for="take-course">Dans quel cours ?</label><select id="take-course"></select></div>
+      <h2 id="take-title">Ajouter à mes matières</h2>
+      <div class="field"><label for="take-course">Dans quelle matière ?</label><select id="take-course"></select></div>
       <p class="status" id="take-status" hidden></p>
       <div class="actions">
         <button class="primary" type="button" id="take-go">Ajouter</button>
@@ -1380,7 +1363,7 @@
     <form id="move-file-form">
       <h2 id="move-file-title">Déplacer le fichier</h2>
       <div class="field">
-        <label for="move-file-target">Vers le cours</label>
+        <label for="move-file-target">Vers la matière</label>
         <select id="move-file-target"></select>
       </div>
       <label class="option-row"><input type="checkbox" id="move-file-items" checked> <span id="move-file-items-text">Avec ses quiz et ses flashcards</span></label>
@@ -1395,19 +1378,19 @@
   <!-- Nouveau cours -->
   <dialog id="new-course-dialog" class="report-dialog">
     <form id="new-course-form">
-      <h2>Nouveau cours</h2>
+      <h2>Ajouter un cours</h2>
       <label id="new-course-drop" class="dropzone small-drop" for="new-course-files">
         <input type="file" id="new-course-files" multiple accept=".pdf,.docx,.pptx,.pages,.key,.txt,.md,.markdown" hidden>
         <strong id="new-course-drop-title">Glisse ton cours ici</strong>
         <span class="muted small-text" id="new-course-drop-sub">ou clique pour choisir · PDF, Word, PowerPoint, Pages, Keynote, texte</span>
       </label>
       <div class="field" id="new-course-target-field">
-        <label for="new-course-target">Ranger dans</label>
+        <label for="new-course-target">Matière</label>
         <select id="new-course-target"></select>
       </div>
       <div class="field" id="new-course-name-field">
-        <label for="new-course-name">Nom du cours</label>
-        <input type="text" id="new-course-name" maxlength="120" placeholder="ex. Neurosciences, chap. 4" autocomplete="off">
+        <label for="new-course-name">Nom de la matière</label>
+        <input type="text" id="new-course-name" maxlength="120" placeholder="ex. Neurosciences" autocomplete="off">
       </div>
       <div class="field" id="new-course-folder-field">
         <label for="new-course-folder">Semestre</label>
@@ -1415,7 +1398,7 @@
       </div>
       <p class="status" id="new-course-status" hidden></p>
       <div class="actions">
-        <button class="primary" type="submit" id="new-course-create">Créer le cours</button>
+        <button class="primary" type="submit" id="new-course-create">Ajouter</button>
         <button class="ghost" type="button" id="new-course-cancel">Annuler</button>
       </div>
       <p class="small-text muted pack-link">Des quiz et flashcards exportés de Pirouette (.zip) ?
@@ -1460,7 +1443,7 @@
 
   <!-- Tout préparer : un quiz et des flashcards par chapitre, en arrière-plan -->
   <dialog class="report-dialog prepare-dialog prepare" id="prepare-panel" aria-label="Tout préparer">
-    <h2>Tout préparer pour ce cours ?</h2>
+    <h2>Options de création</h2>
     <p class="muted" id="prepare-text"></p>
     <div class="filters prepare-engine" role="radiogroup" aria-label="Avec quelle IA" hidden>
       <button type="button" role="radio" data-prepare-engine="local">IA locale (sur ton Mac)</button>
@@ -1474,10 +1457,9 @@
     <p class="heat-note" id="prepare-local-note">Tout se crée en arrière-plan, chapitre après chapitre : tu peux commencer à réviser dès que le premier
       est prêt. Ton Mac peut chauffer un peu pendant ce temps : évite d'ouvrir d'autres apps gourmandes.</p>
     <div class="app-request" id="prepare-app" hidden>
-      <p class="small-text">Copie cette demande et colle-la dans l'app Claude : il lit chaque chapitre dans Pirouette et y
-        enregistre quiz et flashcards. Pas besoin de garder Pirouette ouverte.</p>
+      <p class="small-text">Colle-la dans l'app Claude.</p>
       <p class="app-request-text" id="prepare-request"></p>
-      <p class="small-text muted">Long cours ? Claude peut s'arrêter en route (forfait) : redis-lui simplement « continue ».</p>
+      <p class="small-text muted">Claude s'arrête en route ? Dis-lui « continue ».</p>
     </div>
     <p class="status" id="prepare-status" hidden></p>
     <p class="error" id="prepare-error" hidden></p>

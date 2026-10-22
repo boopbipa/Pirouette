@@ -118,7 +118,7 @@ async function route() {
   const match = hash.match(/^#\/cours\/([0-9a-f]{12})(?:\/(nouveau\/)?([a-z]+))?/);
   // Lien actif du menu du haut
   const section = !hash || hash === "#/" ? "accueil"
-    : hash.startsWith("#/cours") || hash.startsWith("#/nouveau-cours") ? "cours"
+    : hash.startsWith("#/cours") || hash.startsWith("#/nouveau-cours") || hash.startsWith("#/reviser") ? "cours"
       : hash.startsWith("#/social/defis") ? "defis" : hash.slice(2).split("/")[0];
   document.querySelectorAll("[data-nav]").forEach((a) => a.classList.toggle("on", a.dataset.nav === section));
   try {
@@ -134,7 +134,10 @@ async function route() {
       if (room) { await loadRooms(); openChat(room); } else togglePanel(true);
     }
     else if (hash.match(/^#\/reviser\/(tout|dossier|cours)/)) await openReviewScope(...hash.slice(10).split("/"));
-    else if (hash.startsWith("#/reviser")) await openReview();
+    else if (hash.startsWith("#/reviser")) {  // l'ancienne page Réviser : c'est maintenant la liste des matières
+      history.replaceState(null, "", "#/cours");
+      await loadCourses();
+    }
     else if (hash.startsWith("#/nouveau-cours")) {
       await loadCourses();
       history.replaceState(null, "", "#/cours");
@@ -157,10 +160,10 @@ function setCrumbs(crumbs = []) {
     ? `<a href="${c.href}">${escapeHtml(c.label)}</a><span class="sep" aria-hidden="true">›</span>`
     : `<span class="here" aria-current="page">${escapeHtml(c.label)}</span>`).join("");
 }
-const COURSES_CRUMB = { label: "Mes cours", href: "#/cours" };
+const COURSES_CRUMB = { label: "Mes matières", href: "#/cours" };
 const TAB_NAMES = { chapitres: "Chapitres", quiz: "Quiz", cartes: "Flashcards", fichiers: "Fichiers" };
 function courseCrumbs(course, tab = null, ...more) {
-  const list = [COURSES_CRUMB, { label: course.name, href: `#/cours/${course.id}` }];
+  const list = [COURSES_CRUMB, { label: course.name, href: `#/reviser/cours/${course.id}` }, { label: "Gérer", href: `#/cours/${course.id}` }];
   if (tab) list.push({ label: TAB_NAMES[tab], href: `#/cours/${course.id}/${tab}` });
   return [...list, ...more.map((label) => ({ label }))];
 }
@@ -292,15 +295,21 @@ async function openHome() {
 $("#home-start").addEventListener("click", () => {
   const stats = state.stats || {};
   if (!stats.courses) return go("#/nouveau-cours");
-  go("#/reviser");
+  go("#/reviser/tout");
 });
 
 async function loadCourses() {
-  const [courses, orphans, folders] = await Promise.all([
+  const [courses, orphans, folders, progress, stats] = await Promise.all([
     api("/api/courses"), api("/api/quizzes?orphans=true"), api("/api/folders"),
+    api("/api/progress").catch(() => ({ courses: [] })), api("/api/stats").catch(() => ({})),
   ]);
   state.course = null;
+  state.newCards = null;
+  state.courseProgress = Object.fromEntries(progress.courses.map((c) => [c.id, c]));
   setCrumbs();
+  $("#review-home-exam").hidden = !stats.next_exam;
+  if (stats.next_exam) $("#review-home-exam").innerHTML = examSentence(stats.next_exam);
+  renderReviewSets();
 
   $("#course-count").textContent = courses.length ? `· ${courses.length}` : "";
   $("#courses-empty").hidden = courses.length > 0;
@@ -311,18 +320,22 @@ async function loadCourses() {
   show("courses");
 }
 
-// Mes cours (l'atelier) : ce que contient chaque cours. Réviser montre la même grille, mais où tu en es.
+// Une matière : une seule ligne utile (ce qui est à revoir) et un anneau de maîtrise. Un clic : réviser ;
+// le crayon : la gérer (ses cours, chapitres, quiz et flashcards).
 function courseCard(c) {
-  const chapters = c.files.reduce((n, f) => n + (f.chapters?.length || 0), 0);
-  const parts = [plural(c.files.length, "fichier", "fichiers"), chapters ? plural(chapters, "chapitre", "chapitres") : "",
-    `${c.quiz_count} quiz`, plural(c.card_count || 0, "carte", "cartes")].filter(Boolean);
+  const p = state.courseProgress?.[c.id];
+  const mastery = p?.cards ? Math.round((100 * p.known) / p.cards) : 0;
+  const status = !c.files.length && !c.card_count && !c.quiz_count ? "Vide : ajoute un cours"
+    : p?.today ? `<b>${p.today}</b> à revoir` : p?.cards ? "À jour" : c.quiz_count ? plural(c.quiz_count, "quiz", "quiz") : "Rien à réviser encore";
   return `
-    <a class="course-card" href="#/cours/${c.id}" draggable="false" data-course-card="${c.id}">
+    <a class="course-card" href="#/reviser/cours/${c.id}" draggable="false" data-course-card="${c.id}">
       <span class="course-main">
         <strong>${escapeHtml(c.name)}</strong>
-        <small>${parts.join(" · ")}</small>
+        <small>${status}</small>
       </span>
-      <span class="course-edit" title="Régler et modifier ce cours">${ICON_EDIT}</span>
+      ${p?.cards ? `<span class="mastery-ring" style="--m:${mastery}%" title="${p.known} cartes sues sur ${p.cards}"><span>${mastery}</span></span>` : ""}
+      <span class="course-edit" data-course-manage="${c.id}" title="Gérer cette matière" role="button">${ICON_EDIT}</span>
+      <span class="card-glare" aria-hidden="true"></span>
     </a>`;
 }
 
@@ -350,7 +363,8 @@ function folderHtml(folder, courses) {
     <details class="folder${folder.archived ? " is-archived" : ""}" data-folder="${folder.id}" ${folderOpen(folder) ? "open" : ""}>
       <summary class="folder-head drop-zone" data-drop-folder="${folder.id}">
         ${FOLDER_ICON}<strong>${escapeHtml(folder.name)}</strong>
-        <small class="muted">${plural(courses.length, "cours", "cours")}${folder.exam_week && !folder.archived ? ` · ${examLabel(folder.exam_week)}` : ""}</small>
+        <small class="muted">${plural(courses.length, "matière", "matières")}${folder.exam_week && !folder.archived ? ` · ${examLabel(folder.exam_week)}` : ""}</small>
+        ${courses.length > 1 && !folder.archived ? `<a class="button primary small folder-revise" href="#/reviser/dossier/${folder.id}">Réviser le semestre</a>` : ""}
         <span class="folder-actions">
           <button class="icon" type="button" data-folder-rename="${folder.id}" title="Renommer le semestre" aria-label="Renommer le semestre">${ICON_EDIT}</button>
           <button class="icon" type="button" data-folder-exam="${folder.id}" title="Semaine des partiels" aria-label="Semaine des partiels">${ICON_CALENDAR}</button>
@@ -361,7 +375,7 @@ function folderHtml(folder, courses) {
       </summary>
       <div class="course-grid drop-zone" data-drop-folder="${folder.id}">
         ${courses.length ? courses.map(courseCard).join("")
-          : `<p class="folder-empty muted small-text">Semestre vide : glisse un cours ici.</p>`}
+          : `<p class="folder-empty muted small-text">Glisse une matière ici.</p>`}
       </div>
     </details>`;
 }
@@ -375,7 +389,6 @@ function renderFolders(courses, folders) {
   const archived = folders.filter((f) => f.archived);
   $("#archived").hidden = !archived.length;
   $("#archived-list").innerHTML = archived.map((f) => folderHtml(f, inFolder(f))).join("");
-  $("#folders-help").hidden = !folders.length || !courses.length;
 }
 
 $("#view-courses").addEventListener("toggle", (e) => {
@@ -387,6 +400,23 @@ $("#new-folder").addEventListener("click", async () => {
   if (!name) return;
   await api("/api/folders", jsonBody("POST", { name }));
   loadCourses();
+});
+
+// Le crayon d'une matière : sa page « Gérer » (et pas la révision)
+$("#view-courses").addEventListener("click", (e) => {
+  const manage = e.target.closest("[data-course-manage]");
+  if (!manage || drag.justDropped) return;
+  e.preventDefault();
+  go(`#/cours/${manage.dataset.courseManage}`);
+}, true);
+// Au survol, la tuile se soulève un peu avec un reflet qui suit la souris (comme les flashcards). Elle grandit sans
+// bouger de place : la souris ne peut pas en sortir en la faisant bouger (pas de tremblement sur les bords).
+$("#view-courses").addEventListener("pointermove", (e) => {
+  const card = e.target.closest(".course-card");
+  if (!card || e.pointerType === "touch") return;
+  const box = card.getBoundingClientRect();
+  card.style.setProperty("--gx", `${((e.clientX - box.left) / box.width) * 100}%`);
+  card.style.setProperty("--gy", `${((e.clientY - box.top) / box.height) * 100}%`);
 });
 
 $("#view-courses").addEventListener("click", async (e) => {
@@ -408,7 +438,7 @@ $("#view-courses").addEventListener("click", async (e) => {
       await api(`/api/folders/${folder.id}`, jsonBody("PATCH", { archived: !folder.archived }));
     }
     if (folderDelete) {
-      if (!await askConfirm(`Supprimer le semestre « ${folder.name} » ? Ses cours ne sont pas supprimés : ils reviennent dans « Mes cours ».`)) return;
+      if (!await askConfirm(`Supprimer le semestre « ${folder.name} » ? Ses matières sont gardées, hors semestre.`)) return;
       await api(`/api/folders/${folder.id}`, { method: "DELETE" });
     }
     loadCourses();
@@ -1285,9 +1315,9 @@ async function openNewCourse({ folder = "" } = {}) {
   // Proposé d'office : le semestre où l'on a rangé un cours en dernier (sinon le plus récent)
   const wanted = [folder, settings.last_folder, open.at(-1)?.id].find((id) => id && open.some((f) => f.id === id));
   $("#new-course-folder").value = wanted || "";
-  // Ranger le fichier dans un cours qui existe déjà (Statistiques, Psychanalyse…) ou en créer un
+  // Ranger le cours (fichier) dans une matière qui existe déjà (Statistiques, Psychanalyse…) ou en créer une
   const folderName = Object.fromEntries(folders.map((f) => [f.id, f.name]));
-  $("#new-course-target").innerHTML = `<option value="">Un nouveau cours</option>`
+  $("#new-course-target").innerHTML = `<option value="">Une nouvelle matière</option>`
     + courses.map((c) => `<option value="${c.id}">${escapeHtml(c.name)}${folderName[c.folder_id] ? ` · ${escapeHtml(folderName[c.folder_id])}` : ""}</option>`).join("");
   $("#new-course-target").value = "";
   $("#new-course-target-field").hidden = !courses.length;
@@ -1299,8 +1329,8 @@ function renderNewCourseTarget() {
   const existing = Boolean($("#new-course-target").value);
   $("#new-course-name-field").hidden = existing;
   $("#new-course-folder-field").hidden = existing || !$("#new-course-folder").options.length || $("#new-course-folder").options.length < 2;
-  $("#new-course-create").textContent = existing ? "Ajouter au cours" : "Créer le cours";
-  $("#new-course-dialog h2").textContent = existing ? "Ajouter un fichier à un cours" : "Nouveau cours";
+  $("#new-course-create").textContent = existing ? "Ajouter à la matière" : "Créer la matière";
+  $("#new-course-dialog h2").textContent = "Ajouter un cours";
 }
 $("#new-course-target").addEventListener("change", renderNewCourseTarget);
 
@@ -1334,7 +1364,7 @@ $("#new-course-form").addEventListener("submit", async (e) => {
   e.preventDefault();
   const existing = $("#new-course-target").value;
   if (existing) {
-    if (!newCourse.files.length) return setStatus("#new-course-status", "Glisse d'abord le fichier à ajouter à ce cours.", false);
+    if (!newCourse.files.length) return setStatus("#new-course-status", "Glisse d'abord le fichier du cours.", false);
     $("#new-course-dialog").close();
     history.pushState(null, "", `#/cours/${existing}`);
     document.querySelectorAll("[data-nav]").forEach((a) => a.classList.toggle("on", a.dataset.nav === "cours"));
@@ -1343,7 +1373,7 @@ $("#new-course-form").addEventListener("submit", async (e) => {
   }
   const name = $("#new-course-name").value.trim();
   if (!name) {
-    setStatus("#new-course-status", "Donne un nom au cours (ou glisse un fichier : son nom sera repris).", false);
+    setStatus("#new-course-status", "Donne un nom à la matière.", false);
     return $("#new-course-name").focus();
   }
   $("#new-course-create").disabled = true;
@@ -1408,10 +1438,11 @@ async function openCourse(id, tab, { keepScroll = false } = {}) {
   const empty = !course.files.length && !course.quizzes.length && !course.cards.total;
   $("#start-drop").hidden = !empty;
   $("#course-tree").hidden = empty;
-  renderCourseRevise(course);
+  document.querySelectorAll("[data-manage-tab]").forEach((a) => {
+    a.href = `#/reviser/cours/${course.id}${a.dataset.manageTab ? `/${a.dataset.manageTab}` : ""}`;
+  });
   renderQuizPanel(course);
   renderFiles(course);
-  renderSplitOffer(course);
   await loadDeck();
 
   const scroll = pageScroll().scrollTop;
@@ -1431,11 +1462,10 @@ async function renderNews(course) {
   if (state.course?.id !== course.id) return;
   state.news = units;
   $("#news-card").hidden = !units.length && !course.outdated;
-  $("#news-text").textContent = [
-    units.length ? "La nouvelle version a des passages nouveaux." : "",
-    course.outdated ? `${plural(course.outdated, "question ou carte ne correspond", "questions ou cartes ne correspondent")} plus au cours.` : "",
-    "Claude peut ajouter des questions et des cartes sur les nouveautés, et corriger ou supprimer celles qui sont dépassées ; le reste ne bouge pas.",
-  ].filter(Boolean).join(" ");
+  $("#news-text").textContent = "Nouvelle version : " + [
+    units.length ? plural(units.length, "chapitre changé", "chapitres changés") : "",
+    course.outdated ? `${plural(course.outdated, "question ou carte", "questions ou cartes")} à revoir` : "",
+  ].filter(Boolean).join(", ") + ".";
   $("#news-list").innerHTML = units.map((u) => `<li><strong>${escapeHtml(u.title)}</strong>
     <small class="muted">≈ ${u.chars.toLocaleString("fr-FR")} caractères nouveaux</small></li>`).join("");
   $("#outdated-open").hidden = !course.outdated;
@@ -1468,7 +1498,6 @@ document.addEventListener("click", (e) => {
 async function renderFolderPick(course) {
   const folders = await api("/api/folders");
   state.folders = folders;
-  renderCourseRevise(course);  // le bouton « Réviser » mène au semestre du cours
   const select = $("#course-folder");
   select.innerHTML = `<option value="">Sans semestre</option>`
     + folders.map((f) => `<option value="${f.id}">${escapeHtml(f.name)}${f.archived ? " (archivé)" : ""}</option>`).join("")
@@ -1510,9 +1539,9 @@ async function renderTiles(course) {
   const focus = focusFile(course);
   const shown = data.chapters.filter((ch) => !focus || fileOf(ch) === focus).length;
   $("#fold-chapitres-count").textContent = shown ? `· ${shown}` : "";
-  // « Tout préparer » : seulement pour un cours qui vient d'être importé (encore ni quiz ni flashcards)
+  // « Prêt à créer » : seulement pour un cours qui vient d'être ajouté (encore ni quiz ni flashcards)
   const mine = data.chapters.filter((ch) => !focus || fileOf(ch) === focus);
-  $("#prepare-open").hidden = !course.files.length || !mine.length || mine.some((ch) => ch.questions || ch.cards);
+  renderReady(course, course.files.length && mine.length && !mine.some((ch) => ch.questions || ch.cards));
   $("#chapter-list").innerHTML = data.chapters.map((ch, i) => {
     // Plusieurs fichiers : seulement les chapitres du cours affiché
     if (focus && fileOf(ch) !== focus) return "";
@@ -1690,33 +1719,6 @@ const focusUnits = (course = state.course) => {
   const f = focusFile(course);
   return chapterUnits(course).filter((u) => !f || u.file === f.id);
 };
-// L'encart « découper ce cours ? » : pour le cours affiché, tant qu'il n'est ni découpé ni gardé d'un seul bloc
-function renderSplitOffer(course = state.course) {
-  const f = focusFile(course) || course?.files[0];
-  const show = Boolean(f && f.chapters_by === "none" && !chaptersRunning(f.id));
-  $("#split-offer").hidden = !show;
-  if (show) $("#split-offer-title").textContent = `« ${fileLabel(f)} » est d'un seul bloc.`;
-}
-const splitTarget = () => focusFile() || state.course.files[0];
-// L'app Claude découpe elle-même le cours, puis crée quiz et flashcards : la fenêtre « Tout préparer », côté app Claude
-$("#split-app").addEventListener("click", () => {
-  openPrepare();
-  setPrepareEngine("app");
-});
-$("#split-auto").addEventListener("click", async () => {
-  const { course } = await api(`/api/courses/${state.course.id}/files/${splitTarget().id}/chapters/auto`, { method: "POST" });
-  const found = course.files.find((x) => x.id === splitTarget().id)?.chapters.length || 0;
-  await refreshCourse();
-  const status = $("#chapters-status");
-  status.hidden = false;
-  status.className = found ? "status ok" : "status ko";
-  status.textContent = found ? `${plural(found, "chapitre repéré", "chapitres repérés")}.`
-    : "Aucun titre de chapitre évident : essaie « Avec l'app Claude », ou garde le cours en un seul bloc.";
-});
-$("#split-keep").addEventListener("click", async () => {
-  await api(`/api/courses/${state.course.id}/files/${splitTarget().id}/chapters?keep=true`, { method: "DELETE" });
-  refreshCourse();
-});
 document.addEventListener("click", async (e) => {
   const clear = e.target.closest("[data-clear-chapters]");
   if (!clear) return;
@@ -1728,7 +1730,6 @@ document.addEventListener("click", async (e) => {
 function refocus(id) {
   setFocusFile(id);
   renderFiles(state.course);
-  renderSplitOffer();
   renderTiles(state.course);
   renderQuizPanel(state.course);
   if (state.deck) renderCardGrid();
@@ -1945,7 +1946,7 @@ async function exportItem(kind, id, statusSelector) {
     if (state.desktop) {
       const { name } = await api(`/api/export/${kind}/${id}`, { method: "POST" });
       setStatus(statusSelector, kind === "course" || kind === "folder"
-        ? `Enregistré dans Téléchargements : « ${name} ». Pour le réimporter (sur ce Mac ou un autre) : Mes cours → Importer.`
+        ? `Enregistré dans Téléchargements : « ${name} ». Pour le réimporter (sur ce Mac ou un autre) : Mes matières → + Ajouter un cours → Importer.`
         : `Enregistré dans Téléchargements : « ${name} ». Envoie-le (Messages, mail…) : il s'importe dans Pirouette${kind === "cards" ? ", Anki ou Quizlet" : ""}.`, true);
     } else {
       location.href = `/api/export/${kind}/${id}`;
@@ -2060,7 +2061,7 @@ document.addEventListener("click", async (e) => {
 
 $("#rename-course").addEventListener("click", async () => {
   $("#course-more-menu").hidden = true;
-  const name = await askText("Nouveau nom du cours", state.course.name);
+  const name = await askText("Nouveau nom de la matière", state.course.name);
   if (!name) return;
   await api(`/api/courses/${state.course.id}`, jsonBody("PATCH", { name }));
   refreshCourse();
@@ -2080,7 +2081,7 @@ $("#reset-stats").addEventListener("click", async () => {
 
 $("#delete-course").addEventListener("click", async () => {
   $("#course-more-menu").hidden = true;
-  if (!await askConfirm(`Supprimer le cours « ${state.course.name} », ses fichiers, ses quiz et ses flashcards ?`)) return;
+  if (!await askConfirm(`Supprimer la matière « ${state.course.name} », ses cours, ses quiz et ses flashcards ?`)) return;
   await api(`/api/courses/${state.course.id}`, { method: "DELETE" });
   location.hash = "#/cours";
 });
@@ -3464,7 +3465,7 @@ const leaveSession = (e) => {
   e?.preventDefault();
   state.session = null;
   state.deck = null;  // les cartes ont changé : relues depuis le serveur
-  go(state.sessionBack || "#/reviser");
+  go(state.sessionBack || "#/cours");
 };
 // Fil d'Ariane d'une séance : depuis un cours (Mes cours › Cours › Flashcards › …), l'accueil ou Réviser.
 function sessionCrumbs(back, title) {
@@ -3473,10 +3474,10 @@ function sessionCrumbs(back, title) {
     return courseCrumbs(state.course, TABS.includes(inCourse[2]) ? inCourse[2] : null, title);
   }
   if (back.startsWith("#/reviser/") && state.reviewScope) {
-    return [{ label: "Réviser", href: "#/reviser" }, { label: state.reviewScope.name, href: back }, { label: title }];
+    return [COURSES_CRUMB, { label: state.reviewScope.name, href: back }, { label: title }];
   }
   if (back === "#/defis") return [{ label: "Défis", href: "#/defis" }, { label: title }];
-  return [back === "#/" ? { label: "Accueil", href: "#/" } : { label: "Réviser", href: "#/reviser" }, { label: title }];
+  return [back === "#/" ? { label: "Accueil", href: "#/" } : COURSES_CRUMB, { label: title }];
 }
 $("#session-done-back").addEventListener("click", (e) => { state.sessionBack = state.session?.back; leaveSession(e); });
 
@@ -3511,68 +3512,6 @@ $("#card-delete-current").addEventListener("click", async () => {
   else { state.sessionBack = s.back; leaveSession(); }
 });
 
-// Le cours sert à ranger et fabriquer ; on s'entraîne dans Réviser (un lien y mène).
-function renderCourseRevise(course) {
-  const { today } = course.revision;
-  $("#course-revise").hidden = !course.cards.total && !course.quizzes.length;
-  // Vers l'espace Réviser : celui du semestre du cours (plan, rétroplanning, suivi), sinon celui du cours
-  const folder = state.folders?.find((f) => f.id === course.folder_id);
-  $("#course-revise-text").innerHTML = today ? `À réviser aujourd'hui : <b>${today}</b> carte${today > 1 ? "s" : ""}` : "Rien à réviser aujourd'hui : tout est à jour.";
-  $("#course-revise-link").href = folder ? `#/reviser/dossier/${folder.id}` : `#/reviser/cours/${course.id}`;
-  $("#course-revise-link").textContent = folder ? `Réviser ${folder.name} →` : "Réviser →";
-}
-
-// ---------- Réviser : révision du jour, points faibles et suivi ----------
-// Page Réviser : d'abord quoi réviser (tout, un dossier, un cours)…
-async function openReview() {
-  state.course = null;
-  state.newCards = null;
-  const [data, folders, stats] = await Promise.all([api("/api/progress"), api("/api/folders"), api("/api/stats").catch(() => ({}))]);
-  const courses = data.courses;
-  const exam = stats.next_exam;  // les prochains partiels, rappelés en bas de la page
-  $("#review-home-exam").hidden = !exam;
-  if (exam) $("#review-home-exam").innerHTML = examSentence(exam);
-  // Même grille que Mes cours, mais chaque carte dit où tu en es : maîtrise (cartes sues) et ce qui est à revoir.
-  const card = (c) => {
-    const mastery = c.cards ? Math.round((100 * c.known) / c.cards) : 0;
-    const status = c.today ? `<b>${c.today}</b> à revoir aujourd'hui` : c.cards ? "À jour" : "Pas encore de cartes";
-    return `
-    <a class="course-card revise-course" href="#/reviser/cours/${c.id}">
-      <span class="course-main">
-        <strong>${escapeHtml(c.name)}</strong>
-        <small>${status}${c.weak ? ` · ${plural(c.weak, "point faible", "points faibles")}` : ""}</small>
-      </span>
-      <span class="revise-mastery" title="${c.cards ? `${c.known} cartes sues sur ${c.cards}` : "Pas encore de cartes"}">${c.cards ? `${mastery} %<small>maîtrise</small>` : ""}</span>
-      <span class="revise-band" style="--m:${mastery}%" aria-hidden="true"></span>
-    </a>`;
-  };
-  const group = (folder, list) => {
-    if (!list.length) return "";
-    const today = list.reduce((n, c) => n + c.today, 0);
-    const exam = folder?.exam_week && !folder.archived ? ` · ${examLabel(folder.exam_week)}` : "";
-    return `
-    <details class="folder revise-folder" data-folder="${folder?.id || ""}" ${!folder || folderOpen(folder) ? "open" : ""}>
-      <summary class="folder-head">
-        ${FOLDER_ICON}<strong>${escapeHtml(folder ? folder.name : "Sans semestre")}</strong>
-        <small class="muted">${plural(list.length, "cours", "cours")}${exam}${today ? ` · ${today} à revoir` : ""}</small>
-        ${folder && list.length > 1 ? `<a class="button primary small folder-revise" href="#/reviser/dossier/${folder.id}">Réviser le semestre</a>` : ""}
-      </summary>
-      <div class="course-grid">${list.map(card).join("")}</div>
-    </details>`;
-  };
-  const known = new Set(folders.map((f) => f.id));
-  const archived = folders.filter((f) => f.archived);
-  $("#review-pick").innerHTML = !courses.length
-    ? `<p class="empty-state muted">Pas encore de cours à réviser : crée un cours dans « Mes cours ».</p>`
-    : folders.filter((f) => !f.archived).map((f) => group(f, courses.filter((c) => c.folder_id === f.id))).join("")
-      + group(null, courses.filter((c) => !known.has(c.folder_id)))
-      + (archived.length ? `<details class="pick-archived"><summary>Archivés</summary>${
-        archived.map((f) => group(f, courses.filter((c) => c.folder_id === f.id))).join("")}</details>` : "");
-  setCrumbs();
-  show("review");
-  renderReviewSets();
-}
-
 // ---------- Réviser une sélection : des cours entiers ou certains fichiers, de matières différentes ----------
 // Une sélection s'écrit « cours:* » (tout le cours) ou « cours:fichierA,fichierB », séparés par « ; ».
 const PICK_MODES = { today: "À revoir aujourd'hui", cards: "Flashcards", quiz: "Quiz", all: "Tout réviser" };
@@ -3596,7 +3535,7 @@ $("#review-sets").addEventListener("click", async (e) => {
   const edit = e.target.closest("[data-set-edit]")?.dataset.setEdit;
   const del = e.target.closest("[data-set-delete]")?.dataset.setDelete;
   const set = (state.reviewSets || []).find((x) => x.id === (start || edit || del));
-  if (start && set) return startSession({ mode: "today", pick: set.pick }, { title: set.name, back: "#/reviser" });
+  if (start && set) return startSession({ mode: "today", pick: set.pick }, { title: set.name, back: "#/cours" });
   if (edit && set) return openPick(set);
   if (del && set) {
     if (!await askConfirm(`Supprimer la sélection « ${set.name} » ? Tes cours ne changent pas.`)) return;
@@ -3718,16 +3657,12 @@ $("#pick-go").addEventListener("click", async () => {
   const mode = pickState.mode;
   $("#pick-dialog").close();
   startSession({ mode, pick, ...(mode === "cards" ? { filter: "all" } : {}) },
-    { title: mode === "today" ? title : `${PICK_MODES[mode]} · ${title}`, back: "#/reviser" });
+    { title: mode === "today" ? title : `${PICK_MODES[mode]} · ${title}`, back: "#/cours" });
 });
-// Un semestre replié ou ouvert dans Réviser l'est aussi dans Mes cours (même préférence)
-$("#review-pick").addEventListener("toggle", (e) => {
-  const folder = e.target.closest?.("details.revise-folder");
-  if (folder?.dataset.folder) rememberFolder(folder.dataset.folder, folder.open);
-}, true);
 
 // … puis, pour ce choix, trois onglets : Réviser (plan, séance, quiz, partiel), Rétroplanning et Suivi.
 const SCOPE_TABS = { "": "Réviser", planning: "Rétroplanning", suivi: "Suivi" };
+// Une matière : un onglet de plus, « Gérer » (ses cours, chapitres, quiz et flashcards)
 
 async function openReviewScope(kind, id = "", sub = "") {
   if (kind === "cours" && sub === "partiel") return openPartielPrep(id);
@@ -3755,18 +3690,19 @@ async function openReviewScope(kind, id = "", sub = "") {
   renderReviewFiles();
   document.querySelectorAll("[data-scope-tab]").forEach((a) => {
     const t = a.dataset.scopeTab;
+    if (t === "gerer") { a.hidden = kind !== "cours"; a.href = `#/cours/${id}`; return; }
     a.href = base + (t ? `/${t}` : "");
     a.classList.toggle("active", t === tab);
     a.setAttribute("aria-selected", String(t === tab));
   });
-  $("#scope-tabs").hidden = !owner && !parent;  // « Tous mes cours » : pas de plan
+  $("#scope-tabs").hidden = !owner && !parent && kind !== "cours";  // « Tous mes cours » : pas de plan
   $("#scope-main").hidden = tab !== "";
   $("#view-review-scope").dataset.place = tab || $("#scope-main").dataset.mode;
   $("#scope-planning").hidden = tab !== "planning";
   $("#scope-suivi").hidden = tab !== "suivi";
   setCardMode(cardMode());
   $("#mix-questions").checked = mixQuestions();
-  setCrumbs([{ label: "Réviser", href: "#/reviser" }, ...(tab ? [{ label: name, href: base }, { label: SCOPE_TABS[tab] }] : [{ label: name }])]);
+  setCrumbs([COURSES_CRUMB, ...(tab ? [{ label: name, href: base }, { label: SCOPE_TABS[tab] }] : [{ label: name }])]);
   show("review-scope");
   if (tab === "planning") await renderRetro();
   else if (tab === "suivi") await renderProgress();
@@ -3886,7 +3822,7 @@ function renderDecks() {
     ${badge ? `<em>${badge}</em>` : ""}<span class="deck-pile" aria-hidden="true"><i></i><i></i><i>${CARD_BACK}</i></span>
     <b>${title}</b><small>${text}</small></button>`;
   $("#card-decks").innerHTML = !data.all.total
-    ? `<p class="muted">Pas encore de flashcards : crée-les depuis la page du cours (Mes cours).</p>`
+    ? `<p class="muted">Pas encore de flashcards : crée-les depuis l'onglet « Gérer ».</p>`
     : deck("due", "À revoir aujourd'hui", n.due ? "Les cartes que la répétition espacée te ramène" : "Rien à revoir : tout est à jour", n.due, n.due || "")
       + deck("weak", "Là où je bloque", n.weak ? `Les ${plural(n.weak, "carte", "cartes")} que tu rates le plus` : "Aucune carte difficile pour l'instant", n.weak, "")
       + deck("all", "Tout le paquet", `${plural(n.total, "carte", "cartes")}, mélangées${ch ? ` · ${escapeHtml(shortChapter(ch.title))}` : ""}`, n.total, "");
@@ -3921,7 +3857,7 @@ function renderScopeQuizzes() {
   $("#quiz-mix-text").textContent = `Piochées dans ${all.length > 1 ? `les ${all.length} quiz` : "le quiz"} de `
     + `${state.reviewFile ? `« ${fileLabel(state.reviewFile)} »` : "la matière"} (${total} questions), tous chapitres confondus.`;
   $("#scope-quizzes").innerHTML = all.length ? all.map((q) => quizItem(q, null, null, { play: true })).join("")
-    : `<li class="empty muted">Pas encore de quiz : crée-les depuis la page du cours (Mes cours).</li>`;
+    : `<li class="empty muted">Pas encore de quiz : crée-les depuis l'onglet « Gérer ».</li>`;
 }
 
 // Quelques questions au hasard dans tous les quiz du choix (un cours ou toute la matière)
@@ -3980,7 +3916,7 @@ async function renderMastery() {
   $("#mastery-card").hidden = false;
   const several = withChapters.length > 1;
   state.chapterRows = {};
-  $("#mastery-list").innerHTML = !withChapters.length ? `<p class="muted">Pas encore de chapitres : importe ton cours depuis Mes cours.</p>` : withChapters.map((c) => `
+  $("#mastery-list").innerHTML = !withChapters.length ? `<p class="muted">Pas encore de chapitres : ajoute un cours depuis l'onglet « Gérer ».</p>` : withChapters.map((c) => `
     ${several ? `<h3>${escapeHtml(c.course)}</h3>` : ""}
     <ul class="mastery-rows">${c.chapters.map((ch, i) => {
       // Plusieurs fichiers (« PARTIE 2 » dans chacun) : le nom du fichier sépare les groupes.
@@ -4336,7 +4272,7 @@ function startQuiz(quiz, questions, { back = state.quizBack } = {}) {
     : quiz.course_id ? [COURSES_CRUMB, { label: quiz.course_name || "Cours", href: `#/cours/${quiz.course_id}/quiz` }, { label: quiz.title }]
     : [COURSES_CRUMB, { label: quiz.title }]);
   $("#back-course-btn").textContent = state.quizBack === "#/defis" ? "Retour aux défis"
-    : state.quizBack ? "Retour à Réviser" : quiz.course_id ? "Retour au cours" : "Mes cours";
+    : state.quizBack ? "Retour à la matière" : quiz.course_id ? "Retour à la matière" : "Mes matières";
   show("quiz");
   renderQuestion();
 }
@@ -4528,7 +4464,7 @@ async function quitByKey() {
   if (!$("#view-exam").hidden) {
     clearInterval(state.exam?.tick);
     if (state.exam) state.exam.running = false;
-    return go(state.exam?.course ? `#/reviser/cours/${state.exam.course.id}` : "#/reviser");
+    return go(state.exam?.course ? `#/reviser/cours/${state.exam.course.id}` : "#/cours");
   }
 }
 
@@ -4623,6 +4559,12 @@ const WELCOME = [
 ];
 // Les nouveautés de chaque version (le carton « Quoi de neuf » ne s'affiche que si la version en a)
 const WHATS_NEW = {
+  "0.62.0": [
+    ["▦", "Matières : réviser et gérer au même endroit", "« Mes cours » et « Réviser » ne font plus qu'un. Un clic sur une matière : on révise ; l'onglet « Gérer » (ou le crayon) pour ses cours, quiz et flashcards"],
+    ["✎", "Matière › cours", "Une matière (Neurosciences…) contient des cours : un fichier déposé = un cours"],
+    ["✦", "« Créer avec Claude »", "Un cours tout juste ajouté : un seul bouton, Claude le découpe puis crée quiz et flashcards"],
+    ["≡", "Plus léger", "Moins de texte partout, et des tuiles qui réagissent au survol"],
+  ],
   "0.61.2": [
     ["✦", "Bulle des messages plus simple", "Une bulle toute simple, sans oreilles ni points"],
     ["⇩", "Demande pour Claude plus courte", "La boîte de la demande ne prend plus toute la place : le bouton Copier est visible sans faire défiler"],
@@ -5512,7 +5454,7 @@ async function openPartielPrep(courseId) {
   $("#partiel-history").hidden = !history.length;
   $("#partiel-history-list").innerHTML = history.map((h) => `<li><strong>${formatScore(h.score)} / 20</strong>
     <span class="muted">${formatDay(h.date)} · ${plural(h.total, "question", "questions")}${h.duration ? ` · ${formatDuration(h.duration)}` : ""}</span></li>`).join("");
-  setCrumbs([{ label: "Réviser", href: "#/reviser" }, { label: course.name, href: `#/reviser/cours/${course.id}` }, { label: "Partiel" }]);
+  setCrumbs([COURSES_CRUMB, { label: course.name, href: `#/reviser/cours/${course.id}` }, { label: "Partiel" }]);
   show("partiel");
   updatePartielMinutes();
 }
@@ -5567,7 +5509,7 @@ function startExam(course, items, { timer, minutes }) {
     state.exam.tick = setInterval(updateExamClock, 1000);
     updateExamClock();
   }
-  setCrumbs([{ label: "Réviser", href: "#/reviser" }, { label: course.name, href: `#/reviser/cours/${course.id}` },
+  setCrumbs([COURSES_CRUMB, { label: course.name, href: `#/reviser/cours/${course.id}` },
     { label: "Partiel", href: `#/reviser/cours/${course.id}/partiel` }, { label: "Épreuve" }]);
   show("exam");
   showExamItem();
@@ -6436,9 +6378,45 @@ $("#tree-toggle").addEventListener("click", () => {
   try { localStorage.setItem(`pirouette.treeFolded.${id}`, treeFolded(id) ? "0" : "1"); } catch {}
   renderTreeToggle();
 });
-$("#prepare-open").addEventListener("click", (e) => {
-  openPrepare();
+// ---- « Prêt à créer » : un cours tout juste ajouté. Un bouton copie la demande pour Claude ; l'encart suit ensuite
+// l'arrivée des quiz et des flashcards, puis disparaît.
+const ready = { course: null, step: 1, timer: null };
+function renderReady(course, waiting) {
+  const card = $("#ready-card");
+  if (ready.course === course.id && ready.step > 1 && !waiting) {  // Claude a commencé : on le montre, puis l'encart s'en va
+    setReadyStep(3);
+    $("#ready-text").textContent = "Les premiers quiz et flashcards sont là, la suite arrive.";
+    clearInterval(ready.timer);
+    return;
+  }
+  card.hidden = !waiting;
+  if (!waiting) return;
+  if (ready.course !== course.id) { ready.course = course.id; setReadyStep(1); }
+  const f = focusFile(course) || course.files[0];
+  $("#ready-title").textContent = `« ${fileLabel(f)} » est prêt`;
+  $("#ready-text").textContent = ready.step === 1 ? "Claude le découpe en chapitres, puis crée quiz et flashcards."
+    : "Demande copiée : colle-la dans l'app Claude. Les quiz arrivent ici au fur et à mesure.";
+}
+function setReadyStep(step) {
+  ready.step = step;
+  document.querySelectorAll("#ready-steps [data-step]").forEach((x) => x.classList.toggle("on", Number(x.dataset.step) <= step));
+  $("#ready-go").textContent = step === 1 ? "Créer avec Claude" : "Copier à nouveau";
+  $("#ready-go").classList.toggle("ghost", step > 1);
+  $("#ready-go").classList.toggle("primary", step === 1);
+}
+$("#ready-go").addEventListener("click", async () => {
+  await copyText(prepareRequest());
+  setReadyStep(2);
+  $("#ready-text").textContent = "Demande copiée : colle-la dans l'app Claude. Les quiz arrivent ici au fur et à mesure.";
+  // Tant que la page reste ouverte, on guette l'arrivée des premiers quiz et cartes
+  clearInterval(ready.timer);
+  const id = state.course.id;
+  ready.timer = setInterval(() => {
+    if (state.course?.id !== id || $("#view-course").hidden) return clearInterval(ready.timer);
+    renderTiles(state.course);
+  }, 8000);
 });
+$("#ready-options").addEventListener("click", () => openPrepare());
 $("#prepare-later").addEventListener("click", () => $("#prepare-panel").close());
 $("#prepare-go").addEventListener("click", async () => {
   const quizzes = $("#prepare-quizzes").checked, cards = $("#prepare-cards").checked;
