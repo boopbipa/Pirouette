@@ -4715,6 +4715,9 @@ const WELCOME = [
 ];
 // Les nouveautés de chaque version (le carton « Quoi de neuf » ne s'affiche que si la version en a)
 const WHATS_NEW = {
+  "0.64.1": [
+    ["＋", "Des captures dans tes retours", "Feedback : joins des captures d'écran ou des fichiers (glisse-les, choisis-les, ou colle une capture avec ⌘V)"],
+  ],
   "0.64.0": [
     ["⏱", "Quiz en direct", "Dans une conversation : + → Quiz en direct. Tout le monde a la même question en même temps, 20 secondes, le plus rapide marque le plus de points"],
   ],
@@ -5576,7 +5579,39 @@ new MutationObserver((changes) => {
 }).observe(document.body, { childList: true, subtree: true });
 
 // ---------- Feedback : une idée, un bug… ----------
+// Pièces jointes du retour (captures d'écran…) : choisies, glissées ou collées
+const feedbackFiles = [];
+function addFeedbackFiles(list) {
+  for (const f of list) {
+    if (feedbackFiles.length >= 6) break;
+    // Une capture collée s'appelle « image.png » : on lui donne un nom parlant
+    const named = f.name && f.name !== "image.png" ? f : new File([f], `capture-${feedbackFiles.length + 1}.${(f.type.split("/")[1] || "png")}`, { type: f.type });
+    feedbackFiles.push(named);
+  }
+  renderFeedbackFiles();
+}
+function renderFeedbackFiles() {
+  const list = $("#feedback-list");
+  list.hidden = !feedbackFiles.length;
+  list.innerHTML = feedbackFiles.map((f, i) => `<li>${f.type.startsWith("image/") ? `<img src="${URL.createObjectURL(f)}" alt="">` : `<span class="ff-ic">${ICON_FILE}</span>`}
+    <span class="ff-name">${escapeHtml(f.name)}</span><button class="icon" type="button" data-ff-remove="${i}" aria-label="Retirer">✕</button></li>`).join("");
+}
+$("#feedback-files").addEventListener("change", (e) => { addFeedbackFiles(e.target.files); e.target.value = ""; });
+$("#feedback-list").addEventListener("click", (e) => {
+  const i = e.target.closest("[data-ff-remove]")?.dataset.ffRemove;
+  if (i !== undefined) { feedbackFiles.splice(Number(i), 1); renderFeedbackFiles(); }
+});
+["dragenter", "dragover"].forEach((ev) => $("#feedback-drop").addEventListener(ev, (e) => { e.preventDefault(); $("#feedback-drop").classList.add("over"); }));
+["dragleave", "drop"].forEach((ev) => $("#feedback-drop").addEventListener(ev, (e) => { e.preventDefault(); $("#feedback-drop").classList.remove("over"); }));
+$("#feedback-drop").addEventListener("drop", (e) => addFeedbackFiles(e.dataTransfer.files));
+$("#feedback-dialog").addEventListener("paste", (e) => {
+  const files = [...(e.clipboardData?.files || [])];
+  if (files.length) { e.preventDefault(); addFeedbackFiles(files); }
+});
+
 $("#feedback-btn").addEventListener("click", () => {
+  feedbackFiles.length = 0;
+  renderFeedbackFiles();
   $("#feedback-message").value = "";
   $("#feedback-status").hidden = true;
   $("#feedback-send").disabled = false;
@@ -5590,11 +5625,16 @@ $("#feedback-form").addEventListener("submit", async (e) => {
     || document.querySelector("[data-nav].on")?.textContent || "";
   $("#feedback-send").disabled = true;
   try {
-    const result = await api("/api/feedback/general", jsonBody("POST", {
-      kind: $("#feedback-kind").value, message: $("#feedback-message").value, page: where,
-    }));
-    if (!result.opened) window.location.href = result.mailto;
-    setStatus("#feedback-status", "Merci ! Ton app Mail s'ouvre avec le message prêt : il ne reste qu'à cliquer sur Envoyer.", true);
+    const form = new FormData();
+    form.append("kind", $("#feedback-kind").value);
+    form.append("message", $("#feedback-message").value);
+    form.append("page", where);
+    feedbackFiles.forEach((f) => form.append("files", f, f.name));
+    const result = await api("/api/feedback/general", { method: "POST", body: form });
+    if (!result.opened && result.mailto) window.location.href = result.mailto;
+    setStatus("#feedback-status", result.attached ? "Merci ! Mail s'ouvre avec le message et tes fichiers : il ne reste qu'à cliquer sur Envoyer."
+      : result.files ? "Merci ! Ton mail s'ouvre avec le message ; glisse-y les fichiers du dossier qui vient de s'ouvrir, puis Envoyer."
+        : "Merci ! Ton app Mail s'ouvre avec le message prêt : il ne reste qu'à cliquer sur Envoyer.", true);
     setTimeout(() => $("#feedback-dialog").close(), 4000);
   } catch (err) {
     setStatus("#feedback-status", err.message, false);

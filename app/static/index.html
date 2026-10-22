@@ -1603,6 +1603,12 @@
       </div>
       <label class="field" for="feedback-message">Ton message</label>
       <textarea id="feedback-message" rows="5" placeholder="Ex. : ce serait bien de pouvoir…"></textarea>
+      <!-- Des captures d'écran ou des fichiers : glissés, choisis, ou collés (⌘V) -->
+      <label class="feedback-drop" id="feedback-drop" for="feedback-files">
+        <input type="file" id="feedback-files" multiple hidden>
+        <span>Joindre une capture ou un fichier</span><small class="muted">glisse-les ici, clique, ou colle une capture (⌘V)</small>
+      </label>
+      <ul class="feedback-files" id="feedback-list" hidden></ul>
       <p class="status" id="feedback-status" hidden></p>
       <div class="actions">
         <button class="primary" type="submit" id="feedback-send">Envoyer</button>

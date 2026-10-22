@@ -2833,21 +2833,93 @@ def _mail(subject: str, text: str) -> dict:
 FEEDBACK_KINDS = {"idee": "Idée", "bug": "Bug", "autre": "Autre"}
 
 
-class GeneralFeedbackIn(BaseModel):
-    kind: str = "idee"
-    message: str
-    page: str = ""  # où l'on était dans l'app
+FEEDBACK_MAX_FILES, FEEDBACK_MAX_BYTES = 6, 15 * 1024 * 1024  # pièces jointes d'un retour (captures…)
+
+
+def _mail_app_is_default() -> bool:
+    """Mail (Apple) est-il l'app de mail par défaut du Mac ? (sinon : Gmail dans le navigateur, Outlook…)"""
+    import plistlib
+
+    path = Path.home() / "Library/Preferences/com.apple.LaunchServices/com.apple.launchservices.secure.plist"
+    try:
+        handlers = plistlib.loads(path.read_bytes()).get("LSHandlers", [])
+    except Exception:
+        return True  # rien de réglé : c'est Mail
+    chosen = next((h.get("LSHandlerRoleAll") for h in handlers if h.get("LSHandlerURLScheme") == "mailto"), None)
+    return not chosen or chosen.lower() == "com.apple.mail"
+
+
+def _mail_with_files(subject: str, text: str, files: list[Path]) -> bool:
+    """Un mail prêt à partir dans Mail, pièces jointes comprises (Mac). False si ce n'est pas possible."""
+    script = """on run argv
+  set theSubject to item 1 of argv
+  set theBody to item 2 of argv
+  set theTo to item 3 of argv
+  tell application "Mail"
+    set m to make new outgoing message with properties {subject:theSubject, content:theBody & return & return, visible:true}
+    tell m
+      make new to recipient at end of to recipients with properties {address:theTo}
+      repeat with i from 4 to count of argv
+        make new attachment with properties {file name:(POSIX file (item i of argv) as alias)} at after last paragraph of content
+      end repeat
+    end tell
+    activate
+  end tell
+end run"""
+    try:
+        return subprocess.run(["osascript", "-e", script, subject, text, FEEDBACK_EMAIL, *map(str, files)],
+                              capture_output=True, timeout=30).returncode == 0
+    except Exception:
+        return False
 
 
 @app.post("/api/feedback/general")
-async def general_feedback(body: GeneralFeedbackIn) -> dict:
-    """Un retour sur l'app (idée, bug…), depuis le bouton Feedback du menu."""
+async def general_feedback(kind: str = Form("idee"), message: str = Form(""), page: str = Form(""),
+                           files: list[UploadFile] = File([])) -> dict:
+    """Un retour sur l'app (idée, bug…), depuis le bouton Feedback du menu, avec des fichiers si besoin (captures…).
+    Sur Mac avec l'app Mail, ils sont joints au mail ; sinon, Pirouette ouvre le dossier où ils sont rangés,
+    pour les glisser dans le mail."""
+    from datetime import datetime
+
     from . import __version__
 
-    message = body.message.strip()
+    message = message.strip()
     if not message:
         raise HTTPException(400, "Écris ton retour avant de l'envoyer.")
-    kind = FEEDBACK_KINDS.get(body.kind, "Autre")
-    store.add_feedback({"kind": kind, "message": message, "page": body.page[:200]})
-    text = "\n".join([message, "", f"Type : {kind}", f"Page : {body.page or '—'}", f"Pirouette {__version__}"])
-    return _mail(f"Pirouette · retour ({kind})", text)
+    label = FEEDBACK_KINDS.get(kind, "Autre")
+    saved: list[Path] = []
+    if files:
+        if len(files) > FEEDBACK_MAX_FILES:
+            raise HTTPException(400, f"{FEEDBACK_MAX_FILES} fichiers au plus.")
+        folder = store.root / "feedback" / datetime.now().strftime("%Y-%m-%d %H-%M-%S")
+        folder.mkdir(parents=True, exist_ok=True)
+        for upload in files:
+            data = await upload.read()
+            if len(data) > FEEDBACK_MAX_BYTES:
+                raise HTTPException(400, f"« {upload.filename} » est trop lourd (15 Mo au plus).")
+            name = Path(upload.filename or "fichier").name or "fichier"
+            target = folder / name
+            n = 1
+            while target.exists():
+                n += 1
+                target = folder / f"{Path(name).stem} ({n}){Path(name).suffix}"
+            target.write_bytes(data)
+            saved.append(target)
+    store.add_feedback({"kind": label, "message": message, "page": page[:200], "files": [p.name for p in saved]})
+    lines = [message, "", f"Type : {label}", f"Page : {page or '—'}", f"Pirouette {__version__}"]
+    subject = f"Pirouette · retour ({label})"
+    desktop_mac = os.getenv("PIROUETTE_DESKTOP") == "1" and sys.platform == "darwin"
+    if saved and desktop_mac and _mail_app_is_default() and _mail_with_files(subject, "\n".join(lines), saved):
+        return {"opened": True, "attached": True, "files": len(saved)}
+    if saved:
+        lines.append(f"Fichiers à joindre : {', '.join(p.name for p in saved)}")
+    result = _mail(subject, "\n".join(lines))
+    if saved and os.getenv("PIROUETTE_DESKTOP") == "1":  # le dossier des fichiers s'ouvre, pour les glisser dans le mail
+        if sys.platform == "darwin":
+            subprocess.run(["open", str(saved[0].parent)], capture_output=True)
+        elif os.name == "nt":
+            try:
+                os.startfile(str(saved[0].parent))
+            except OSError:
+                pass
+    return result | {"attached": False, "files": len(saved)}

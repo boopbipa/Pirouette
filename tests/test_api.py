@@ -427,13 +427,18 @@ def test_cards_edited_and_written_by_hand(client):
 
 
 def test_general_feedback(client):
-    assert client.post("/api/feedback/general", json={"message": "  "}).status_code == 400
-    result = client.post("/api/feedback/general", json={"kind": "bug", "message": "Le glisser ne marche pas",
+    assert client.post("/api/feedback/general", data={"message": "  "}).status_code == 400
+    result = client.post("/api/feedback/general", data={"kind": "bug", "message": "Le glisser ne marche pas",
                                                         "page": "Mes cours"}).json()
     assert result["subject"] == "Pirouette · retour (Bug)" and "Page : Mes cours" in result["body"]
     assert result["mailto"].startswith("mailto:gonnetpierrelouis@gmail.com?subject=")
     saved = json.loads((main.store.root / "feedback.json").read_text())
     assert saved[-1]["kind"] == "Bug" and saved[-1]["message"] == "Le glisser ne marche pas"
+    # Avec une capture : rangée dans data/feedback/…, et nommée dans le mail (à glisser dedans hors de l'app Mail)
+    result = client.post("/api/feedback/general", data={"kind": "bug", "message": "Regarde"},
+                         files=[("files", ("capture.png", b"\x89PNG fausse image", "image/png"))]).json()
+    assert result["files"] == 1 and not result["attached"] and "capture.png" in result["body"]
+    assert len(list((main.store.root / "feedback").glob("*/capture.png"))) == 1
 
 
 def test_local_model_falls_back_to_an_installed_one(monkeypatch):
