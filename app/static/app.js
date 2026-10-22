@@ -4623,6 +4623,10 @@ const WELCOME = [
 ];
 // Les nouveautés de chaque version (le carton « Quoi de neuf » ne s'affiche que si la version en a)
 const WHATS_NEW = {
+  "0.61.2": [
+    ["✦", "Bulle des messages plus simple", "Une bulle toute simple, sans oreilles ni points"],
+    ["⇩", "Demande pour Claude plus courte", "La boîte de la demande ne prend plus toute la place : le bouton Copier est visible sans faire défiler"],
+  ],
   "0.61.1": [
     ["＋", "Nouveau cours bien rangé", "Il est proposé d'office dans le dernier semestre où tu as rangé un cours"],
     ["✓", "Cartes plus justes", "Claude vérifie que le verso répond bien au recto (et la réponse à la question)"],
