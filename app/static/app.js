@@ -103,6 +103,9 @@ const pageScroll = () => document.getElementById("page-scroll");
 function show(view) {
   document.querySelectorAll(".view").forEach((v) => (v.hidden = v.id !== `view-${view}`));
   document.body.classList.toggle("on-home", view === "home");  // l'accueil a déjà son grand logo au centre
+  // Séances, quiz et partiels : mode concentration (fond noir, rien que la carte ou la question)
+  document.body.classList.toggle("focus", ["cards", "quiz", "exam"].includes(view));
+  if (view !== "cards") document.body.classList.remove("card-zoomed");
   pageScroll().scrollTo(0, 0);
   // Flèches, Page bas, Espace : c'est ce cadre qui défile (sauf si on écrit dans un champ)
   if (document.activeElement === document.body) pageScroll().focus({ preventScroll: true });
@@ -117,14 +120,14 @@ async function route() {
   else foldJobs();
   const match = hash.match(/^#\/cours\/([0-9a-f]{12})(?:\/(nouveau\/)?([a-z]+))?/);
   // Lien actif du menu du haut
-  const section = !hash || hash === "#/" ? "accueil"
+  const section = !hash || hash === "#/" ? "cours"
     : hash.startsWith("#/cours") || hash.startsWith("#/nouveau-cours") || hash.startsWith("#/reviser") ? "cours"
       : hash.startsWith("#/social/defis") ? "defis" : hash.slice(2).split("/")[0];
   document.querySelectorAll("[data-nav]").forEach((a) => a.classList.toggle("on", a.dataset.nav === section));
   try {
     if (match && match[2]) await openCreate(match[1], match[3] === "quiz" ? "quiz" : "cartes");
     else if (match) await openCourse(match[1], match[3]);
-    else if (hash.startsWith("#/reglages")) await openSettings();
+    else if (hash.startsWith("#/reglages")) { await openSettings(); showPref(hash.split("/")[2]); }
     else if (hash.startsWith("#/defis") || hash.startsWith("#/social/defis")) await openOnline();
     // Anciens liens des messages : la conversation s'ouvre dans sa fenêtre (en bas à droite), sur l'accueil
     else if (hash.startsWith("#/messages") || hash.startsWith("#/social")) {
@@ -144,7 +147,7 @@ async function route() {
       openNewCourse();
     }
     else if (hash.startsWith("#/cours")) await loadCourses();
-    else await openHome();
+    else await openStart();
   } catch (err) {
     notify(err.message);
     location.hash = "#/cours";
@@ -274,6 +277,18 @@ $("#home-guide").addEventListener("click", async (e) => {
   }
 });
 
+// L'app s'ouvre sur les matières ; l'ancien accueil ne sert plus qu'au tout premier lancement (le guide).
+async function openStart() {
+  const stats = await api("/api/stats").catch(() => ({ courses: 1 }));
+  return stats.courses ? loadCourses() : openHome();
+}
+// « Bonjour, Pierre-Louis » le jour, « Bonsoir » le soir
+function helloText(name) {
+  const hour = new Date().getHours();
+  const word = hour >= 18 || hour < 5 ? "Bonsoir" : "Bonjour";
+  return name ? `${word}, ${name}` : word;
+}
+
 async function openHome() {
   const [profile, stats, config, folders] = await Promise.all([api("/api/profile"), api("/api/stats"), api("/api/config"), api("/api/folders")]);
   const guiding = renderGuide(config, folders, stats);
@@ -299,10 +314,13 @@ $("#home-start").addEventListener("click", () => {
 });
 
 async function loadCourses() {
-  const [courses, orphans, folders, progress, stats] = await Promise.all([
+  const [courses, orphans, folders, progress, stats, profile] = await Promise.all([
     api("/api/courses"), api("/api/quizzes?orphans=true"), api("/api/folders"),
     api("/api/progress").catch(() => ({ courses: [] })), api("/api/stats").catch(() => ({})),
+    api("/api/profile").catch(() => ({ name: "", asked: true })),
   ]);
+  state.profile = profile;
+  renderTodayBar(profile, progress);
   state.course = null;
   state.newCards = null;
   state.courseProgress = Object.fromEntries(progress.courses.map((c) => [c.id, c]));
@@ -320,6 +338,37 @@ async function loadCourses() {
   show("courses");
 }
 
+// En haut des matières : la salutation, puis la révision du jour de toutes les matières et la maîtrise d'ensemble
+function renderTodayBar(profile, progress) {
+  $("#hello").textContent = helloText(profile.name);
+  $("#name-prompt").hidden = profile.asked;
+  const today = progress.today || { cards: 0, questions: 0 };
+  const list = progress.courses || [];
+  const total = list.reduce((n, c) => n + (c.cards || 0), 0), known = list.reduce((n, c) => n + (c.known || 0), 0);
+  $("#today-bar").hidden = !total && !today.questions;
+  const mastery = total ? Math.round((100 * known) / total) : 0;
+  $("#today-ring").style.setProperty("--m", `${mastery}%`);
+  $("#today-ring span").textContent = mastery;
+  $("#today-ring").title = total ? `${known} cartes sues sur ${total}` : "";
+  const due = today.cards + (mixQuestions() ? today.questions : 0);
+  const subjects = list.filter((c) => c.today).length;
+  const parts = [today.cards ? plural(today.cards, "carte", "cartes") : "",
+    mixQuestions() && today.questions ? plural(today.questions, "question", "questions") : ""].filter(Boolean);
+  $("#today-title").textContent = due ? `${parts.join(" et ")} aujourd'hui` : "Tout est à jour aujourd'hui";
+  const minutes = Math.max(1, Math.round(today.cards * 0.2 + (mixQuestions() ? today.questions * 0.5 : 0)));
+  $("#today-sub").textContent = due ? `${subjects > 1 ? `${subjects} matières · ` : ""}environ ${minutes} min` : "Reviens demain, ou révise une matière en particulier";
+  $("#today-go").hidden = !due;
+}
+$("#today-go").addEventListener("click", () => startSession({ mode: "today" }, { title: "Révision du jour", back: "#/cours" }));
+
+// Une couleur par matière, adoucie, toujours la même (tirée de son identifiant)
+const SUBJECT_COLORS = ["#B4532A", "#5B7A99", "#6E8B6A", "#8E7499", "#A88A5C", "#4F8A8B", "#A0606E"];
+function subjectColor(id) {
+  let h = 0;
+  for (const ch of String(id || "")) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+  return SUBJECT_COLORS[h % SUBJECT_COLORS.length];
+}
+
 // Une matière : une seule ligne utile (ce qui est à revoir) et un anneau de maîtrise. Un clic : réviser ;
 // le crayon : la gérer (ses cours, chapitres, quiz et flashcards).
 function courseCard(c) {
@@ -328,7 +377,8 @@ function courseCard(c) {
   const status = !c.files.length && !c.card_count && !c.quiz_count ? "Vide : ajoute un cours"
     : p?.today ? `<b>${p.today}</b> à revoir` : p?.cards ? "À jour" : c.quiz_count ? plural(c.quiz_count, "quiz", "quiz") : "Rien à réviser encore";
   return `
-    <a class="course-card" href="#/reviser/cours/${c.id}" draggable="false" data-course-card="${c.id}">
+    <a class="course-card" href="#/reviser/cours/${c.id}" draggable="false" data-course-card="${c.id}" style="--c:${subjectColor(c.id)}">
+      <span class="subject-dot" aria-hidden="true"></span>
       <span class="course-main">
         <strong>${escapeHtml(c.name)}</strong>
         <small>${status}</small>
@@ -411,6 +461,13 @@ $("#view-courses").addEventListener("click", (e) => {
 }, true);
 // Au survol, la tuile se soulève un peu avec un reflet qui suit la souris (comme les flashcards). Elle grandit sans
 // bouger de place : la souris ne peut pas en sortir en la faisant bouger (pas de tremblement sur les bords).
+$("#course-tabs").addEventListener("pointermove", (e) => {
+  const row = e.target.closest(".course-tab");
+  if (!row) return;
+  const box = row.getBoundingClientRect();
+  row.style.setProperty("--gx", `${((e.clientX - box.left) / box.width) * 100}%`);
+  row.style.setProperty("--gy", `${((e.clientY - box.top) / box.height) * 100}%`);
+});
 $("#view-courses").addEventListener("pointermove", (e) => {
   const card = e.target.closest(".course-card");
   if (!card || e.pointerType === "touch") return;
@@ -562,6 +619,7 @@ async function saveName(name) {
   state.profile = await api("/api/profile", jsonBody("PUT", { name }));
   $("#name-prompt").hidden = true;
   $("#greeting").textContent = pickGreeting(state.profile.name);
+  $("#hello").textContent = helloText(state.profile.name);
 }
 
 $("#name-prompt").addEventListener("submit", (e) => {
@@ -570,6 +628,53 @@ $("#name-prompt").addEventListener("submit", (e) => {
 });
 $("#name-skip").addEventListener("click", () => saveName(""));
 // ---------- Réglages ----------
+// Rangés comme les Réglages du Mac : un menu à gauche, une rubrique à la fois (ses cartes), avec un en-tête
+const PREF_ICON = (d) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg>`;
+const PREFS = [
+  { id: "revisions", label: "Révisions", desc: "Ton rythme, et comment tu réponds.", cards: ["revision-card", "definitions-card"],
+    icon: '<rect x="4" y="6" width="12" height="15" rx="2"/><path d="M8 3h10a2 2 0 0 1 2 2v12"/>' },
+  { id: "claude", label: "App Claude", desc: "Branche Claude pour créer quiz et flashcards à partir de tes cours.",
+    cards: ["claude-app-card", "settings-key-form", "local-ai"], icon: '<path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z"/>' },
+  { id: "apparence", label: "Apparence", desc: "Clair ou sombre, et la couleur de l'app.", cards: ["theme-card", "appearance-card"],
+    icon: '<circle cx="12" cy="12" r="8"/><path d="M12 4a8 8 0 0 1 0 16z" fill="currentColor"/>' },
+  { id: "clavier", label: "Clavier", desc: "Les touches pour réviser sans la souris.", cards: ["keys-card"],
+    icon: '<rect x="3" y="7" width="18" height="11" rx="2"/><path d="M7 11h.01M11 11h.01M15 11h.01M8 15h8"/>' },
+  { id: "donnees", label: "Sauvegarde", desc: "Tes sauvegardes, et récupérer tes anciens cours.", cards: ["data-card"],
+    icon: '<path d="M12 4v10M8 10l4 4 4-4M5 19h14"/>' },
+  { id: "apropos", label: "À propos", desc: "La version de Pirouette et ses nouveautés.", cards: ["version-card"],
+    icon: '<circle cx="12" cy="12" r="8"/><path d="M12 11v5M12 8h.01"/>' },
+];
+const PROFILE_PREF = { id: "profil", label: "Ton prénom", desc: "Pour te dire bonjour en ouvrant Pirouette.", cards: ["settings-name-form"] };
+function renderPrefsSide() {
+  const name = state.profile?.name || "";
+  const initials = (name || "?").split(/[\s-]+/).filter(Boolean).map((w) => w[0]).join("").slice(0, 2).toUpperCase();
+  $("#prefs-side").innerHTML = `<button type="button" class="pref-item pref-me" data-pref="profil"><span class="pref-avatar">${escapeHtml(initials)}</span>
+      <span><b>${escapeHtml(name || "Ton prénom")}</b><small>${name ? "Modifier ton prénom" : "Pour te dire bonjour"}</small></span></button>`
+    + PREFS.map((x) => `<button type="button" class="pref-item" data-pref="${x.id}"><span class="pref-ic">${PREF_ICON(x.icon)}</span>${x.label}</button>`).join("");
+}
+function showPref(id) {
+  let saved = null;
+  try { saved = localStorage.getItem("pirouette.prefs"); } catch {}
+  const pref = [PROFILE_PREF, ...PREFS].find((x) => x.id === id) || [PROFILE_PREF, ...PREFS].find((x) => x.id === saved) || PREFS[0];
+  try { localStorage.setItem("pirouette.prefs", pref.id); } catch {}
+  renderPrefsSide();
+  document.querySelectorAll("#prefs-side [data-pref]").forEach((b) => b.classList.toggle("on", b.dataset.pref === pref.id));
+  const all = [PROFILE_PREF, ...PREFS].flatMap((x) => x.cards);
+  all.forEach((card) => $(`#${card}`)?.classList.toggle("pref-off", !pref.cards.includes(card)));
+  if (pref.id === "clavier") $("#keys-card").open = true;
+  // Le titre d'une carte qui répète celui de la rubrique (« Révisions » dans Révisions) est masqué
+  pref.cards.forEach((card) => {
+    const h2 = $(`#${card}`)?.querySelector("h2, summary h2");
+    if (h2) h2.classList.toggle("pref-dup", pref.cards.filter((x) => !$(`#${x}`)?.hidden).length === 1
+      || h2.textContent.trim().toLowerCase() === pref.label.toLowerCase());
+  });
+  $("#prefs-head").innerHTML = pref.icon ? `<span class="prefs-head-ic">${PREF_ICON(pref.icon)}</span><h2>${pref.label}</h2><p>${pref.desc}</p>`
+    : `<h2>${pref.label}</h2><p>${pref.desc}</p>`;
+}
+$("#prefs-side").addEventListener("click", (e) => {
+  const item = e.target.closest("[data-pref]");
+  if (item) { history.replaceState(null, "", `#/reglages/${item.dataset.pref}`); showPref(item.dataset.pref); }
+});
 const isDesktop = () => Boolean(window.pywebview?.api);
 
 async function openSettings() {
@@ -578,6 +683,7 @@ async function openSettings() {
   renderThemeChoice(settings.theme || "auto");
   $("#settings-name").value = settings.name;
   showSettingsName(settings.name);
+  state.profile = { ...(state.profile || {}), name: settings.name };
   const claude = settings.claude;
   $("#settings-key-state").innerHTML = claude.configured
     ? `<span class="ok-text">✓ Clé enregistrée</span> <span class="muted">(${escapeHtml(claude.hint)} · modèle ${escapeHtml(claude.model)})</span>`
@@ -1262,6 +1368,8 @@ $("#settings-name-form").addEventListener("submit", async (e) => {
   state.profile = { name: settings.name, asked: true };
   showSettingsName(settings.name);
   setStatus("#settings-name-status", settings.name ? `Enchanté, ${settings.name} !` : "Prénom retiré.", true);
+  renderPrefsSide();
+  document.querySelector('#prefs-side [data-pref="profil"]')?.classList.add("on");
 });
 function showSettingsName(name) {
   $("#settings-name-show").hidden = !name;
@@ -1443,6 +1551,8 @@ async function openCourse(id, tab, { keepScroll = false } = {}) {
   if (!TABS.includes(tab)) tab = null;
   state.tab = tab;
   $("#course-name").textContent = course.name;
+  $("#course-dot").style.background = subjectColor(course.id);
+  $("#course-tree").style.setProperty("--c", subjectColor(course.id));
   setCrumbs(courseCrumbs(course));
   renderFolderPick(course);
   renderTiles(course);
@@ -1456,6 +1566,7 @@ async function openCourse(id, tab, { keepScroll = false } = {}) {
   renderQuizPanel(course);
   renderFiles(course);
   await loadDeck();
+  renderFiles(course);  // les lignes des cours affichent aussi leurs flashcards (paquet chargé)
 
   const scroll = pageScroll().scrollTop;
   show("course");
@@ -1785,9 +1896,17 @@ function renderFiles(course) {
   const focus = focusFile(course) || course.files[0] || null;
   $("#course-tabs").hidden = !focus;
   $("#course-tree").classList.toggle("tabbed", Boolean(focus));
-  $("#course-tabs").innerHTML = focus ? course.files.map((f) => `<button type="button" role="tab" class="course-tab${f === focus ? " active" : ""}"
-      data-file-focus="${f.id}" aria-selected="${f === focus}" title="${escapeHtml(f.name)}">${ICON_FILE}<span>${escapeHtml(fileLabel(f))}</span></button>`).join("")
-    + `<label class="course-tab add" for="file-input" title="Ajouter un autre cours à la matière">+</label>` : "";
+  // Une ligne par cours (fichier), avec ses chiffres ; celui ouvert montre dessous ses chapitres, quiz et flashcards
+  const deck = state.deck?.course_id === course.id ? state.deck.cards : null;
+  const chip = (n, one, many) => `<span class="row-chip">${plural(n, one, many)}</span>`;
+  $("#course-tabs").innerHTML = focus ? course.files.map((f) => {
+    const quizzes = course.quizzes.filter((q) => ownerFile(q.scope, q.sources, course.files)?.id === f.id).length;
+    const cards = deck ? deck.filter((c) => ownerFile(c.scope, c.origin, course.files)?.id === f.id).length : null;
+    return `<button type="button" role="tab" class="course-tab${f === focus ? " active" : ""}" data-file-focus="${f.id}"
+      aria-selected="${f === focus}" title="${escapeHtml(f.name)}"><span class="row-doc">${ICON_FILE}</span><span class="row-name">${escapeHtml(fileLabel(f))}</span>
+      ${f.chapters?.length ? chip(f.chapters.length, "chapitre", "chapitres") : ""}${quizzes ? chip(quizzes, "quiz", "quiz") : ""}${cards ? chip(cards, "carte", "cartes") : ""}
+      <span class="row-chev" aria-hidden="true">›</span><span class="card-glare" aria-hidden="true"></span></button>`;
+  }).join("") + `<label class="course-tab add" for="file-input">+ Ajouter un cours<span class="card-glare" aria-hidden="true"></span></label>` : "";
   const shown = focus ? [focus] : course.files;
   $("#source-names").innerHTML = shown.map((f) => `<span class="source-name">${ICON_FILE}<strong>${escapeHtml(fileLabel(f))}</strong>
       <button class="icon rename-file" type="button" data-rename-file="${f.id}" title="Renommer ce cours" aria-label="Renommer ce cours">${ICON_EDIT}</button></span>`).join("")
@@ -2377,7 +2496,7 @@ async function loadConfig({ keepSelection = false } = {}) {
   claudeStatus.classList.toggle("warn", !config.claude.available);
   claudeStatus.innerHTML = config.claude.available
     ? `Meilleure qualité · ${escapeHtml(config.claude.default_model)}`
-    : `Ajoute ta clé API dans <a href="#/reglages">Réglages</a>`;
+    : `Ajoute ta clé API dans <a href="#/reglages/claude">Réglages</a>`;
 
   const select = $("#local-model");
   const previous = select.value;
@@ -2398,7 +2517,7 @@ async function loadConfig({ keepSelection = false } = {}) {
   document.querySelector(`input[name=provider][value=${provider}]`).checked = true;
   api("/api/claude-app").then((info) => {
     $("#app-status").innerHTML = info.installed ? "Avec ton abonnement Claude · branchée"
-      : `À brancher d'abord dans <a href="#/reglages">Réglages</a>`;
+      : `À brancher d'abord dans <a href="#/reglages/claude">Réglages</a>`;
     $("#app-status").classList.toggle("warn", !info.installed);
   }).catch(() => {});
   updateProviderUi();
@@ -2987,6 +3106,8 @@ $("#flashcard").addEventListener("animationend", (e) => {
 function flattenCard() {
   const el = $("#flashcard");
   el.classList.remove("tilting");
+  el.style.setProperty("--sx", "0px");
+  el.style.setProperty("--sy", "0px");
   el.style.setProperty("--rx", "0deg");
   el.style.setProperty("--ry", "0deg");
 }
@@ -3003,10 +3124,12 @@ $(".tcg-table").addEventListener("pointermove", (e) => {
   el.style.setProperty("--rx", `${(0.5 - y) * 14}deg`);
   el.style.setProperty("--mx", `${x * 100}%`);
   el.style.setProperty("--my", `${y * 100}%`);
+  el.style.setProperty("--sx", `${(0.5 - x) * 30}px`);
+  el.style.setProperty("--sy", `${(0.5 - y) * 22}px`);
 });
 // Zoom : pincer sur le trackpad, la souris sur la carte (Safari : événements « gesture », sinon molette + ctrl).
 // Plafonné pour que la carte tienne dans la fenêtre (et ne soit jamais floue ou trop grosse pour se lire).
-const ZOOM_MAX = 2;
+const ZOOM_MAX = 2.6;
 function zoomCard(next) {
   const el = $("#flashcard");
   // Taille et place sans le zoom en cours (la carte peut être en pleine animation)
@@ -3015,12 +3138,14 @@ function zoomCard(next) {
   const z = Math.max(1, Math.min(next, Math.max(1, room)));
   el.style.setProperty("--zoom", z.toFixed(3));
   el.classList.toggle("zoomed", z > 1.01);
+  document.body.classList.toggle("card-zoomed", z > 1.01);  // le reste passe derrière, flouté
   if (z > 1.01) { el.style.setProperty("--rx", "0deg"); el.style.setProperty("--ry", "0deg"); }
 }
 function unzoomCard() {
   const el = $("#flashcard");
   el.style.setProperty("--zoom", "1");
   el.classList.remove("zoomed", "zooming");
+  document.body.classList.remove("card-zoomed");
 }
 let gestureStart = 1;
 $("#flashcard").addEventListener("gesturestart", (e) => {
@@ -3036,6 +3161,8 @@ $("#flashcard").addEventListener("wheel", (e) => {
   $("#flashcard").classList.add("zooming");
   zoomCard((Number($("#flashcard").style.getPropertyValue("--zoom")) || 1) * Math.exp(-e.deltaY / 100));
 }, { passive: false });
+$("#focus-close").addEventListener("click", () => quitByKey());
+$("#zoom-veil").addEventListener("click", () => unzoomCard());
 $(".tcg-table").addEventListener("pointerleave", () => {
   unzoomCard();
   flattenCard();
@@ -3492,7 +3619,7 @@ function sessionCrumbs(back, title) {
     return [COURSES_CRUMB, { label: state.reviewScope.name, href: back }, { label: title }];
   }
   if (back === "#/defis") return [{ label: "Défis", href: "#/defis" }, { label: title }];
-  return [back === "#/" ? { label: "Accueil", href: "#/" } : COURSES_CRUMB, { label: title }];
+  return [COURSES_CRUMB, { label: title }];
 }
 $("#session-done-back").addEventListener("click", (e) => { state.sessionBack = state.session?.back; leaveSession(e); });
 
@@ -3702,6 +3829,8 @@ async function openReviewScope(kind, id = "", sub = "") {
   if (state.reviewScope?.base !== base) state.deckChapter = null;  // autre cours : tous les chapitres
   state.reviewScope = { params, name, hash: location.hash, base, single: kind === "cours", owner, parent };
   $("#review-scope-title").textContent = name;
+  $("#review-scope-dot").hidden = kind !== "cours";
+  if (kind === "cours") $("#review-scope-dot").style.background = subjectColor(id);
   renderReviewFiles();
   document.querySelectorAll("[data-scope-tab]").forEach((a) => {
     const t = a.dataset.scopeTab;
@@ -3745,6 +3874,13 @@ async function renderScopeMain() {
     : reviewScope().folder ? c.folder_id === reviewScope().folder : true));
   const ids = new Set(scoped.map((c) => c.id));
   state.scopePlan = plan;
+  // La maîtrise (cartes sues) de la matière, du semestre ou de tout, dans l'anneau du bandeau
+  const cardsTotal = scoped.reduce((n, c) => n + (c.cards || 0), 0), cardsKnown = scoped.reduce((n, c) => n + (c.known || 0), 0);
+  const ring = $("#hero-ring");
+  ring.hidden = !cardsTotal;
+  ring.style.setProperty("--m", `${cardsTotal ? Math.round((100 * cardsKnown) / cardsTotal) : 0}%`);
+  ring.style.setProperty("--c", scope.single ? subjectColor(reviewScope().course) : "var(--accent)");
+  ring.querySelector("span").textContent = `${cardsTotal ? Math.round((100 * cardsKnown) / cardsTotal) : 0}%`;
   $("#review-exam").hidden = !data.exam || data.exam.days <= -7;
   if (data.exam) $("#review-exam").innerHTML = examSentence(data.exam);
 
@@ -3760,7 +3896,8 @@ async function renderScopeMain() {
   const planned = plan?.plan;
   $("#hero-summary").innerHTML = planned
     ? `${plan.status.done_today ? "Séance du jour faite" : "Séance du plan à faire"} · ${plural(plan.session.cards, "carte", "cartes")} environ · ${planned.minutes} min`
-    : (today.cards || today.questions ? `${$("#today-summary").innerHTML} à revoir · le mélange conseillé` : "Tout est à jour pour aujourd'hui");
+    : (today.cards || today.questions ? `${$("#today-summary").innerHTML} · environ ${Math.max(1, Math.round(today.cards * 0.2
+      + (mixQuestions() ? today.questions * 0.5 : 0)))} min` : "Tout est à jour pour aujourd'hui");
   $("#hero-start").disabled = planned ? false : $("#start-today").disabled;
   $("#hero-start").textContent = planned && plan.status.done_today ? "Refaire une séance" : "Commencer →";
   $("#hero-all").title = `Toutes les cartes et toutes les questions ${state.reviewFile ? `du cours « ${fileLabel(state.reviewFile)} »`
@@ -4472,6 +4609,7 @@ function chooseByKey(selector, index, submit) {
 
 // Quitter au clavier : même question que depuis le menu
 async function quitByKey() {
+  if ($("#flashcard").classList.contains("zoomed")) return unzoomCard();  // Échap : d'abord la carte reprend sa place
   const question = leaveQuestion();
   if (question && !await askConfirm(question)) return;
   if (!$("#view-quiz").hidden) return backToCourse();
@@ -4574,6 +4712,14 @@ const WELCOME = [
 ];
 // Les nouveautés de chaque version (le carton « Quoi de neuf » ne s'affiche que si la version en a)
 const WHATS_NEW = {
+  "0.63.0": [
+    ["✦", "Un nouveau design", "La police du Mac, un fond crème, des cartes qui flottent, des onglets en verre : plus sobre, plus net"],
+    ["▦", "Plus d'accueil", "Pirouette s'ouvre sur tes matières, avec ta révision du jour en haut ; une couleur douce par matière"],
+    ["▤", "Séances en mode concentration", "Fond noir, rien que la carte : plaque blanche en mode clair, graphite en mode sombre ; elle s'incline sous la souris et passe devant tout quand tu zoomes"],
+    ["✓", "Réponses plus douces", "Au clic, la couleur part de l'endroit cliqué : vert sauge si c'est juste, rose brique sinon"],
+    ["≡", "Gérer et Réglages rangés", "Une ligne par cours dans Gérer ; les Réglages ont un menu à gauche, comme sur Mac"],
+    ["💬", "Aperçu des messages", "Passe la souris sur la bulle : tes messages non lus s'affichent sans rien ouvrir"],
+  ],
   "0.62.2": [
     ["✎", "Ton prénom dans Réglages", "Une fois enregistré, il s'affiche simplement, avec un crayon pour le changer"],
   ],
@@ -6744,6 +6890,32 @@ setTimeout(startDock, 1200);
 
 // ---------- La bulle et son panneau : conversations / amis ----------
 $("#chat-bubble").addEventListener("click", () => togglePanel());
+// Survol de la bulle : un aperçu des messages non lus, sans rien ouvrir ; un clic sur l'un ouvre sa conversation
+const ago = (iso) => {
+  const min = Math.round((Date.now() - new Date(iso)) / 60000);
+  return min < 1 ? "maintenant" : min < 60 ? `il y a ${min} min` : min < 1440 ? `il y a ${Math.round(min / 60)} h` : formatDate(iso);
+};
+function showPeek() {
+  clearTimeout(showPeek.hide);
+  if (!$("#chat-panel").hidden) return;
+  const open = new Set([...msg.wins.values()].filter((w) => !w.min).map((w) => w.id));
+  const unread = (msg.rooms || []).filter((r) => r.unread && r.last && !open.has(r.id)).slice(0, 3);
+  $("#chat-peek").hidden = !unread.length;
+  $("#chat-peek").innerHTML = unread.map((r) => `<button type="button" class="peek-note" data-peek="${r.id}">${avatar(r.name)}
+    <span class="peek-text"><b>${escapeHtml(r.kind === "group" && !r.last.mine ? `${r.name} · ${r.last.pseudo}` : r.name)}</b>
+      <span class="peek-when">${r.last.at ? ago(r.last.at) : ""}</span><small>${escapeHtml(r.last.text)}</small></span></button>`).join("");
+}
+function hidePeek() { showPeek.hide = setTimeout(() => { $("#chat-peek").hidden = true; }, 250); }
+$("#chat-bubble").addEventListener("mouseenter", showPeek);
+$("#chat-bubble").addEventListener("mouseleave", hidePeek);
+$("#chat-peek").addEventListener("mouseenter", () => clearTimeout(showPeek.hide));
+$("#chat-peek").addEventListener("mouseleave", hidePeek);
+$("#chat-peek").addEventListener("click", (e) => {
+  const id = e.target.closest("[data-peek]")?.dataset.peek;
+  if (!id) return;
+  $("#chat-peek").hidden = true;
+  openChat(id);
+});
 async function togglePanel(open = $("#chat-panel").hidden) {
   $("#chat-panel").hidden = !open;
   if (!open) return;
@@ -7211,4 +7383,21 @@ document.querySelector(".theme-choice").addEventListener("click", async (e) => {
   applyTheme(theme);  // tout de suite, sans attendre
   renderThemeChoice(theme);
   await api("/api/settings", jsonBody("PUT", { theme })).catch(() => {});
+});
+
+// Réponses (QCM, vrai / faux) : un halo de la couleur de l'app suit la souris, et au clic la couleur de la réponse
+// (juste ou fausse) se propage depuis l'endroit cliqué.
+document.addEventListener("pointermove", (e) => {
+  const choice = e.target.closest?.(".choice");
+  if (!choice) return;
+  const box = choice.getBoundingClientRect();
+  choice.style.setProperty("--hx", `${e.clientX - box.left}px`);
+  choice.style.setProperty("--hy", `${e.clientY - box.top}px`);
+});
+document.addEventListener("pointerdown", (e) => {
+  const choice = e.target.closest?.(".choice");
+  if (!choice) return;
+  const box = choice.getBoundingClientRect();
+  choice.style.setProperty("--px", `${e.clientX - box.left}px`);
+  choice.style.setProperty("--py", `${e.clientY - box.top}px`);
 });

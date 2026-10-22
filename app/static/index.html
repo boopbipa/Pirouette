@@ -22,7 +22,6 @@
   <header class="topbar">
     <a href="#/" class="brand"><span class="app-icon"><svg aria-hidden="true"><use href="#logo"/></svg><span class="beta-badge">bêta</span></span><span class="brand-name">Pirouette</span></a>
     <nav class="nav-pill" aria-label="Menu">
-      <a href="#/" data-nav="accueil">Accueil</a>
       <a href="#/cours" data-nav="cours">Matières</a>
       <a href="#/defis" data-nav="defis" hidden>Défis</a>
       <a href="#/reglages" data-nav="reglages">Réglages</a>
@@ -42,13 +41,7 @@
       <div class="hero">
         <h1 class="greeting" id="greeting">On révise ?</h1>
         <p class="hero-sub" id="hero-sub"></p>
-        <p class="setup-banner" id="setup-banner" hidden>Pour créer quiz et flashcards : <a href="#/reglages">branche l'app Claude dans Réglages</a>.</p>
-        <form class="name-prompt" id="name-prompt" hidden>
-          <label for="name-input">Comment tu t'appelles ?</label>
-          <input type="text" id="name-input" placeholder="Ton prénom" maxlength="40">
-          <button class="ghost small" type="submit">OK</button>
-          <button class="link-button" type="button" id="name-skip">Plus tard</button>
-        </form>
+        <p class="setup-banner" id="setup-banner" hidden>Pour créer quiz et flashcards : <a href="#/reglages/claude">branche l'app Claude dans Réglages</a>.</p>
       </div>
       <ol class="guide" id="home-guide" hidden></ol>
       <div class="home-actions">
@@ -62,8 +55,21 @@
 
     <!-- Mes cours : cours et dossiers -->
     <section id="view-courses" class="view" hidden>
-      <div class="page-head">
-        <h1>Mes matières <span class="muted count" id="course-count"></span></h1>
+      <!-- En haut des matières : la salutation et la révision du jour de toutes les matières (l'ancien accueil) -->
+      <h1 class="hello" id="hello"></h1>
+      <form class="name-prompt" id="name-prompt" hidden>
+          <label for="name-input">Comment tu t'appelles ?</label>
+          <input type="text" id="name-input" placeholder="Ton prénom" maxlength="40">
+          <button class="ghost small" type="submit">OK</button>
+          <button class="link-button" type="button" id="name-skip">Plus tard</button>
+        </form>
+      <div class="today-bar" id="today-bar" hidden>
+        <span class="mastery-ring" id="today-ring"><span></span></span>
+        <span class="today-text"><b id="today-title"></b><small id="today-sub"></small></span>
+        <button class="primary" type="button" id="today-go">Commencer</button>
+      </div>
+      <div class="page-head list-head">
+        <h1>Matières <span class="muted count" id="course-count"></span></h1>
         <div class="head-actions">
           <input type="file" id="pack-input" accept=".zip,application/zip" hidden>
           <button class="ghost" type="button" id="pick-open">Réviser une sélection…</button>
@@ -162,7 +168,7 @@
     </section>
 
     <section id="view-review-scope" class="view" hidden>
-      <h1 id="review-scope-title"></h1>
+      <h1 class="subject-title"><span class="subject-dot" id="review-scope-dot" hidden></span><span id="review-scope-title"></span></h1>
       <nav class="filters scope-tabs" id="scope-tabs" role="tablist" aria-label="Réviser">
         <a role="tab" data-scope-tab="">Réviser</a>
         <a role="tab" data-scope-tab="planning">Rétroplanning</a>
@@ -175,6 +181,7 @@
       <div id="scope-main" data-mode="jour">
         <!-- En haut, la révision du jour (le mélange conseillé) ; dessous, trois accès distincts : flashcards, quiz, partiel -->
         <div class="today-hero" id="today-hero" data-scope-mode="jour" role="tab" tabindex="0" aria-label="Révision du jour : détails et réglages">
+          <span class="mastery-ring hero-ring" id="hero-ring" hidden><span></span></span>
           <div class="today-hero-text"><h2>Révision du jour</h2><p id="hero-summary"></p></div>
           <span class="hero-actions">
             <button class="ghost" type="button" id="hero-all" title="Toutes les cartes et toutes les questions des quiz, mélangées">Tout réviser</button>
@@ -182,9 +189,9 @@
           </span>
         </div>
         <div class="mode-tiles" id="scope-modes" role="tablist" aria-label="Façon de réviser">
-          <button type="button" role="tab" data-scope-mode="cartes"><strong>Flashcards</strong><small id="mode-cartes-note"></small></button>
-          <button type="button" role="tab" data-scope-mode="quiz"><strong>Quiz</strong><small id="mode-quiz-note"></small></button>
-          <button type="button" role="tab" data-scope-mode="partiel"><strong>Partiel blanc</strong><small>note sur 20</small></button>
+          <button type="button" role="tab" data-scope-mode="cartes"><span class="mode-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="6" width="12" height="15" rx="2"/><path d="M8 3h11a2 2 0 0 1 2 2v12"/></svg></span><span><strong>Flashcards</strong><small id="mode-cartes-note"></small></span></button>
+          <button type="button" role="tab" data-scope-mode="quiz"><span class="mode-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.6M12 17h.01"/></svg></span><span><strong>Quiz</strong><small id="mode-quiz-note"></small></span></button>
+          <button type="button" role="tab" data-scope-mode="partiel"><span class="mode-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3H6.5A1.5 1.5 0 0 0 5 4.5v15A1.5 1.5 0 0 0 6.5 21h11a1.5 1.5 0 0 0 1.5-1.5V8z"/><path d="M14 3v5h5M9 14l2 2 4-4"/></svg></span><span><strong>Partiel blanc</strong><small>noté sur 20</small></span></button>
         </div>
         <!-- Plan de révision (semestre, ou cours sans semestre) -->
         <div class="card plan-card" id="plan-card" data-mode="jour" hidden>
@@ -456,7 +463,11 @@
 
     <!-- Réglages -->
     <section id="view-settings" class="view" hidden>
-      <h1>Réglages</h1>
+      <h1 class="prefs-title">Réglages</h1>
+      <div class="prefs-layout">
+      <nav class="prefs-side" id="prefs-side" aria-label="Rubriques des réglages"></nav>
+      <div class="prefs-pane">
+      <div class="prefs-head" id="prefs-head"></div>
 
       <form class="card" id="settings-name-form">
         <h2>Ton prénom</h2>
@@ -587,7 +598,7 @@
           <li>Dans n'importe quelle conversation, demande-lui simplement ce que tu veux :
             « Fais-moi un quiz de 10 questions sur le chapitre 2 de Neuro dans Pirouette »,
             « Ajoute 15 flashcards sur la myéline », « Réexplique-moi les notions où je bloque ».</li>
-          <li>Le quiz ou les cartes arrivent dans Pirouette (Réviser et Mes cours), notés « App Claude ». Chaque question est
+          <li>Le quiz ou les cartes arrivent dans tes matières, notés « App Claude ». Chaque question est
             vérifiée comme les autres : elle doit venir de ton cours.</li>
         </ol>
         <details class="claude-tips-box">
@@ -700,7 +711,7 @@
         <button class="link-button" type="button" id="calib-auto">Revenir au repérage automatique</button>
       </div>
 
-      <div class="card">
+      <div class="card" id="data-card">
         <h2>Tes données</h2>
         <p class="muted small-text">Cours, quiz et cartes sont enregistrés ici, sur cet ordinateur :</p>
         <p><code id="settings-data-dir"></code></p>
@@ -741,7 +752,8 @@
         <div class="actions"><button class="ghost small" type="button" id="keys-reset">Rétablir les touches par défaut</button></div>
         <p class="status" id="keys-status" hidden></p>
       </details>
-
+      </div>
+      </div>
     </section>
 
     <!-- Un cours : trois entrées (quiz, flashcards, fichiers) -->
@@ -749,11 +761,9 @@
       <div id="course-overview">
       <div class="course-head">
         <div class="course-title">
-          <h1 id="course-name"></h1>
+          <h1 class="subject-title"><span class="subject-dot" id="course-dot"></span><span id="course-name"></span></h1>
         </div>
         <div class="more">
-          <label class="ghost small button-like add-course-file" for="file-input" id="add-course-file"
-                 title="Un autre cours de cette matière (CM2, TD…) : ses chapitres, quiz et flashcards s'ajoutent à ceux-ci, rien n'est remplacé">+ Ajouter un cours</label>
           <button class="ghost small manage-btn" type="button" id="course-more" aria-haspopup="menu">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
             Options <span class="caret" aria-hidden="true">▾</span></button>
@@ -1064,6 +1074,7 @@
 
     <!-- Séance de révision : flashcards (et questions de quiz mélangées) -->
     <section id="view-cards" class="view" hidden>
+      <div class="zoom-veil" id="zoom-veil"></div>  <!-- carte zoomée : le reste de la séance passe derrière, flouté -->
       <div class="quiz-head">
         <h1 id="cards-title">Flashcards</h1>
         <span id="cards-counter" class="pill"></span>
@@ -1280,6 +1291,8 @@
 
   <!-- Messages : la bulle en bas à droite (conversations et amis) et les fenêtres de discussion -->
   <div class="chat-dock" id="chat-dock" hidden>
+    <!-- Survol de la bulle : les messages non lus, empilés comme des notifications -->
+    <div class="chat-peek" id="chat-peek" hidden></div>
     <div class="chat-windows" id="chat-windows"></div>
     <div class="chat-panel" id="chat-panel" hidden>
       <header class="chat-panel-head"><b>Messages</b>
@@ -1373,6 +1386,9 @@
       </div>
     </form>
   </dialog>
+
+  <!-- Mode concentration (séances, quiz) : une croix pour sortir -->
+  <button class="focus-close" id="focus-close" type="button" aria-label="Quitter" title="Quitter (Échap)">✕</button>
 
   <!-- Semestre d'une matière (menu Options de « Gérer ») -->
   <dialog id="semester-dialog" class="report-dialog">
