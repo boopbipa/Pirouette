@@ -30,6 +30,9 @@ Règles :
   si le cours ne donne pas un détail, ne fais pas de carte sur ce détail.
 - Recto ("front") : une question courte et précise, ou un terme à définir. Une seule notion par carte.
 - Verso ("back") : la réponse, courte (une à deux phrases maximum), mémorisable.
+- Le verso répond exactement à ce que demande le recto. Relis chaque carte avant de la donner : un recto « Quelle
+  théorie… ? » attend le nom d'une théorie, « Qui… ? » une personne, « Combien… ? » un nombre. Si le verso est une
+  définition ou une description, le recto le dit (« Qu'est-ce que l'aphasie de Broca ? ») ; sinon, réécris le recto.
 - Couvre les notions importantes de tout le cours : définitions, mécanismes, causes/conséquences, formules, dates.
 - Chaque carte porte sur une notion différente : jamais deux cartes sur la même notion, même formulées autrement.
 - Pas de questions auxquelles on peut répondre par oui/non.

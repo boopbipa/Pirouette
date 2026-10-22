@@ -74,6 +74,8 @@ Règles :
 - Ignore l'organisation du cours : modalités d'évaluation (notes, pourcentages, coefficients, partiels, dossiers à
   rendre), calendrier, horaires, salles, contacts, plan du cours, bibliographie. Seul le contenu à apprendre compte.
 - Questions claires, autonomes, sans ambiguïté, et sans répétition entre elles.
+- La réponse répond exactement à la question posée : « Quelle théorie… ? » attend une théorie, « Qui… ? » une
+  personne, « Qu'est-ce que… ? » une définition. Relis chaque question avec sa réponse avant de la donner.
 - Sauf pour "texte_a_trous", l'énoncé est une vraie question, courte (une ou deux phrases) et terminée par « ? ».
   Jamais une phrase inachevée qui s'arrête sur un article ou une élision (« d' », « l' », « le », « une », « des »…) :
   ça trahirait la réponse.

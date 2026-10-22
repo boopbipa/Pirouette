@@ -171,6 +171,7 @@ def _settings_view() -> dict:
         "shortcuts": store.get_settings().get("shortcuts") or {},
         "keys_instant": bool(store.get_settings().get("keys_instant", False)),
         "theme": store.get_settings().get("theme", "auto"),
+        "last_folder": store.get_settings().get("last_folder", ""),  # semestre où l'on a rangé un cours en dernier
         "welcome_seen": store.get_settings().get("welcome_seen") or "",
         "news_seen": store.get_settings().get("news_seen") or "",
         "data_dir": str(store.root.resolve()),
@@ -488,7 +489,10 @@ class MoveIn(BaseModel):
 
 @app.put("/api/courses/{course_id}/folder")
 async def move_course(course_id: str, body: MoveIn) -> dict:
-    return store.move_course(course_id, body.folder_id)
+    course = store.move_course(course_id, body.folder_id)
+    if body.folder_id:  # le prochain nouveau cours sera proposé dans ce semestre
+        store.save_settings(last_folder=body.folder_id)
+    return course
 
 
 # ---------- Dossiers de cours (un semestre, une UE…) ----------
@@ -508,7 +512,9 @@ async def list_folders() -> list[dict]:
 async def create_folder(body: FolderIn) -> dict:
     if not (body.name or "").strip():
         raise HTTPException(400, "Donne un nom au semestre.")
-    return store.create_folder(body.name)
+    folder = store.create_folder(body.name)
+    store.save_settings(last_folder=folder["id"])
+    return folder
 
 
 @app.patch("/api/folders/{folder_id}")

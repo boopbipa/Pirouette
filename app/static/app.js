@@ -1271,21 +1271,20 @@ $("#settings-import-btn").addEventListener("click", async () => {
 // ---------- Nouveau cours : une petite fenêtre, on y glisse son fichier ----------
 const newCourse = { files: [] };
 
-// Le dernier semestre choisi en créant un cours : proposé d'office la fois suivante
-const lastFolder = () => { try { return localStorage.getItem("pirouette.lastFolder") || ""; } catch { return ""; } };
 async function openNewCourse({ folder = "" } = {}) {
   newCourse.files = [];
   $("#new-course-name").value = "";
   $("#new-course-status").hidden = true;
   $("#new-course-create").disabled = false;
   renderNewCourseFiles();
-  const [folders, courses] = await Promise.all([api("/api/folders"), api("/api/courses")]);
+  const [folders, courses, settings] = await Promise.all([api("/api/folders"), api("/api/courses"), api("/api/settings").catch(() => ({}))]);
   const open = folders.filter((f) => !f.archived);
   $("#new-course-folder-field").hidden = !open.length;
   $("#new-course-folder").innerHTML = `<option value="">Sans semestre</option>`
     + open.map((f) => `<option value="${f.id}">${escapeHtml(f.name)}</option>`).join("");
-  const wanted = folder || lastFolder();
-  $("#new-course-folder").value = open.some((f) => f.id === wanted) ? wanted : "";
+  // Proposé d'office : le semestre où l'on a rangé un cours en dernier (sinon le plus récent)
+  const wanted = [folder, settings.last_folder, open.at(-1)?.id].find((id) => id && open.some((f) => f.id === id));
+  $("#new-course-folder").value = wanted || "";
   // Ranger le fichier dans un cours qui existe déjà (Statistiques, Psychanalyse…) ou en créer un
   const folderName = Object.fromEntries(folders.map((f) => [f.id, f.name]));
   $("#new-course-target").innerHTML = `<option value="">Un nouveau cours</option>`
@@ -1351,7 +1350,6 @@ $("#new-course-form").addEventListener("submit", async (e) => {
   try {
     const course = await api("/api/courses", jsonBody("POST", { name }));
     const folder = $("#new-course-folder").value;
-    try { localStorage.setItem("pirouette.lastFolder", folder); } catch {}
     if (folder) await api(`/api/courses/${course.id}/folder`, jsonBody("PUT", { folder_id: folder }));
     $("#new-course-dialog").close();
     const files = newCourse.files;
@@ -2967,14 +2965,23 @@ $("#flashcard").addEventListener("animationend", (e) => {
   if (e.animationName === "tcg-deal") $("#flashcard").classList.remove("dealing");
 });
 
-// Relief : la carte s'incline sous la souris, avec un reflet (holographique pour les cartes acquises)
-$("#flashcard").addEventListener("pointermove", (e) => {
+// Relief : la carte s'incline sous la souris, avec un reflet (holographique pour les cartes acquises).
+// On suit la souris sur la table, par rapport à la place de la carte à plat : inclinée, la carte déborde ou rentre
+// un peu, et suivre la carte elle-même la faisait trembler (la souris sortait et rentrait sans cesse sur un coin).
+function flattenCard() {
+  const el = $("#flashcard");
+  el.classList.remove("tilting");
+  el.style.setProperty("--rx", "0deg");
+  el.style.setProperty("--ry", "0deg");
+}
+$(".tcg-table").addEventListener("pointermove", (e) => {
   if (e.pointerType === "touch" || swipe.moved && swipe.x !== null || matchMedia("(prefers-reduced-motion: reduce)").matches) return;
   const el = $("#flashcard");
-  const box = el.getBoundingClientRect();
-  const x = (e.clientX - box.left) / box.width;
-  const y = (e.clientY - box.top) / box.height;
   if (el.classList.contains("zoomed")) return;  // zoomée : la carte reste à plat, pour bien la lire
+  const table = el.offsetParent.getBoundingClientRect();
+  const x = (e.clientX - table.left - el.offsetLeft) / el.offsetWidth;
+  const y = (e.clientY - table.top - el.offsetTop) / el.offsetHeight;
+  if (x < 0 || x > 1 || y < 0 || y > 1) return flattenCard();
   el.classList.add("tilting");
   el.style.setProperty("--ry", `${(x - 0.5) * 16}deg`);
   el.style.setProperty("--rx", `${(0.5 - y) * 14}deg`);
@@ -3013,12 +3020,9 @@ $("#flashcard").addEventListener("wheel", (e) => {
   $("#flashcard").classList.add("zooming");
   zoomCard((Number($("#flashcard").style.getPropertyValue("--zoom")) || 1) * Math.exp(-e.deltaY / 100));
 }, { passive: false });
-$("#flashcard").addEventListener("pointerleave", () => {
-  const el = $("#flashcard");
+$(".tcg-table").addEventListener("pointerleave", () => {
   unzoomCard();
-  el.classList.remove("tilting");
-  el.style.setProperty("--rx", "0deg");
-  el.style.setProperty("--ry", "0deg");
+  flattenCard();
 });
 
 function showCardToast(text) {
@@ -3028,7 +3032,7 @@ function showCardToast(text) {
   void toast.offsetWidth;
   toast.hidden = false;
   clearTimeout(showCardToast.timer);
-  showCardToast.timer = setTimeout(() => { toast.hidden = true; }, 1700);
+  showCardToast.timer = setTimeout(() => { toast.hidden = true; }, 1100);
 }
 
 // Retourne la carte ; un nouveau clic la remet côté question (et ainsi de suite).
@@ -4619,6 +4623,11 @@ const WELCOME = [
 ];
 // Les nouveautés de chaque version (le carton « Quoi de neuf » ne s'affiche que si la version en a)
 const WHATS_NEW = {
+  "0.61.1": [
+    ["＋", "Nouveau cours bien rangé", "Il est proposé d'office dans le dernier semestre où tu as rangé un cours"],
+    ["✓", "Cartes plus justes", "Claude vérifie que le verso répond bien au recto (et la réponse à la question)"],
+    ["✦", "Cartes plus calmes", "La carte ne tremble plus sur un coin, et « Carte acquise ! » s'affiche en haut, brièvement"],
+  ],
   "0.61.0": [
     ["⟳", "Claude met ton cours à jour", "Nouvelle version d'un fichier : « Mettre à jour avec Claude » ajoute des questions et des cartes sur les nouveautés, et corrige ou supprime celles qui sont dépassées"],
     ["✎", "Le suivi est gardé", "Une carte ou une question corrigée garde ses révisions ; « Vérifier moi-même » reste possible"],

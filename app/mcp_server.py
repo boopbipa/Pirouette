@@ -126,6 +126,8 @@ TOOLS = [
         "name": "pirouette_ajouter_cartes",
         "description": "Ajoute des flashcards à un cours dans Pirouette. Recto : une question ou un terme ; verso : "
                        "la réponse, courte, avec les mots du cours ; source : la phrase du cours recopiée mot pour mot. "
+                       "Le verso doit répondre exactement au recto : relis chaque carte (un recto « Quelle théorie… ? » "
+                       "attend une théorie ; si le verso est une définition, le recto est « Qu'est-ce que… ? »). "
                        "Les cartes qui ne viennent pas du cours ou qui existent déjà sont refusées (avec la raison).",
         "inputSchema": {"type": "object", "properties": {
             "cours": {"type": "string", "description": "Identifiant du cours."},
