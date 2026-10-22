@@ -647,6 +647,8 @@ const PREFS = [
     icon: '<rect x="4" y="6" width="12" height="15" rx="2"/><path d="M8 3h10a2 2 0 0 1 2 2v12"/>' },
   { id: "claude", label: "App Claude", desc: "Branche Claude pour créer quiz et flashcards à partir de tes cours.",
     cards: ["claude-app-card", "settings-key-form", "local-ai"], icon: '<path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z"/>' },
+  { id: "appareils", label: "iPhone et iPad", desc: "Tes quiz et tes flashcards, aussi sur ton téléphone et ta tablette.", cards: ["devices-card"],
+    icon: '<rect x="7" y="3" width="10" height="18" rx="2.5"/><path d="M11 18h2"/>' },
   { id: "apparence", label: "Apparence", desc: "Clair ou sombre, et la couleur de l'app.", cards: ["theme-card", "appearance-card"],
     icon: '<circle cx="12" cy="12" r="8"/><path d="M12 4a8 8 0 0 1 0 16z" fill="currentColor"/>' },
   { id: "clavier", label: "Clavier", desc: "Les touches pour réviser sans la souris.", cards: ["keys-card"],
@@ -711,6 +713,7 @@ async function openSettings() {
   $("#local-thinking-status").hidden = true;
   $("#settings-data-dir").textContent = settings.data_dir;
   renderBackup(settings);
+  renderSync();
   loadClaudeApp();
   $("#settings-import").hidden = !settings.desktop;
   ["#settings-name-status", "#settings-key-status", "#settings-import-status"].forEach((id) => ($(id).hidden = true));
@@ -3551,6 +3554,7 @@ const RATING_NAMES = { again: "Je ne savais pas", hard: "À moitié", good: "Je 
 const isMistake = (r) => (r.kind === "card" ? r.rating !== "good" && r.rating !== "easy" : !r.correct);
 
 function finishSession() {
+  syncSoon();
   const s = state.session;
   const cards = s.results.filter((r) => r.kind === "card");
   const questions = s.results.filter((r) => r.kind === "question");
@@ -4725,6 +4729,10 @@ const WELCOME = [
 ];
 // Les nouveautés de chaque version (le carton « Quoi de neuf » ne s'affiche que si la version en a)
 const WHATS_NEW = {
+  "0.65.0": [
+    ["▯", "Sur ton iPhone et ton iPad", "Réglages › iPhone et iPad : scanne le code avec ton téléphone, et révise tes flashcards et tes quiz partout, même hors connexion. Tes réponses reviennent sur ton Mac"],
+    ["⚖", "Le poids de tes révisions", "Réglages › Sauvegarde : combien pèsent tes quiz et tes flashcards"],
+  ],
   "0.64.2": [
     ["●", "Une couleur par matière", "Chaque matière a maintenant sa propre couleur (elles ne se répètent qu'au-delà de 10 matières)"],
     ["☺", "Amis plus clairs", "Une ligne courte par ami (un clic pour lui écrire), une recherche quand la liste s'allonge, et l'ajout rangé derrière « + Ajouter »"],
@@ -5266,6 +5274,7 @@ function startQuizTimer(quiz) {
 
 // ---------- Résultats ----------
 function showResults() {
+  syncSoon();
   state.resultsFilter = "all";
   $("#retry-btn").textContent = isBank(state.quiz) ? "Nouveau tirage" : "Refaire le quiz";
   renderResults();
@@ -6950,6 +6959,89 @@ $("#online-friends").addEventListener("click", async (e) => {
   if (accept || remove) { renderFriends(); renderChallenges(); }
 });
 
+
+// ---------- iPhone et iPad : une copie en ligne des quiz et des cartes (voir app/sync.py et web/) ----------
+const octets = (n) => n < 1e6 ? `${Math.max(1, Math.round(n / 1000))} Ko` : `${(n / 1e6).toFixed(1).replace(".", ",")} Mo`;
+function sinceText(iso) {
+  const minutes = Math.round((Date.now() - new Date(iso)) / 60000);
+  return minutes < 1 ? "à l'instant" : minutes < 60 ? `il y a ${minutes} min` : minutes < 1440 ? `il y a ${Math.round(minutes / 60)} h`
+    : `le ${new Date(iso).toLocaleDateString("fr-FR", { day: "numeric", month: "long" })}`;
+}
+async function renderSync() {
+  let s;
+  try { s = await api("/api/sync"); } catch { return; }
+  const size = s.size;
+  $("#data-weight").textContent = `Tes quiz et tes flashcards pèsent ${octets(size.bytes)} : ${plural(size.cards, "carte", "cartes")}, `
+    + `${plural(size.quizzes, "quiz", "quiz")} (${plural(size.questions, "question", "questions")}).`;
+  $("#sync-closed").hidden = s.configured;
+  $("#sync-login").hidden = !s.configured || s.connected;
+  $("#sync-main").hidden = !s.configured || !s.connected;
+  if (!s.configured || !s.connected) return;
+  $("#sync-on").checked = s.on;
+  $("#sync-state").innerHTML = !s.on ? `${octets(size.bytes)} à copier : c'est très peu, le compte gratuit en garde bien plus.`
+    : s.error ? `<span class="ko-text">${escapeHtml(s.error)}</span>`
+    : s.last ? `Copie à jour ${sinceText(s.last)} · ${octets(size.bytes)}` : "Première copie en cours…";
+  renderDevices();
+}
+async function renderDevices() {
+  let list = [];
+  try { list = await api("/api/sync/devices"); } catch {}
+  $("#device-list").innerHTML = list.map((d) => `<li><span class="device-ic">${PREF_ICON('<rect x="7" y="3" width="10" height="18" rx="2.5"/><path d="M11 18h2"/>')}</span>
+    <span><b>${escapeHtml(d.name || "Appareil")}</b><small class="muted">jumelé le ${new Date(d.created_at).toLocaleDateString("fr-FR", { day: "numeric", month: "long" })}</small></span>
+    <button class="link-button" type="button" data-unpair="${escapeHtml(d.device)}">Retirer</button></li>`).join("");
+}
+$("#sync-on").addEventListener("change", async (e) => {
+  try {
+    await api("/api/sync", jsonBody("POST", { on: e.target.checked }));
+  } catch (err) {
+    setStatus("#sync-status", err.message, false);
+  }
+  renderSync();
+});
+$("#sync-pair").addEventListener("click", async () => {
+  const button = $("#sync-pair");
+  button.disabled = true;
+  try {
+    const p = await api("/api/sync/pair", { method: "POST" });
+    $("#pair-qr").innerHTML = p.qr;
+    $("#pair-code").textContent = p.code;
+    $("#pair-web").textContent = p.web.replace(/^https:\/\//, "");
+    $("#pair-box").hidden = false;
+    $("#sync-status").hidden = true;
+    clearInterval(state.pairWatch);
+    // On guette l'arrivée du nouvel appareil (2 s, pendant 15 min)
+    const before = $("#device-list").children.length;
+    let tries = 0;
+    state.pairWatch = setInterval(async () => {
+      tries += 1;
+      if (tries > 450 || !$("#pair-box") || $("#view-settings").hidden) return clearInterval(state.pairWatch);
+      await renderDevices();
+      if ($("#device-list").children.length > before) {
+        clearInterval(state.pairWatch);
+        $("#pair-box").hidden = true;
+        setStatus("#sync-status", "C'est jumelé ! Tes quiz et tes flashcards arrivent sur l'appareil.", true);
+        renderSync();
+      }
+    }, 2000);
+  } catch (err) {
+    setStatus("#sync-status", err.message, false);
+  }
+  button.disabled = false;
+  renderSync();
+});
+$("#device-list").addEventListener("click", async (e) => {
+  const id = e.target.closest("[data-unpair]")?.dataset.unpair;
+  if (!id || !await askConfirm("Retirer cet appareil ? Il ne verra plus tes quiz ni tes flashcards.", { ok: "Retirer" })) return;
+  await api(`/api/sync/devices/${id}`, { method: "DELETE" }).catch((err) => setStatus("#sync-status", err.message, false));
+  renderDevices();
+});
+// La copie se tient à jour toute seule : à l'ouverture, toutes les 3 minutes, et peu après une séance
+const syncSoon = (() => {
+  let timer;
+  return (ms = 20000) => { clearTimeout(timer); timer = setTimeout(() => api("/api/sync/now", { method: "POST" }).catch(() => {}), ms); };
+})();
+syncSoon(4000);
+setInterval(() => syncSoon(0), 180000);
 
 // ---------- Messages entre amis : une bulle en bas à droite, et des fenêtres de discussion (voir app/online.py) ----------
 // Comme une messagerie de réseau social : la bulle 💬 (sur toutes les pages) ouvre la liste des conversations et des

@@ -1,0 +1,48 @@
+name: Pirouette sur iPhone et iPad
+
+# Publie la version web (dossier web/) sur GitHub Pages : https://boopbipa.github.io/Pirouette/
+# L'adresse et la clé publique du service en ligne sont ajoutées au moment de la publication (secrets du dépôt).
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "web/**"
+      - ".github/workflows/web.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  publier:
+    if: ${{ !github.event.repository.private }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Préparer la page (avec la configuration du service en ligne)
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_PUBLISHABLE_KEY }}
+        run: |
+          mkdir -p _site
+          cp -r web/. _site/
+          python3 -c "import json, os, re; u, k = os.environ.get('SUPABASE_URL', '').strip().rstrip('/'), os.environ.get('SUPABASE_KEY', '').strip(); ok = bool(re.fullmatch(r'https://[a-z0-9]+\.supabase\.co', u)) and bool(re.fullmatch(r'[A-Za-z0-9_.-]{20,}', k)); open('_site/config.js', 'w').write('window.PIROUETTE_CONFIG = ' + json.dumps({'url': u, 'key': k} if ok else {}) + ';\n'); print('branchée' if ok else '::warning::secrets SUPABASE absents : la page ne sera pas branchée')"
+          # Une nouvelle version de la page : le cache hors connexion se renouvelle
+          sed -i "s/pirouette-v1/pirouette-${GITHUB_SHA::8}/" _site/sw.js
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+      - id: deploy
+        uses: actions/deploy-pages@v4

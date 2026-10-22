@@ -27,7 +27,7 @@ from pydantic import BaseModel
 
 load_dotenv()
 
-from . import backup, claude_desktop, exchange, figures, local_ai, news, online, plan as plans, reminder, srs, updater  # noqa: E402
+from . import backup, claude_desktop, exchange, figures, local_ai, news, online, plan as plans, reminder, srs, sync, updater  # noqa: E402
 from .grounding import Grounding  # noqa: E402
 from .jobs import Jobs  # noqa: E402
 from .chapters import (CHAPTERS_SCHEMA, CHAPTERS_SYSTEM, ai_candidates, build_chapters_prompt,  # noqa: E402
@@ -2342,6 +2342,64 @@ async def online_start(body: OnlineTextIn) -> dict:
 async def online_logout() -> dict:
     _online().logout()
     return {"connected": False, "configured": online.configured()}
+
+
+# ---------- iPhone et iPad : la copie en ligne des quiz et des cartes (voir app/sync.py) ----------
+_SYNC_LOCK = asyncio.Lock()
+
+
+class SyncIn(BaseModel):
+    on: bool
+
+
+@app.get("/api/sync")
+async def sync_status() -> dict:
+    session = _online()._session()
+    size = await run_in_threadpool(sync.data_size, store)
+    state = sync.Sync(_online()).status()
+    return {"configured": online.configured(), "connected": bool(session.get("user_id")), "on": bool(state.get("on")),
+            "last": state.get("last"), "error": state.get("error") or "", "size": size, "web": sync.WEB_URL}
+
+
+@app.post("/api/sync")
+async def sync_switch(body: SyncIn) -> dict:
+    sync.Sync(_online())._save(on=body.on)
+    if body.on:
+        await sync_now()
+    return await sync_status()
+
+
+@app.post("/api/sync/now")
+async def sync_now() -> dict:
+    """Lancé par l'app au démarrage, toutes les quelques minutes et après une séance (si la synchro est activée)."""
+    syncer = sync.Sync(_online())
+    if not syncer.status().get("on") or not online.configured():
+        return {"skipped": True}
+    if _SYNC_LOCK.locked():
+        return {"skipped": True, "busy": True}
+    async with _SYNC_LOCK:
+        return await _online_call(syncer.run())
+
+
+@app.post("/api/sync/pair")
+async def sync_pair() -> dict:
+    syncer = sync.Sync(_online())
+    result = await _online_call(syncer.pair())
+    if not syncer.status().get("on"):
+        syncer._save(on=True)
+    await sync_now()
+    return result
+
+
+@app.get("/api/sync/devices")
+async def sync_devices() -> list[dict]:
+    return await _online_call(sync.Sync(_online()).devices())
+
+
+@app.delete("/api/sync/devices/{device}")
+async def sync_forget_device(device: str) -> dict:
+    await _online_call(sync.Sync(_online()).remove_device(device))
+    return {"ok": True}
 
 
 @app.put("/api/online/pseudo")

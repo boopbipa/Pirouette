@@ -2290,3 +2290,18 @@ body.focus .feedback, body.focus .feedback.ok, body.focus .feedback.ko, body.foc
 .friend-row:hover .friend-more, .friend-more:focus-visible { opacity: 1; }
 @media (hover: none) { .friend-more { opacity: 1; } }
 .friend-sent { font-size: 12.5px; padding: 10px 10px 2px !important; }
+
+/* ---------- Réglages › iPhone et iPad ---------- */
+.sync-state { margin: 10px 0 4px; }
+.device-list { list-style: none; padding: 0; margin: 10px 0 14px; display: grid; gap: 6px; }
+.device-list:empty { display: none; }
+.device-list li { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 12px; background: var(--sunken); }
+.device-list li > span:nth-child(2) { flex: 1; display: grid; }
+.device-ic { width: 30px; height: 30px; border-radius: 9px; background: var(--surface); display: grid; place-items: center; color: var(--accent); }
+.device-ic svg { width: 18px; height: 18px; }
+.pair-box { display: flex; gap: 22px; align-items: center; margin-top: 16px; padding: 18px; border-radius: 16px; background: var(--sunken); }
+.pair-qr { flex: none; background: #fff; border-radius: 12px; padding: 6px; line-height: 0; box-shadow: var(--shadow); }
+.pair-qr svg { width: 168px; height: 168px; }
+.pair-steps ol { margin: 0 0 10px; padding-left: 20px; line-height: 1.6; font-size: 14px; }
+.pair-code { font: 700 26px/1 ui-monospace, "SF Mono", Menlo, monospace; letter-spacing: .1em; color: var(--accent-ink); margin: 4px 0 8px; }
+@media (max-width: 640px) { .pair-box { flex-direction: column; align-items: flex-start; } }

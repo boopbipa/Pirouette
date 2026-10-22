@@ -17,7 +17,8 @@ class FakeSupabase:
         self.users = {}       # comptes créés
         self.tables = {"profiles": [], "friendships": [], "challenges": [], "attempts": [],
                        "rooms": [], "room_members": [], "messages": [],
-                       "live_games": [], "live_players": [], "live_answers": []}
+                       "live_games": [], "live_players": [], "live_answers": [],
+                       "sync_docs": [], "sync_events": [], "sync_devices": [], "sync_pairs": []}
         self.clock = 0  # horodatage croissant des lignes créées
         self.token_user = {}  # jeton -> id
 
@@ -44,13 +45,22 @@ class FakeSupabase:
                                              "user": {"id": user, "email": "pilou@gmail.com", "is_anonymous": False,
                                                       "user_metadata": {"full_name": "Pierre-Louis"}}})
         table = path.removeprefix("/rest/v1/")
+        if table == "rpc/sync_pair":  # jumeler un iPhone : le code du Mac, une seule fois
+            me = self.token_user[request.headers["Authorization"].removeprefix("Bearer ")]
+            pair = next((p for p in self.tables["sync_pairs"] if p["code"] == body["pair_code"].replace("-", "")), None)
+            if pair is None:
+                return httpx.Response(400, json={"message": "Code inconnu ou expiré : demande un nouveau code sur ton Mac."})
+            self.tables["sync_pairs"].remove(pair)
+            self.tables["sync_devices"].append({"device": me, "owner": pair["owner"], "name": body.get("device_name"),
+                                                "created_at": "2099-01-01T10:00:00+00:00"})
+            return httpx.Response(200, json=pair["owner"])
         if getattr(self, "old_base", False) and table == "challenges" and (
                 "time_limit" in params.get("select", "") or (body and "time_limit" in body)):
             return httpx.Response(400, json={"message": "column challenges.time_limit does not exist"})
         rows = self.tables[table]
         def ok(row):
             for key, value in params.items():
-                if key in ("select", "order", "limit"):
+                if key in ("select", "order", "limit", "on_conflict"):
                     continue
                 op, _, arg = value.partition(".")
                 cell = row.get(key)
@@ -73,6 +83,12 @@ class FakeSupabase:
             if columns and "(" not in columns:  # colonnes simples : seulement celles demandées
                 out = [{k: r.get(k) for k in columns.split(",")} for r in out]
             return httpx.Response(200, json=out)
+        if request.method == "POST" and isinstance(body, list) and "merge-duplicates" in request.headers.get("Prefer", ""):
+            key = params["on_conflict"].split(",")
+            for item in body:
+                rows[:] = [r for r in rows if any(r.get(k) != item.get(k) for k in key)]
+                rows.append(dict(item))
+            return httpx.Response(201, json=[])
         if request.method == "POST" and isinstance(body, list):
             for item in body:
                 if not any(all(r.get(k) == v for k, v in item.items()) for r in rows):
@@ -92,6 +108,8 @@ class FakeSupabase:
                 row.setdefault("created_at", "2099-01-01T10:00:00")
             if table == "friendships":
                 row.setdefault("status", "pending")
+            if table == "sync_pairs":
+                row.setdefault("owner", self.token_user[request.headers["Authorization"].removeprefix("Bearer ")])
             rows.append(row)
             return httpx.Response(201, json=[row])
         wants_rows = "return=representation" in request.headers.get("Prefer", "")

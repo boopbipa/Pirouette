@@ -9,3 +9,4 @@ dist/
 packaging/Pirouette.icns
 app/online_config.json
 online.log
+web/config.js

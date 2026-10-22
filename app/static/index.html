@@ -719,10 +719,44 @@
         <button class="link-button" type="button" id="calib-auto">Revenir au repérage automatique</button>
       </div>
 
+      <div class="card" id="devices-card">
+        <h2>iPhone et iPad</h2>
+        <div id="sync-login" hidden>
+          <p class="muted small-text">Pour retrouver tes quiz et tes flashcards sur ton iPhone ou ton iPad, connecte-toi d'abord
+            à ton compte Pirouette (onglet Défis).</p>
+          <a class="ghost small" href="#/defis">Me connecter</a>
+        </div>
+        <div id="sync-closed" hidden><p class="muted small-text">Pas encore disponible dans cette version.</p></div>
+        <div id="sync-main" hidden>
+          <label class="toggle-row first">
+            <input type="checkbox" id="sync-on">
+            <span><strong>Mes quiz et mes flashcards, aussi sur iPhone et iPad</strong>
+              <small class="muted">Une copie part sur ton compte, mise à jour toute seule. Tes cours (PDF, textes) restent sur ce Mac.</small></span>
+          </label>
+          <p class="muted small-text sync-state" id="sync-state"></p>
+          <ul class="device-list" id="device-list"></ul>
+          <button class="primary small" type="button" id="sync-pair">+ Ajouter un iPhone ou un iPad</button>
+          <div class="pair-box" id="pair-box" hidden>
+            <div class="pair-qr" id="pair-qr"></div>
+            <div class="pair-steps">
+              <ol>
+                <li>Scanne ce code avec l'appareil photo de ton iPhone ou de ton iPad.</li>
+                <li>Dans Safari : <b>Partager</b> › <b>Sur l'écran d'accueil</b>.</li>
+                <li>Ouvre Pirouette depuis l'écran d'accueil et tape :</li>
+              </ol>
+              <div class="pair-code" id="pair-code"></div>
+              <small class="muted">Valable 15 minutes. Sans appareil photo : va sur <span id="pair-web"></span></small>
+            </div>
+          </div>
+          <p class="status" id="sync-status" hidden></p>
+        </div>
+      </div>
+
       <div class="card" id="data-card">
         <h2>Tes données</h2>
         <p class="muted small-text">Cours, quiz et cartes sont enregistrés ici, sur cet ordinateur :</p>
         <p><code id="settings-data-dir"></code></p>
+        <p class="muted small-text" id="data-weight"></p>
         <div class="backup-box">
           <div class="plan-form">
             <strong>Sauvegarde automatique</strong>

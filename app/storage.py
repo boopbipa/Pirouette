@@ -658,6 +658,23 @@ class Store:
         self.log_activity(course_id, cards=1, cards_ok=int(rating != "again"), new=int(was_new))
         return card
 
+    def apply_remote_review(self, course_id: str, card_id: str, rating: str, at: str) -> bool:
+        """Une carte révisée sur l'iPhone ou l'iPad (voir app/sync.py), à l'heure où elle l'a été. Ignorée si la carte
+        a été revue depuis (ici ou ailleurs). Renvoie True si elle a compté."""
+        try:
+            deck, card = self._deck_card(course_id, card_id)
+            when = datetime.fromisoformat(at).replace(tzinfo=None)
+        except (NotFound, ValueError):
+            return False
+        if rating not in srs.RATINGS or (card.get("last_reviewed") or "") >= when.isoformat(timespec="seconds"):
+            return False
+        was_new = srs.is_new(card)
+        srs.schedule(card, rating, now=when, exam=self.exam_date(course_id))
+        card.pop("undo", None)
+        _write(self._doc_path(course_id, "cards"), deck)
+        self.log_activity(course_id, day=when.date(), cards=1, cards_ok=int(rating != "again"), new=int(was_new))
+        return True
+
     def undo_review(self, course_id: str, card_id: str) -> dict:
         """Annule la dernière réponse à une carte : elle retrouve son état d'avant (le journal du jour aussi)."""
         deck, card = self._deck_card(course_id, card_id)
@@ -991,10 +1008,11 @@ class Store:
             })
         return sorted(summaries, key=lambda q: q["created_at"] or "", reverse=True)
 
-    def record_answers(self, quiz_id: str, answers: list[dict]) -> dict:
+    def record_answers(self, quiz_id: str, answers: list[dict], at: str | None = None) -> dict:
         """Réponses données aux questions d'un quiz (dans le quiz ou pendant une révision) : pour repérer
-        les points faibles et suivre la réussite."""
+        les points faibles et suivre la réussite. `at` : quand (réponses données sur l'iPhone, reprises plus tard)."""
         quiz = self.get_quiz(quiz_id)
+        day = _day(at) if at else None
         stats = quiz.setdefault("stats", {})
         good = 0
         for answer in answers:
@@ -1009,15 +1027,15 @@ class Store:
                 self.log_activity(quiz.get("course_id"), questions=-1, questions_ok=-int(was))
             correct = bool(answer["correct"])
             stat["right" if correct else "wrong"] += 1
-            stat.update(last=correct, date=_now())
+            stat.update(last=correct, date=at or _now())
             good += correct
         _write(self._quiz_path(quiz_id), quiz)
         if answers:
-            self.log_activity(quiz.get("course_id"), questions=len(answers), questions_ok=good)
+            self.log_activity(quiz.get("course_id"), day=day, questions=len(answers), questions_ok=good)
         return stats
 
-    def record_attempt(self, quiz_id: str, score: int, total: int) -> dict:
+    def record_attempt(self, quiz_id: str, score: int, total: int, at: str | None = None) -> dict:
         quiz = self.get_quiz(quiz_id)
-        quiz.setdefault("attempts", []).append({"date": _now(), "score": score, "total": total})
+        quiz.setdefault("attempts", []).append({"date": at or _now(), "score": score, "total": total})
         _write(self._quiz_path(quiz_id), quiz)
         return quiz
