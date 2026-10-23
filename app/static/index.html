@@ -465,9 +465,12 @@
 
     <!-- Réglages -->
     <section id="view-settings" class="view" hidden>
-      <h1 class="prefs-title">Réglages</h1>
       <div class="prefs-layout">
-      <nav class="prefs-side" id="prefs-side" aria-label="Rubriques des réglages"></nav>
+      <!-- Le titre reste avec le menu (les deux restent en place quand on fait défiler la rubrique) -->
+      <div class="prefs-col">
+        <h1 class="prefs-title">Réglages</h1>
+        <nav class="prefs-side" id="prefs-side" aria-label="Rubriques des réglages"></nav>
+      </div>
       <div class="prefs-pane">
       <div class="prefs-head" id="prefs-head"></div>
 
@@ -548,19 +551,26 @@
               <canvas id="color-wheel" width="220" height="220" aria-label="Roue chromatique"></canvas>
               <span class="wheel-handle" id="wheel-handle"></span>
             </div>
+          </div>
+          <!-- À droite de la roue : la luminosité, le code, les couleurs toutes prêtes et les boutons -->
+          <div class="picker-side">
             <label class="field">Luminosité
               <input type="range" id="color-value" min="30" max="100" value="100">
             </label>
-            <div class="hex-row">
-              <span class="hex-swatch" id="hex-swatch"></span>
-              <input type="text" id="color-hex" maxlength="7" spellcheck="false" aria-label="Code couleur">
+            <div class="field">Code couleur
+              <div class="hex-row">
+                <span class="hex-swatch" id="hex-swatch"></span>
+                <input type="text" id="color-hex" maxlength="7" spellcheck="false" aria-label="Code couleur">
+              </div>
             </div>
-            <div class="presets" id="color-presets"></div>
+            <div class="field">Couleurs toutes prêtes
+              <div class="presets" id="color-presets"></div>
+            </div>
+            <div class="actions">
+              <button class="primary" type="button" id="color-save">Appliquer à toute l'app</button>
+              <button class="ghost" type="button" id="color-reset">Revenir à la terre cuite</button>
+            </div>
           </div>
-        </div>
-        <div class="actions">
-          <button class="primary" type="button" id="color-save">Appliquer à toute l'app</button>
-          <button class="ghost" type="button" id="color-reset">Revenir à la terre cuite</button>
         </div>
         <p class="status" id="color-status" hidden></p>
       </div>

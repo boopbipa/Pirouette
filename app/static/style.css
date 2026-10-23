@@ -501,13 +501,18 @@ code { font-family: "SF Mono", Menlo, monospace; font-size: .88em; background: v
 .setup-banner { margin: 12px auto 0; max-width: 560px; padding: 8px 14px; border-radius: 10px; background: var(--accent-soft); font-size: 15px; }
 
 /* Couleur de l'app : roue chromatique */
-.appearance { margin-top: 14px; }
+.appearance { margin-top: 14px; display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 34px; align-items: center; }
+@media (max-width: 700px) { .appearance { grid-template-columns: 1fr; } }
+.picker-side { display: grid; gap: 16px; }
+.picker-side .field { margin: 0; display: grid; gap: 8px; font-size: 14px; font-weight: 600; }
+.picker-side input[type=range] { width: 100%; accent-color: var(--text); }
+.picker-side .hex-row, .picker-side .presets { margin: 0; }
+.picker-side .presets { gap: 9px; }
+.picker-side .actions { margin: 4px 0 0; }
 .wheel-wrap { position: relative; width: 220px; height: 220px; touch-action: none; }
 #color-wheel { width: 220px; height: 220px; border-radius: 50%; cursor: crosshair; display: block; }
 .wheel-handle { position: absolute; width: 18px; height: 18px; margin: -9px 0 0 -9px; border-radius: 50%; border: 3px solid #fff;
   box-shadow: 0 0 0 1px rgba(0, 0, 0, .35), 0 2px 6px rgba(0, 0, 0, .3); pointer-events: none; }
-.picker .field { margin-top: 12px; font-size: 14px; font-weight: 600; }
-.picker input[type=range] { width: 220px; accent-color: var(--text); }
 .hex-row { display: flex; align-items: center; gap: 8px; margin-top: 10px; }
 .hex-swatch { width: 34px; height: 34px; border-radius: 9px; border: 1px solid var(--border); flex: none; }
 .hex-row input { width: 110px; font-family: "SF Mono", Menlo, monospace; text-transform: uppercase; }
@@ -1944,7 +1949,9 @@ body.focus .feedback.ok, body.focus .feedback.ko { background: color-mix(in srgb
 #view-settings { max-width: 1000px; }
 .prefs-title { font-size: 26px; }
 .prefs-layout { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 26px; align-items: start; }
-.prefs-side { position: sticky; top: 80px; display: grid; gap: 2px; }
+.prefs-col { position: sticky; top: 80px; }
+.prefs-col .prefs-title { margin-top: 0; }
+.prefs-side { display: grid; gap: 2px; }
 .pref-item { display: flex; align-items: center; gap: 10px; width: 100%; padding: 7px 10px; border-radius: 999px; border: 0; background: none;
   color: var(--text); font-size: 14px; text-align: left; }
 .pref-item:hover { background: color-mix(in srgb, var(--text) 5%, transparent); }
@@ -1975,7 +1982,7 @@ body.focus .feedback.ok, body.focus .feedback.ko { background: color-mix(in srgb
 #view-settings input[type="checkbox"]:checked { background: var(--accent); }
 #view-settings input[type="checkbox"]:checked::after { transform: translateX(12px); }
 #view-settings input[type="checkbox"]:disabled { opacity: .45; cursor: not-allowed; }
-@media (max-width: 760px) { .prefs-layout { grid-template-columns: 1fr; } .prefs-side { position: static; grid-auto-flow: column; overflow-x: auto; } }
+@media (max-width: 760px) { .prefs-layout { grid-template-columns: 1fr; } .prefs-col { position: static; } .prefs-side { grid-auto-flow: column; overflow-x: auto; } }
 .pref-dup { display: none; }
 
 /* Aperçu des messages au survol de la bulle : des notifications en verre, empilées au-dessus */
