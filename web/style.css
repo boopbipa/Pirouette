@@ -110,8 +110,6 @@ input:focus { border-color: var(--accent); background: var(--surface); }
   background: var(--surface); box-shadow: 0 0 0 .5px rgba(0, 0, 0, .06), 0 24px 46px -24px rgba(60, 35, 20, .5);
   display: flex; flex-direction: column; overflow: auto; }
 .face.back { transform: rotateY(180deg); }
-.flash[data-lean="good"] .back { box-shadow: 0 0 0 2.5px var(--right), 0 24px 46px -24px rgba(60, 35, 20, .5); }
-.flash[data-lean="again"] .back { box-shadow: 0 0 0 2.5px var(--wrong), 0 24px 46px -24px rgba(60, 35, 20, .5); }
 .tag { font-size: 12px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); display: flex; align-items: center; gap: 7px; }
 .tag i { width: 8px; height: 8px; border-radius: 50%; background: var(--c); }
 .txt { flex: 1; display: flex; align-items: center; justify-content: center; text-align: center; font-size: 22px; line-height: 1.35;
@@ -119,7 +117,6 @@ input:focus { border-color: var(--accent); background: var(--surface); }
 .back .txt { font-size: 19px; }
 .hint { text-align: center; color: var(--muted); font-size: 13px; }
 .rates { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 18px; }
-.rates[hidden] { display: none; }
 .rate { border: 0; border-radius: 18px; padding: 16px 10px; font-weight: 600; font-size: 16px; cursor: pointer; }
 .rate.again { background: var(--wrong-soft); color: var(--wrong); }
 .rate.good { background: var(--right-soft); color: #4E7A49; }
@@ -274,19 +271,99 @@ body.with-tabbar .toast { bottom: calc(env(safe-area-inset-bottom) + 82px); }
 .card-typed { margin-top: 14px; }
 .rate.suggested { box-shadow: 0 0 0 2.5px currentColor; }
 
-/* Toutes les cartes, en grille */
-.grid-toggle { display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; margin-top: 14px; padding: 12px;
-  border: 1.5px dashed var(--border); border-radius: 16px; background: transparent; color: var(--muted); font-size: 15px; cursor: pointer; }
-.grid-toggle svg { width: 18px; height: 18px; }
-.grid-toggle[aria-expanded="true"] { border-style: solid; color: var(--text); }
-.seg.grid-filters { margin-top: 14px; }
-.grid-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-.gcard { position: relative; height: 140px; padding: 0; border: 0; background: none; perspective: 800px; cursor: pointer; font: inherit; color: inherit; text-align: left; }
-.gface { position: absolute; inset: 0; padding: 12px; border-radius: 16px; background: var(--surface); box-shadow: var(--shadow);
-  backface-visibility: hidden; -webkit-backface-visibility: hidden; transition: transform .4s ease; overflow: hidden; font-size: 14px; line-height: 1.35; }
-.gface.gback { transform: rotateY(180deg); background: var(--sunken); }
+/* Onglet Cartes : « Réviser tes cartes » d'un côté, la collection « Tes cartes » de l'autre */
+.deck-box { padding: 16px 16px 4px; border-radius: 22px; background: var(--surface); box-shadow: var(--shadow); }
+.deck-box h3, .library h3 { margin: 0 0 12px; font: 700 18px var(--display); letter-spacing: -.01em; }
+.library h3 small { font-size: 14px; font-weight: 500; color: var(--muted); }
+.deck-box .m1 { box-shadow: none; background: var(--sunken); }
+.library { margin-top: 28px; }
+.lib { transition: max-height .5s ease; }
+/* Le haut des cartes dépasse dans un fondu ; en faisant défiler, la collection se dévoile */
+.lib.peek { max-height: 150px; overflow: hidden; -webkit-mask-image: linear-gradient(to bottom, #000 25%, transparent 95%);
+  mask-image: linear-gradient(to bottom, #000 25%, transparent 95%); }
+.lib.peek .grid-filters { display: none; }
+.peek-arrow { display: block; margin: -6px auto 0; width: 48px; height: 34px; padding: 0; border: 0; background: none; color: var(--accent);
+  animation: peek-bob 1.8s ease-in-out infinite; }
+.peek-arrow svg { width: 28px; height: 28px; }
+.peek-arrow[hidden] { display: none; }
+@keyframes peek-bob { 50% { transform: translateY(5px); } }
+.seg.grid-filters { margin: 0 0 14px; }
+/* La grille : le visuel des cartes de l'ordinateur (plaque claire « nouvelle », crème « en cours », nacrée « acquise ») */
+.grid-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 12px; }
+.gcard { position: relative; aspect-ratio: 63 / 88; padding: 0; border: 0; background: none; perspective: 800px; cursor: pointer;
+  font: inherit; color: inherit; text-align: left; }
+.gface { position: absolute; inset: 0; display: flex; flex-direction: column; gap: 6px; padding: 12px; border-radius: 16px; color: #1D1D1F;
+  background: linear-gradient(155deg, #FFFFFF 0%, #F4F3F0 48%, #E9E7E2 100%);
+  box-shadow: inset 0 0 0 .5px rgba(0, 0, 0, .07), 0 14px 26px -18px rgba(60, 40, 20, .5);
+  backface-visibility: hidden; -webkit-backface-visibility: hidden; transition: transform .4s ease; overflow: hidden; }
+.gcard.rare .gfront { background: linear-gradient(155deg, #FBF6EC 0%, #EFE3CC 50%, #E2D1B0 100%); }
+.gcard.holo .gfront { background: linear-gradient(155deg, #FDFDFF 0%, #EEF0F6 40%, #E7E9F2 100%); }
+.gface.gback { transform: rotateY(180deg); }
 .gcard.flipped .gfront { transform: rotateY(-180deg); }
 .gcard.flipped .gback { transform: rotateY(0); }
+.ghead { display: flex; justify-content: flex-end; }
+.grarity { padding: 2px 8px; border-radius: 999px; background: rgba(0, 0, 0, .05); color: #3A3A3C; font-size: 10.5px; font-weight: 700; }
+.gtxt { flex: 1; display: flex; align-items: center; justify-content: center; text-align: center; font-size: 14px; font-weight: 600; line-height: 1.35;
+  overflow: hidden; overflow-wrap: anywhere; }
+.gback .gtxt { font-weight: 500; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .gface, :root:not([data-theme="light"]) .gcard .gfront { color: #F5F5F7;
+    background: linear-gradient(160deg, #2C2C2E, #1C1C1E 60%, #141415); box-shadow: inset 0 0 0 .5px rgba(255, 255, 255, .12), 0 14px 26px -18px #000; }
+  :root:not([data-theme="light"]) .gcard.rare .gfront { box-shadow: inset 0 0 0 1px rgba(226, 190, 120, .55), 0 14px 26px -18px #000; }
+  :root:not([data-theme="light"]) .grarity { background: rgba(255, 255, 255, .08); color: #D1D1D6; }
+}
+:root[data-theme="dark"] .gface, :root[data-theme="dark"] .gcard .gfront { color: #F5F5F7;
+  background: linear-gradient(160deg, #2C2C2E, #1C1C1E 60%, #141415); box-shadow: inset 0 0 0 .5px rgba(255, 255, 255, .12), 0 14px 26px -18px #000; }
+:root[data-theme="dark"] .gcard.rare .gfront { box-shadow: inset 0 0 0 1px rgba(226, 190, 120, .55), 0 14px 26px -18px #000; }
+:root[data-theme="dark"] .grarity { background: rgba(255, 255, 255, .08); color: #D1D1D6; }
+
+/* La carte en séance : la matière au-dessus, et la même plaque que sur l'ordinateur (chapitre et rareté en haut,
+   numéro, chat et matière en bas) */
+.card-line { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px; }
+.card-line .seg.card-mode { margin: 0; width: 190px; flex: none; }
+.s-subject { display: flex; align-items: center; gap: 7px; min-width: 0; font-size: 14px; color: var(--muted);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.s-subject i { width: 8px; height: 8px; border-radius: 50%; background: var(--c); flex: none; }
+.face { color: #1D1D1F; background: linear-gradient(155deg, #FFFFFF 0%, #F4F3F0 48%, #E9E7E2 100%);
+  box-shadow: inset 0 0 0 .5px rgba(0, 0, 0, .07), 0 24px 46px -24px rgba(60, 35, 20, .55); padding: 18px; }
+.flash.rare .front { background: linear-gradient(155deg, #FBF6EC 0%, #EFE3CC 50%, #E2D1B0 100%); }
+.flash.holo .front { background: linear-gradient(155deg, #FDFDFF 0%, #EEF0F6 40%, #E7E9F2 100%); }
+.fhead { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 11.5px; font-weight: 700;
+  letter-spacing: .05em; text-transform: uppercase; color: #86868B; }
+.fhead span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.frarity { flex: none; padding: 2px 9px; border-radius: 999px; background: rgba(0, 0, 0, .05); color: #3A3A3C; text-transform: none; letter-spacing: .02em; }
+.flash.rare .frarity { background: #f6e3a8; color: #6b4d0e; }
+.flash.holo .frarity { background: linear-gradient(90deg, #ffd6ec, #d3efff, #dcffd6); color: #3d2b57; }
+.ffoot { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 11px; font-weight: 700; color: #A1A1A6; }
+.ffoot span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 45%; }
+.ffoot svg { width: 16px; height: 16px; opacity: .5; flex: none; }
+.fq { margin: 8px 0 0; text-align: center; font-size: 13px; color: #86868B; max-height: 3.9em; overflow: hidden; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .face, :root:not([data-theme="light"]) .flash .front { color: #F5F5F7;
+    background: linear-gradient(160deg, #2C2C2E, #1C1C1E 60%, #141415); box-shadow: inset 0 0 0 .5px rgba(255, 255, 255, .12), 0 24px 46px -24px #000; }
+  :root:not([data-theme="light"]) .flash.rare .front { box-shadow: inset 0 0 0 1px rgba(226, 190, 120, .55), 0 24px 46px -24px #000; }
+  :root:not([data-theme="light"]) .frarity { background: rgba(255, 255, 255, .08); color: #D1D1D6; }
+}
+:root[data-theme="dark"] .face, :root[data-theme="dark"] .flash .front { color: #F5F5F7;
+  background: linear-gradient(160deg, #2C2C2E, #1C1C1E 60%, #141415); box-shadow: inset 0 0 0 .5px rgba(255, 255, 255, .12), 0 24px 46px -24px #000; }
+:root[data-theme="dark"] .flash.rare .front { box-shadow: inset 0 0 0 1px rgba(226, 190, 120, .55), 0 24px 46px -24px #000; }
+:root[data-theme="dark"] .frarity { background: rgba(255, 255, 255, .08); color: #D1D1D6; }
+.flash[data-lean="good"] .back { box-shadow: 0 0 0 2.5px var(--right), 0 24px 46px -24px rgba(60, 35, 20, .5); }
+.flash[data-lean="again"] .back { box-shadow: 0 0 0 2.5px var(--wrong), 0 24px 46px -24px rgba(60, 35, 20, .5); }
+
+/* Avant de retourner : un seul bouton « Retourner la carte » ; une fois retournée, il se partage en deux */
+.flip-btn { display: none; grid-column: 1 / -1; border: 0; border-radius: 18px; padding: 16px 10px; font-weight: 600; font-size: 16px;
+  background: var(--surface); color: var(--text); box-shadow: var(--shadow); cursor: pointer; }
+.rates.locked .flip-btn { display: block; }
+.rates.locked .rate, .rates.locked.typing .flip-btn { display: none; }
+.rates:not(.locked) .rate.again { animation: split-left .32s cubic-bezier(.2, .8, .2, 1); }
+.rates:not(.locked) .rate.good { animation: split-right .32s cubic-bezier(.2, .8, .2, 1); }
+@keyframes split-left { from { transform: translateX(50%) scaleX(.6); opacity: .4; } }
+@keyframes split-right { from { transform: translateX(-50%) scaleX(.6); opacity: .4; } }
+
+/* Réglages : jour ou nuit pendant les quiz et les cartes */
+.seg.theme-seg { margin: 0 0 26px; }
+.front .txt { font-weight: 600; }
 /* En mode Écrire, la carte est un peu plus petite : la réponse et les notes tiennent à l'écran */
 .stage:has(+ .card-typed) { min-height: 0; }
 .stage:has(+ .card-typed) .flash { max-height: 42dvh; }

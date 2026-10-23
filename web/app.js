@@ -127,6 +127,7 @@ const ICON = {
   grid: '<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.9"><rect x="4" y="4" width="7" height="7" rx="1.5"/><rect x="13" y="4" width="7" height="7" rx="1.5"/><rect x="4" y="13" width="7" height="7" rx="1.5"/><rect x="13" y="13" width="7" height="7" rx="1.5"/></svg>',
   back: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
   close: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>',
+  down: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
   chevron: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
   sync: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11a8 8 0 0 0-14.3-4.9L4 8M4 4v4h4M4 13a8 8 0 0 0 14.3 4.9L20 16m0 4v-4h-4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
 };
@@ -531,20 +532,44 @@ function renderSubjects() {
 }
 
 // ---------- Réglages ----------
+const sessionChoice = () => { try { return localStorage.getItem("pirouette.sessionTheme") || ""; } catch { return ""; } };
 function renderSettings() {
   app.innerHTML = `<header class="home-head"><h1>Réglages</h1></header>
     <nav class="list">
       <div class="row static"><span class="row-text"><b>Synchronisation</b><small id="sync-line">${syncLine()}</small></span>
         <button class="icon-btn" type="button" id="sync" aria-label="Synchroniser">${ICON.sync}</button></div>
+    </nav>
+    <h2>Pendant les quiz et les cartes</h2>
+    <div class="seg theme-seg" role="radiogroup" aria-label="Jour ou nuit pendant les quiz">${[["", "Automatique"], ["light", "Jour"], ["dark", "Nuit"]].map(([t, label]) =>
+      `<a role="radio" href="#" data-session-theme="${t}" class="${sessionChoice() === t ? "on" : ""}" aria-checked="${sessionChoice() === t}">${label}</a>`).join("")}</div>
+    <nav class="list">
       <button class="row" type="button" id="unpair"><span class="row-text"><b class="danger">Dissocier cet appareil</b><small>il ne verra plus tes quiz ni tes cartes</small></span></button>
     </nav>
     <p class="muted small center" style="margin-top:22px">Tes quiz et tes cartes se créent et se modifient sur ton ordinateur ; ici, tu révises. Tes réponses y reviennent toutes seules.</p>`;
   $("#sync").addEventListener("click", () => syncNow());
+  app.querySelectorAll("[data-session-theme]").forEach((a) => a.addEventListener("click", (e) => {
+    e.preventDefault();
+    try { localStorage.setItem("pirouette.sessionTheme", a.dataset.sessionTheme); } catch {}
+    renderSettings();
+  }));
   $("#unpair").addEventListener("click", async () => {
     if (!confirm("Dissocier cet appareil de ton ordinateur ? Tes réponses pas encore envoyées seraient perdues.")) return;
     try { await request("/rest/v1/sync_devices", { method: "DELETE", params: { device: `eq.${S.session.user_id}` } }); } catch {}
     forget("Cet appareil n'est plus jumelé.");
   });
+}
+
+// Où en est une carte, comme sur l'ordinateur : nouvelle (plaque claire), en cours (crème), acquise (nacrée)
+function rarity(card) {
+  if (card.status === "known" || (card.interval || 0) >= 21) return { cls: "holo", label: "★ Acquise" };
+  if ((card.reviews || 0) > 0) return { cls: "rare", label: "◆◆ En cours" };
+  return { cls: "", label: "◇ Nouvelle" };
+}
+// « Chapitre 1 — Comment débuter » → « Chapitre 1 » (comme sur l'ordinateur)
+function shortChapter(title) {
+  if (!title) return "";
+  const m = /^\s*((?:chapitre|chap\.?|partie|section|le[çc]on|s[ée]ance|module|th[èe]me|unit[ée]|cours|cm|td)\s*n?°?\s*[0-9IVXLC]+[a-z]?)(?=$|[\s:.,—–-])/i.exec(title);
+  return m ? m[1] : title;
 }
 
 // Une matière : trois onglets pour réviser, comme sur l'ordinateur — Aujourd'hui, Quiz, Cartes
@@ -591,9 +616,11 @@ function renderSubject(id, tab = "") {
       }).join("") : quizRows(quizzes)}`;
   } else {
     body = !all.length ? `<p class="muted center">Pas encore de flashcards dans cette matière.</p>` : `
-      ${all.length >= 2 ? `<div class="m1" id="deck"></div>` : ""}<button class="primary random-quiz" type="button" id="cards-go"></button>
-      <button class="grid-toggle" type="button" id="grid-toggle" aria-expanded="false">${ICON.grid}<span>Voir toutes les cartes</span></button>
-      <div id="card-grid" hidden></div>`;
+      <section class="deck-box"><h3>Réviser tes cartes</h3>
+        ${all.length >= 2 ? `<div class="m1" id="deck"></div>` : ""}<button class="primary random-quiz" type="button" id="cards-go"></button></section>
+      <section class="library"><h3>Tes cartes <small>· ${all.length}</small></h3>
+        <div class="lib peek" id="card-grid"></div>
+        <button class="peek-arrow" type="button" id="peek-arrow" aria-label="Voir toutes les cartes">${ICON.down}</button></section>`;
   }
   app.innerHTML = `<header class="top sub"><a class="icon-btn" href="#/matieres" aria-label="Retour">${ICON.back}</a></header>
     <h1 class="subject" style="--c:${colorOf(course)}"><span class="dot"></span>${esc(course.name)}</h1>
@@ -609,13 +636,15 @@ function renderSubject(id, tab = "") {
     const order = [...due, ...shuffle(weak.filter((x) => !dueIds.has(x.card.id))),
       ...shuffle(all.filter((x) => !dueIds.has(x.card.id) && !isWeak(x.card)))];
     let n = Math.min(all.length, Math.max(due.length, S.deckValue || 10));
-    const label = (v) => { $("#cards-go").textContent = `${v === all.length ? "Tout le paquet" : plural(v, "carte", "cartes")} →`; };
+    // Le nombre est dans la barre : le bouton dit seulement « Réviser » (sans barre, avec une seule carte, il la compte)
+    const label = (v) => { $("#cards-go").textContent = $("#deck") ? "Réviser →" : `Réviser ${plural(v, "carte", "cartes")} →`; };
     if ($("#deck")) {
       m1Bar($("#deck"), { min: Math.min(5, all.length), max: all.length, value: n, unit: ["carte", "cartes"],
         onChange: (v) => { n = S.deckValue = v; label(v); } });
     } else label(n);
     $("#cards-go").addEventListener("click", () => startCards(order.slice(0, n), course.name, { free: true }));
-    // Toutes les cartes, en grille : un filtre (toutes, à revoir, sues), et on touche une carte pour la retourner
+    // Tes cartes, en grille (le même visuel que sur l'ordinateur) : le haut dépasse dans un fondu, et en faisant
+    // défiler (ou en touchant la flèche) la collection se dévoile ; un filtre, et on touche une carte pour la retourner
     const now = today();
     const filters = { all: () => true, due: (c) => isNew(c) || isDue(c, now), known: (c) => c.status === "known" };
     let filter = "all";
@@ -623,16 +652,33 @@ function renderSubject(id, tab = "") {
       const shown = all.filter((x) => filters[filter](x.card));
       $("#card-grid").innerHTML = `<div class="seg grid-filters">${[["all", "Toutes"], ["due", "À revoir"], ["known", "Sues"]].map(([f, label]) =>
           `<a href="#" data-grid-filter="${f}" class="${f === filter ? "on" : ""}">${label} · ${all.filter((x) => filters[f](x.card)).length}</a>`).join("")}</div>
-        <div class="grid-cards">${shown.map((x) => `<button class="gcard" type="button"><span class="gface gfront">${rich(x.card.front)}</span>
-          <span class="gface gback">${rich(x.card.back)}</span></button>`).join("") || `<p class="muted center">Aucune carte ici.</p>`}</div>`;
+        <div class="grid-cards">${shown.map((x) => { const r = rarity(x.card); return `<button class="gcard ${r.cls}" type="button">
+          <span class="gface gfront"><span class="ghead"><span class="grarity">${r.label}</span></span><span class="gtxt">${rich(x.card.front)}</span></span>
+          <span class="gface gback"><span class="gtxt">${rich(x.card.back)}</span></span></button>`; }).join("") || `<p class="muted center">Aucune carte ici.</p>`}</div>`;
     };
-    $("#grid-toggle").addEventListener("click", () => {
-      const open = $("#card-grid").hidden;
-      $("#card-grid").hidden = !open;
-      $("#grid-toggle").setAttribute("aria-expanded", String(open));
-      if (open) drawGrid();
-    });
+    drawGrid();
+    const reveal = () => {
+      const lib = $("#card-grid");
+      if (!lib?.classList.contains("peek")) return;
+      lib.style.maxHeight = "150px";
+      lib.classList.remove("peek");
+      $("#peek-arrow").hidden = true;
+      requestAnimationFrame(() => { lib.style.maxHeight = `${lib.scrollHeight}px`; });
+      lib.addEventListener("transitionend", () => { lib.style.maxHeight = ""; }, { once: true });
+      stopWatching();
+    };
+    // Le doigt glisse vers le haut (on fait défiler vers le bas) : la collection se dévoile
+    let y0 = null;
+    const onMove = (e) => {
+      if (!$("#card-grid")) return stopWatching();  // on a quitté l'onglet
+      if (e.type === "touchstart") y0 = e.touches[0].clientY;
+      else if (e.type === "wheel" ? e.deltaY > 0 : y0 !== null && y0 - e.touches[0].clientY > 12) reveal();
+    };
+    const stopWatching = () => ["touchstart", "touchmove", "wheel"].forEach((ev) => removeEventListener(ev, onMove));
+    ["touchstart", "touchmove", "wheel"].forEach((ev) => addEventListener(ev, onMove, { passive: true }));
+    $("#peek-arrow").addEventListener("click", reveal);
     $("#card-grid").addEventListener("click", (e) => {
+      if ($("#card-grid").classList.contains("peek")) return reveal();
       const f = e.target.closest("[data-grid-filter]");
       if (f) { e.preventDefault(); filter = f.dataset.gridFilter; return drawGrid(); }
       e.target.closest(".gcard")?.classList.toggle("flipped");
@@ -660,7 +706,7 @@ function renderSubject(id, tab = "") {
 // est un interrupteur caché qu'on bascule (Safari le fait « cliquer » sous le doigt)
 function tick() {
   const now = Date.now();
-  if (now - (tick.last || 0) < 120) return;
+  if (now - (tick.last || 0) < 45) return;
   tick.last = now;
   if (navigator.vibrate) { navigator.vibrate(2); return; }
   if (!tick.label) {
@@ -685,8 +731,9 @@ function m1Bar(box, { min, max, value, onChange, unit = ["question", "questions"
     box.querySelector(".m1-text").textContent = v === max ? `${unit[1] === "cartes" ? "Tout le paquet" : "Toutes"} (${v})` : plural(v, ...unit);
     box.classList.toggle("full", share > .7);
     box.setAttribute("aria-valuenow", v);
-    // Un « tic » seulement aux repères (5, 10, 15… et aux deux bouts) : très discret
-    if (box.dataset.last && Number(box.dataset.last) !== v && (v % 5 === 0 || v === min || v === max)) tick();
+    // Un « tic » seulement aux crans (tous les 2 ou 3 nombres, de 5 en 5 sur une longue barre, et aux deux bouts)
+    const last = Number(box.dataset.last), step = max - min > 60 ? 5 : 2.5;
+    if (box.dataset.last && last !== v && (v === min || v === max || Math.floor(v / step) !== Math.floor(last / step))) tick();
     box.dataset.last = v;
     onChange(v);
   };
@@ -730,8 +777,8 @@ const darkNow = () => document.documentElement.dataset.theme === "dark"
 function sessionTheme(on) {
   let saved = "";
   try { saved = localStorage.getItem("pirouette.sessionTheme") || ""; } catch {}
-  if (on && saved) document.documentElement.dataset.theme = saved;
-  else delete document.documentElement.dataset.theme;
+  if (on && (saved === "light" || saved === "dark")) document.documentElement.dataset.theme = saved;
+  else delete document.documentElement.dataset.theme;  // automatique : comme le téléphone
 }
 const SUN_MOON = '<span class="dn-knob"><svg class="dn-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>'
   + '<svg class="dn-moon" viewBox="0 0 24 24" fill="currentColor"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/></svg></span>';
@@ -746,24 +793,28 @@ document.addEventListener("click", (e) => {
   const button = e.target.closest(".day-night");
   if (!button) return;
   const theme = darkNow() ? "light" : "dark";
-  try { localStorage.setItem("pirouette.sessionTheme", theme); } catch {}
-  document.documentElement.dataset.theme = theme;
+  document.documentElement.dataset.theme = theme;  // pour cette séance seulement : le choix par défaut est dans Réglages
   button.setAttribute("aria-checked", String(theme === "dark"));
 });
 // Les cartes : on les retourne, ou on écrit sa réponse avant (choix gardé sur ce téléphone)
 const cardMode = () => { try { return localStorage.getItem("pirouette.cardMode") || "flip"; } catch { return "flip"; } };
 function drawCard({ course, card }) {
   const writing = cardMode() === "type";
+  const r = rarity(card), s = session, pad = (n) => String(n).padStart(3, "0");
+  const head = `<div class="fhead"><span>${esc(shortChapter(card.scope?.[0]) || "Flashcard")}</span><span class="frarity">${r.label}</span></div>`;
+  const foot = `<div class="ffoot"><span>${pad(s.index + 1)}/${pad(s.list.length)}</span>${catSvg()}<span>${esc(course.name)}</span></div>`;
   app.innerHTML = `${sessionHead()}
-    <div class="seg card-mode" role="radiogroup" aria-label="Façon de réviser les cartes">${[["flip", "Retourner"], ["type", "Écrire"]].map(([m, label]) =>
-      `<a role="radio" href="#" data-card-mode="${m}" class="${cardMode() === m ? "on" : ""}" aria-checked="${cardMode() === m}">${label}</a>`).join("")}</div>
-    <div class="stage"><div class="flash" id="flash" style="--c:${colorOf(course)}" role="button" tabindex="0" aria-label="Retourner la carte">
-      <div class="face front"><span class="tag"><i></i>${esc(course.name)}</span><div class="txt">${rich(card.front)}</div></div>
-      <div class="face back"><span class="tag"><i></i>${esc(course.name)}</span><div class="txt">${rich(card.back)}</div></div>
+    <div class="card-line"><span class="s-subject" style="--c:${colorOf(course)}"><i></i>${esc(course.name)}</span>
+      <div class="seg card-mode" role="radiogroup" aria-label="Façon de réviser les cartes">${[["flip", "Retourner"], ["type", "Écrire"]].map(([m, label]) =>
+        `<a role="radio" href="#" data-card-mode="${m}" class="${cardMode() === m ? "on" : ""}" aria-checked="${cardMode() === m}">${label}</a>`).join("")}</div></div>
+    <div class="stage"><div class="flash ${r.cls}" id="flash" style="--c:${colorOf(course)}" role="button" tabindex="0" aria-label="Retourner la carte">
+      <div class="face front">${head}<div class="txt">${rich(card.front)}</div>${foot}</div>
+      <div class="face back">${head}<p class="fq">${rich(card.front)}</p><div class="txt">${rich(card.back)}</div>${foot}</div>
     </div></div>
     ${writing ? `<form id="card-typed" class="typed card-typed"><input id="card-answer" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Ta réponse">
       <button class="primary" type="submit">Vérifier</button></form>` : ""}
-    <div class="rates" id="rates" hidden>
+    <div class="rates locked${writing ? " typing" : ""}" id="rates">
+      <button class="flip-btn" type="button" id="flip-btn">Retourner la carte</button>
       <button class="rate again" type="button" data-rate="again">Je ne savais pas</button>
       <button class="rate good" type="button" data-rate="good">Je savais</button>
     </div>`;
@@ -789,16 +840,18 @@ function drawCard({ course, card }) {
     ringAnswer(input, right);
     flash.classList.add("flipped");
     revealed = true;
-    $("#rates").hidden = false;
+    $("#rates").classList.remove("locked");
     app.querySelector(`[data-rate="${right ? "good" : "again"}"]`).classList.add("suggested");
   });
   if (writing) setTimeout(() => $("#card-answer")?.focus(), 50);
-  flash.addEventListener("click", () => {
+  const flip = () => {
     if (moved > 10 || (writing && !revealed)) return;  // en mode Écrire, on répond d'abord
     flash.classList.toggle("flipped");
     revealed = true;
-    $("#rates").hidden = false;
-  });
+    $("#rates").classList.remove("locked");  // « Retourner la carte » se partage en « Je ne savais pas » / « Je savais »
+  };
+  flash.addEventListener("click", flip);
+  $("#flip-btn").addEventListener("click", () => { moved = 0; flip(); });
   app.querySelectorAll("[data-rate]").forEach((b) => b.addEventListener("click", () => rate(b.dataset.rate)));
   // Glisser : à droite « je savais », à gauche « je ne savais pas » (une fois la réponse vue)
   let x0 = null;
