@@ -1370,9 +1370,11 @@ dialog.prepare-dialog.prepare { margin: auto; border: 0; }
 
 /* Glisser la carte : le bouton du côté où elle part grandit et se colore */
 #card-stage { --lean-left: 0; --lean-right: 0; }
-.ratings .rating { --pull: 0; position: relative; flex: calc(1 + var(--pull) * 1.8) 1 auto; white-space: nowrap; overflow: hidden; isolation: isolate;
+/* Les deux boutons gardent leur taille (ni plus larges ni plus gros quand on répond ou qu'on penche la carte) :
+   seule leur couleur se remplit */
+.ratings .rating { --pull: 0; position: relative; flex: 1 1 0; white-space: nowrap; overflow: hidden; isolation: isolate;
   flex-direction: row; justify-content: center; gap: 10px; padding: 16px 12px; border-radius: 999px; font-size: 16px;
-  transform: scale(calc(1 + var(--pull) * .14)); transition: flex-grow .25s, transform .25s, color .2s, border-color .2s, opacity .2s; }
+  transition: color .2s, border-color .2s, opacity .2s; }
 .ratings .rating::before { content: ""; position: absolute; inset: 0; z-index: -1; opacity: var(--pull); transition: opacity .2s; }
 .ratings .rating.again { --pull: var(--lean-left); }
 .ratings .rating.good { --pull: var(--lean-right); }
@@ -2332,8 +2334,6 @@ body.focus .choice:has(input:checked):not(.right):not(.wrong), body.focus.day .c
    ne fait plus qu'assombrir, et ce sont les autres éléments de la séance qui se floutent, jamais la carte. */
 .zoom-veil { backdrop-filter: none !important; -webkit-backdrop-filter: none !important; }
 
-body.card-zoomed #view-cards > :not(#card-stage):not(.zoom-veil), body.card-zoomed #card-stage > :not(.tcg-table),
-body.card-zoomed .tcg-pile { filter: blur(8px); }
 
 /* Aujourd'hui : le bandeau du jour, à la couleur de la matière ; au survol, comme les cases de l'accueil : il grandit
    à peine, un fin halo l'entoure et un reflet suit la souris */
@@ -2361,7 +2361,10 @@ body.focus.day .day-night:hover { background: rgba(0, 0, 0, .1); }
 .flashcard.tcg.zooming, body.focus .flashcard.tcg.zooming { transition: none !important; }
 .flashcard.tcg.zoomed { transform: translate(var(--dx), calc(var(--dy) + var(--zy, 0px))) rotate(var(--dr)) scale(var(--zoom)); }
 .flashcard.tcg.zoomed .tcg-glare { opacity: 0 !important; }
-#view-cards > :not(#card-stage):not(.zoom-veil), #card-stage > :not(.tcg-table), .tcg-pile { transition: none !important; }
+#view-cards > :not(#card-stage):not(.zoom-veil), #card-stage > :not(.tcg-table), .tcg-pile, .focus-close, body.focus .day-night {
+  transition: opacity .3s ease !important; }
+body.zoom-live #view-cards > :not(#card-stage):not(.zoom-veil), body.zoom-live #card-stage > :not(.tcg-table), body.zoom-live .tcg-pile,
+body.zoom-live .focus-close, body.zoom-live.focus .day-night { transition: none !important; }
 
 /* Réponse écrite validée : un trait vert ou rouge fait le tour de la réponse (comme un stylo), avec un léger halo,
    puis tout s'efface en douceur */
@@ -2388,8 +2391,9 @@ input.answer-ring { animation: field-ring 2.2s ease forwards; }
 /* Carte zoomée, sur Mac : le voile sombre passait aussi devant la carte. Plus de voile coloré (il reste invisible,
    pour fermer le zoom d'un clic à côté) : ce sont les autres éléments qui s'effacent et se floutent. */
 .zoom-veil, body.card-zoomed .zoom-veil { background: transparent !important; }
+/* Le reste s'efface au fil du zoom (en suivant les doigts, comme dans Photos) : plus de flou, qui saccadait */
 body.card-zoomed #view-cards > :not(#card-stage):not(.zoom-veil), body.card-zoomed #card-stage > :not(.tcg-table),
-body.card-zoomed .tcg-pile, body.card-zoomed .focus-close, body.card-zoomed .day-night { filter: blur(8px); opacity: .25; }
+body.card-zoomed .tcg-pile, body.card-zoomed .focus-close, body.card-zoomed .day-night { opacity: calc(1 - var(--zp, 0) * .85); }
 
 /* Onglet Quiz d'une matière à plusieurs cours : un titre par cours (fichier), avec sa jauge « au hasard » */
 .quiz-list .quiz-file { list-style: none; margin: 22px 0 6px; padding: 0; border: 0; background: none; box-shadow: none; }
@@ -2571,3 +2575,9 @@ body.same-subject #view-course:not([hidden]), body.same-subject #view-review-sco
 body.same-subject #view-course:not([hidden]) > :not(#course-overview),
 body.same-subject #view-course:not([hidden]) > #course-overview > :not(.course-head):not(.scope-nav),
 body.same-subject #view-review-scope:not([hidden]) > :not(.scope-head):not(.scope-nav) { animation: view-in .18s ease-out; }
+
+/* Rester appuyé sur le trackpad ne sélectionne plus le texte des boutons, onglets, réponses et cartes
+   (le texte des cours, des explications et des champs reste sélectionnable) */
+button, a, label, summary, [role="button"], [role="tab"], [role="menuitem"], .choice, .flashcard, .gcard, .filters, .chips,
+.course-tab, .rating, .m1, kbd, .tabs, nav { -webkit-user-select: none; user-select: none; }
+input, textarea, [contenteditable] { -webkit-user-select: text; user-select: text; }

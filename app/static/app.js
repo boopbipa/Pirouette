@@ -3273,42 +3273,65 @@ $(".tcg-table").addEventListener("pointermove", (e) => {
 // Zoom : pincer sur le trackpad, la souris sur la carte (Safari : événements « gesture », sinon molette + ctrl).
 // Plafonné pour que la carte tienne dans la fenêtre (et ne soit jamais floue ou trop grosse pour se lire).
 const ZOOM_MAX = 2.6;
-function zoomCard(next) {
+// Comme dans Photos : la carte suit les doigts (une mise à jour par image), passe à plat dès le début du geste (et non
+// à un seuil : c'est ce va-et-vient qui la faisait trembler), et le reste s'efface au fil du zoom.
+const zoomNow = () => Number($("#flashcard").style.getPropertyValue("--zoom")) || 1;
+function beginZoom() {
   const el = $("#flashcard");
-  // Taille et place sans le zoom en cours (la carte peut être en pleine animation)
-  const top = el.offsetParent.getBoundingClientRect().top + el.offsetTop;
-  const room = Math.min((innerHeight - 40) / el.offsetHeight, (innerWidth - 24) / el.offsetWidth, ZOOM_MAX);
-  const z = Math.max(1, Math.min(next, Math.max(1, room)));
-  el.style.setProperty("--zoom", z.toFixed(3));
-  // Zoomée, la carte grandit vers le milieu de la fenêtre (et non plus seulement vers le bas)
-  const middle = innerHeight / 2 - (top + el.offsetHeight * z / 2);
-  el.style.setProperty("--zy", z > 1.01 ? `${Math.round(middle * Math.min(1, (z - 1) / 0.3))}px` : "0px");
-  el.classList.toggle("zoomed", z > 1.01);
-  document.body.classList.toggle("card-zoomed", z > 1.01);  // le reste passe derrière, flouté
-  if (z > 1.01) { el.style.setProperty("--rx", "0deg"); el.style.setProperty("--ry", "0deg"); }
+  el.style.setProperty("--rx", "0deg");
+  el.style.setProperty("--ry", "0deg");
+  el.classList.remove("tilting");  // la carte revient ensuite à sa taille en douceur (pas au rythme rapide de l'inclinaison)
+  el.classList.add("zooming", "zoomed");
+  document.body.classList.add("card-zoomed", "zoom-live");
+}
+function zoomCard(next) {
+  zoomCard.target = next;
+  if (zoomCard.frame) return;
+  zoomCard.frame = requestAnimationFrame(() => {
+    zoomCard.frame = 0;
+    const el = $("#flashcard");
+    // Taille et place sans le zoom en cours (la carte peut être en pleine animation)
+    const top = el.offsetParent.getBoundingClientRect().top + el.offsetTop;
+    const room = Math.min((innerHeight - 40) / el.offsetHeight, (innerWidth - 24) / el.offsetWidth, ZOOM_MAX);
+    const z = Math.max(1, Math.min(zoomCard.target, Math.max(1, room)));
+    el.style.setProperty("--zoom", z.toFixed(4));
+    // Zoomée, la carte grandit vers le milieu de la fenêtre (et non plus seulement vers le bas)
+    const middle = innerHeight / 2 - (top + el.offsetHeight * z / 2);
+    el.style.setProperty("--zy", `${(middle * Math.min(1, (z - 1) / 0.3)).toFixed(1)}px`);
+    document.body.style.setProperty("--zp", Math.min(1, (z - 1) / 0.35).toFixed(3));
+  });
+}
+function endZoom() {
+  document.body.classList.remove("zoom-live");
+  $("#flashcard").classList.remove("zooming");
+  if (zoomNow() < 1.04) unzoomCard();  // à peine zoomée : elle reprend doucement sa place
 }
 function unzoomCard() {
   const el = $("#flashcard");
+  cancelAnimationFrame(zoomCard.frame);
+  zoomCard.frame = 0;
+  zoomCard.target = 1;
   el.style.setProperty("--zoom", "1");
   el.style.setProperty("--zy", "0px");
   el.classList.remove("zoomed", "zooming");
-  document.body.classList.remove("card-zoomed");
+  document.body.classList.remove("card-zoomed", "zoom-live");
+  document.body.style.setProperty("--zp", "0");
 }
 let gestureStart = 1;
 $("#flashcard").addEventListener("gesturestart", (e) => {
   e.preventDefault();
-  gestureStart = Number($("#flashcard").style.getPropertyValue("--zoom")) || 1;
-  $("#flashcard").classList.add("zooming");
+  gestureStart = zoomNow();
+  beginZoom();
 });
 $("#flashcard").addEventListener("gesturechange", (e) => { e.preventDefault(); zoomCard(gestureStart * e.scale); });
-$("#flashcard").addEventListener("gestureend", (e) => { e.preventDefault(); $("#flashcard").classList.remove("zooming"); });
+$("#flashcard").addEventListener("gestureend", (e) => { e.preventDefault(); endZoom(); });
 $("#flashcard").addEventListener("wheel", (e) => {
   if (!e.ctrlKey) return;  // pincer = molette + ctrl (Chrome, Firefox) ; la molette seule fait défiler la page
   e.preventDefault();
-  $("#flashcard").classList.add("zooming");
-  zoomCard((Number($("#flashcard").style.getPropertyValue("--zoom")) || 1) * Math.exp(-e.deltaY / 100));
+  if (!document.body.classList.contains("zoom-live")) { beginZoom(); zoomCard.target = zoomNow(); }
+  zoomCard((zoomCard.target || zoomNow()) * Math.exp(-e.deltaY / 100));
   clearTimeout(zoomCard.idle);  // le geste fini, la carte reprend ses petites animations
-  zoomCard.idle = setTimeout(() => $("#flashcard").classList.remove("zooming"), 160);
+  zoomCard.idle = setTimeout(endZoom, 160);
 }, { passive: false });
 $("#focus-close").addEventListener("click", () => quitByKey());
 $("#zoom-veil").addEventListener("click", () => unzoomCard());
@@ -4876,6 +4899,18 @@ function pickedChoice(e, choices) {
   if (isKey(e, "faux")) return choices.findIndex((c) => normalize(c) === "faux");
   return -1;
 }
+// ↓ / ↑ : passer d'une réponse à l'autre (la première, puis celle du dessous… ou du dessus) ; Entrée valide ensuite
+function arrowChoice(e, selector) {
+  if (!["ArrowDown", "ArrowUp"].includes(e.key) || e.shiftKey) return false;
+  const radios = [...document.querySelectorAll(selector)].filter((r) => !r.disabled && r.offsetParent);
+  if (!radios.length) return false;
+  e.preventDefault();
+  const at = radios.findIndex((r) => r.checked);
+  const to = e.key === "ArrowDown" ? (at < 0 ? 0 : Math.min(at + 1, radios.length - 1)) : (at < 0 ? radios.length - 1 : Math.max(at - 1, 0));
+  radios[to].click();
+  radios[to].focus();
+  return true;
+}
 function chooseByKey(selector, index, submit) {
   const radio = document.querySelectorAll(selector)[index];
   if (!radio || radio.disabled) return;
@@ -4998,6 +5033,11 @@ const WELCOME = [
 ];
 // Les nouveautés de chaque version (le carton « Quoi de neuf » ne s'affiche que si la version en a)
 const WHATS_NEW = {
+  "0.74.0": [
+    ["⤢", "Un zoom tout doux", "Pince la carte : elle suit tes doigts comme une photo, sans trembler ni flou, et le reste s'efface autour"],
+    ["↓", "Les flèches dans les quiz", "↓ et ↑ passent d'une réponse à l'autre, Entrée valide"],
+    ["✓", "Des boutons qui restent calmes", "« Je savais » ne grossit plus quand tu réponds, et rester appuyé ne sélectionne plus le texte"],
+  ],
   "0.73.5": [
     ["▢", "Un bouton plus discret", "« Retourner la carte » est un petit bouton au centre ; les deux réponses en sortent une fois la carte retournée"],
   ],
@@ -5462,6 +5502,7 @@ function quizKeys(e) {
   if (isKey(e, "previous") && !$("#prev-btn").hidden) { e.preventDefault(); return $("#prev-btn").click(); }
   if (isKey(e, "next") && state.answered && !$("#next-btn").hidden) { e.preventDefault(); return next(); }
   if (state.answered) return;
+  if (arrowChoice(e, "input[name=choice]")) return;
   const index = pickedChoice(e, q?.choices);
   if (index >= 0) { e.preventDefault(); chooseByKey("input[name=choice]", index, validate); }
 }
@@ -5492,6 +5533,7 @@ function sessionKeys(e) {
   if (typing) return;
   if (isKey(e, "next") && !$("#sq-next").hidden) { e.preventDefault(); return nextItem(); }
   if ($("#sq-validate").hidden) return;
+  if (arrowChoice(e, "input[name=sq-choice]")) return;
   const index = pickedChoice(e, item.question.choices);
   if (index >= 0) { e.preventDefault(); chooseByKey("input[name=sq-choice]", index, validateSessionQuestion); }
 }
@@ -5504,6 +5546,7 @@ function examKeys(e) {
   if ((isKey(e, "previous")) && !$("#exam-prev").disabled && !$("#exam-prev").hidden) { e.preventDefault(); return $("#exam-prev").click(); }
   if ((isKey(e, "next") || isKey(e, "validate")) && !$("#exam-next").disabled && !$("#exam-next").hidden) { e.preventDefault(); return $("#exam-next").click(); }
   const item = exam.items[exam.index];
+  if (arrowChoice(e, "input[name=exam-choice]")) return;
   const index = pickedChoice(e, item?.question?.choices);
   if (index >= 0) { e.preventDefault(); chooseByKey("input[name=exam-choice]", index, null); }
 }

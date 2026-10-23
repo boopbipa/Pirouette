@@ -367,3 +367,8 @@ body.with-tabbar .toast { bottom: calc(env(safe-area-inset-bottom) + 82px); }
 /* En mode Écrire, la carte est un peu plus petite : la réponse et les notes tiennent à l'écran */
 .stage:has(+ .card-typed) { min-height: 0; }
 .stage:has(+ .card-typed) .flash { max-height: 42dvh; }
+
+/* Rester appuyé ne sélectionne plus le texte des boutons, onglets, réponses et cartes */
+button, a, label, [role="button"], [role="tab"], .choice, .flash, .gcard, .seg, .rate, .m1, .tabbar { -webkit-user-select: none; user-select: none;
+  -webkit-touch-callout: none; }
+input, textarea { -webkit-user-select: text; user-select: text; }
