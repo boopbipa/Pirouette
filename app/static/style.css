@@ -359,7 +359,7 @@ button.small { padding: 6px 12px; font-size: 14px; }
   --frame: linear-gradient(150deg, #eef0f3, #b9bfc9 42%, #f7f8fa 58%, #a4abb6);
   position: relative; z-index: 2; display: block; width: min(330px, 86vw); aspect-ratio: 63 / 88; cursor: pointer; outline: none;
   transform-style: preserve-3d; transform-origin: 50% 0;
-  transform: translate(var(--dx), var(--dy)) rotate(var(--dr)) scale(var(--zoom)) rotateX(var(--rx)) rotateY(var(--ry));
+  transform: translate(var(--dx), calc(var(--dy) + var(--zy, 0px))) rotate(var(--dr)) scale(var(--zoom)) rotateX(var(--rx)) rotateY(var(--ry));
   transition: transform .5s cubic-bezier(.2, .8, .2, 1); touch-action: pan-y; user-select: none; -webkit-user-select: none;
 }
 .flashcard.tcg.dragging { transition: none; cursor: grabbing; }
@@ -2564,3 +2564,10 @@ body.focus .choice:has(input:checked):not(.right):not(.wrong), body.focus.day .c
 /* Séances et quiz : ni l'origine (« Question de quiz · … ») ni le type (« Réponse courte · Question de cours ») */
 #session-origin, #sq-type, #question-type { display: none !important; }
 .session-top { justify-content: flex-end; }
+
+/* Carte zoomée : sur Mac (WebKit), le flou « derrière le voile » (backdrop-filter) floutait aussi la carte. Le voile
+   ne fait plus qu'assombrir, et ce sont les autres éléments de la séance qui se floutent, jamais la carte. */
+.zoom-veil { backdrop-filter: none !important; -webkit-backdrop-filter: none !important; }
+#view-cards > :not(#card-stage):not(.zoom-veil), #card-stage > :not(.tcg-table), .tcg-pile { transition: filter .3s ease; }
+body.card-zoomed #view-cards > :not(#card-stage):not(.zoom-veil), body.card-zoomed #card-stage > :not(.tcg-table),
+body.card-zoomed .tcg-pile { filter: blur(8px); }

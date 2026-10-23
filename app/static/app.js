@@ -3257,9 +3257,12 @@ function zoomCard(next) {
   const el = $("#flashcard");
   // Taille et place sans le zoom en cours (la carte peut être en pleine animation)
   const top = el.offsetParent.getBoundingClientRect().top + el.offsetTop;
-  const room = Math.min((innerHeight - top - 12) / el.offsetHeight, (innerWidth - 24) / el.offsetWidth, ZOOM_MAX);
+  const room = Math.min((innerHeight - 40) / el.offsetHeight, (innerWidth - 24) / el.offsetWidth, ZOOM_MAX);
   const z = Math.max(1, Math.min(next, Math.max(1, room)));
   el.style.setProperty("--zoom", z.toFixed(3));
+  // Zoomée, la carte grandit vers le milieu de la fenêtre (et non plus seulement vers le bas)
+  const middle = innerHeight / 2 - (top + el.offsetHeight * z / 2);
+  el.style.setProperty("--zy", z > 1.01 ? `${Math.round(middle * Math.min(1, (z - 1) / 0.3))}px` : "0px");
   el.classList.toggle("zoomed", z > 1.01);
   document.body.classList.toggle("card-zoomed", z > 1.01);  // le reste passe derrière, flouté
   if (z > 1.01) { el.style.setProperty("--rx", "0deg"); el.style.setProperty("--ry", "0deg"); }
@@ -3267,6 +3270,7 @@ function zoomCard(next) {
 function unzoomCard() {
   const el = $("#flashcard");
   el.style.setProperty("--zoom", "1");
+  el.style.setProperty("--zy", "0px");
   el.classList.remove("zoomed", "zooming");
   document.body.classList.remove("card-zoomed");
 }
@@ -5017,6 +5021,9 @@ const WELCOME = [
 ];
 // Les nouveautés de chaque version (le carton « Quoi de neuf » ne s'affiche que si la version en a)
 const WHATS_NEW = {
+  "0.69.1": [
+    ["⤢", "Zoom sur une carte", "La carte reste nette (seul le fond se floute) et vient au milieu de la fenêtre"],
+  ],
   "0.69.0": [
     ["✎", "Claude relit tes cartes", "« Relire avec Claude » (Mes cours › Flashcards) ou « ⋯ › Clarifier avec Claude » : il reformule ce qui ne se comprend pas sorti du cours"],
     ["✦", "Des cartes qui se comprennent seules", "Les nouvelles cartes et questions donnent leur contexte (plus de « cette investigation » sans dire laquelle)"],
