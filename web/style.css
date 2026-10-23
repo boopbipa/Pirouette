@@ -352,14 +352,14 @@ body.with-tabbar .toast { bottom: calc(env(safe-area-inset-bottom) + 82px); }
 .flash[data-lean="again"] .back { box-shadow: 0 0 0 2.5px var(--wrong), 0 24px 46px -24px rgba(60, 35, 20, .5); }
 
 /* Avant de retourner : un seul bouton « Retourner la carte » ; une fois retournée, il se partage en deux */
-.flip-btn { display: none; grid-column: 1 / -1; border: 0; border-radius: 18px; padding: 16px 10px; font-weight: 600; font-size: 16px;
+.flip-btn { display: none; grid-column: 1 / -1; justify-self: center; border: 0; border-radius: 999px; padding: 11px 22px; font-weight: 600; font-size: 15px;
   background: var(--surface); color: var(--text); box-shadow: var(--shadow); cursor: pointer; }
 .rates.locked .flip-btn { display: block; }
 .rates.locked .rate, .rates.locked.typing .flip-btn { display: none; }
 .rates:not(.locked) .rate.again { animation: split-left .32s cubic-bezier(.2, .8, .2, 1); }
 .rates:not(.locked) .rate.good { animation: split-right .32s cubic-bezier(.2, .8, .2, 1); }
-@keyframes split-left { from { transform: translateX(50%) scaleX(.6); opacity: .4; } }
-@keyframes split-right { from { transform: translateX(-50%) scaleX(.6); opacity: .4; } }
+@keyframes split-left { from { transform: translateX(50%) scaleX(.45); opacity: 0; } }
+@keyframes split-right { from { transform: translateX(-50%) scaleX(.45); opacity: 0; } }
 
 /* Réglages : jour ou nuit pendant les quiz et les cartes */
 .seg.theme-seg { margin: 0 0 26px; }

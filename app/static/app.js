@@ -4998,6 +4998,9 @@ const WELCOME = [
 ];
 // Les nouveautés de chaque version (le carton « Quoi de neuf » ne s'affiche que si la version en a)
 const WHATS_NEW = {
+  "0.73.5": [
+    ["▢", "Un bouton plus discret", "« Retourner la carte » est un petit bouton au centre ; les deux réponses en sortent une fois la carte retournée"],
+  ],
   "0.73.4": [
     ["〰", "Des crans plus serrés", "La barre « Combien de cartes ? » vibre deux fois plus souvent en glissant, toujours discrètement"],
   ],
