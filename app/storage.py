@@ -223,6 +223,9 @@ class Store:
             exam = self.exam_info(course, today)
             fresh = []
             for card in cards:
+                # Déjà revue aujourd'hui (même ratée) : la révision du jour la compte comme faite ; ratée, elle revient demain
+                if str(card.get("last_reviewed") or "").startswith(today.isoformat()):
+                    continue
                 item = {"course": course, "card": card, "exam": exam["days"] if exam and exam["days"] > 0 else 9999}
                 if srs.is_new(card) and card.get("status") != "known":
                     fresh.append(item)

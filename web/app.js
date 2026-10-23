@@ -305,6 +305,8 @@ function todayCards(courseIds) {
     const examDays = course.exam ? daysBetween(now, parseDay(course.exam)) : null;
     const mine = [];
     for (const card of cards) {
+      // Déjà revue aujourd'hui (même ratée) : comptée comme faite ; ratée, elle revient demain
+      if (String(card.last_reviewed || "").startsWith(dayOf(new Date()))) continue;
       const item = { course, card, exam: examDays > 0 ? examDays : 9999 };
       if (isNew(card) && card.status !== "known") mine.push(item);
       else if (isDue(card, now)) due.push(item);
@@ -451,6 +453,14 @@ function interleave(cards, questions) {
   questions.forEach((q, i) => list.splice(Math.min(list.length, (i + 1) * step - 1), 0, { kind: "q", q }));
   return list;
 }
+// Questions de quiz déjà répondues aujourd'hui : la révision du jour en pose DAILY_QUESTIONS, pas une de plus
+function questionsDoneToday() {
+  const day = dayOf(new Date());
+  const meta = Object.values(current().meta?.activity?.[day] || {}).reduce((n, c) => n + (c.questions || 0), 0);
+  const pending = [...S.remote, ...S.outbox].filter((e) => e.kind === "answers" && e.payload.at?.startsWith(day))
+    .reduce((n, e) => n + (e.payload.answers || []).length, 0);
+  return meta + pending;
+}
 function doneToday() {
   const day = dayOf(new Date());
   const meta = Object.values(current().meta?.activity?.[day] || {}).reduce((n, c) => n + (c.cards || 0) + (c.questions || 0), 0);
@@ -491,7 +501,7 @@ function renderHome() {
     return;
   }
   const cards = todayCards();
-  const questions = cards.length ? dailyQuestions() : [];
+  const questions = dailyQuestions(Math.max(0, DAILY_QUESTIONS - questionsDoneToday()));
   const total = cards.length + questions.length, done = doneToday();
   const pct = total ? Math.round((100 * done) / (done + total)) : 100;
   // Le mélange des matières de la séance (les 3 plus présentes nommées)
@@ -563,7 +573,7 @@ function renderSettings() {
         <button class="icon-btn" type="button" id="sync" aria-label="Synchroniser">${ICON.sync}</button></div>
     </nav>
     <h2>Pendant les quiz et les cartes</h2>
-    <div class="seg theme-seg" role="radiogroup" aria-label="Jour ou nuit pendant les quiz">${[["", "Automatique"], ["light", "Jour"], ["dark", "Nuit"]].map(([t, label]) =>
+    <div class="seg theme-seg" role="radiogroup" aria-label="Clair ou sombre pendant les quiz">${[["", "Automatique"], ["light", "Clair"], ["dark", "Sombre"]].map(([t, label]) =>
       `<a role="radio" href="#" data-session-theme="${t}" class="${sessionChoice() === t ? "on" : ""}" aria-checked="${sessionChoice() === t}">${label}</a>`).join("")}</div>
     <nav class="list">
       <button class="row" type="button" id="unpair"><span class="row-text"><b class="danger">Dissocier cet appareil</b><small>il ne verra plus tes quiz ni tes cartes</small></span></button>

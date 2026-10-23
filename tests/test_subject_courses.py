@@ -96,3 +96,17 @@ def test_today_of_one_course_is_not_crowded_out_by_the_others(tmp_path, monkeypa
     assert today["cards"] == 5 and {i["card"]["id"] for i in today["items"]} == {f"g{i}" for i in range(5)}
     decks = client.get(f"/api/cards/decks?course={cid}&file={glossary}").json()
     assert decks["all"]["due"] == 5
+
+
+def test_daily_review_is_done_once_everything_was_seen(tmp_path, monkeypatch):
+    # 100 % quand la révision du jour a été faite, quels que soient les résultats : une carte ratée aujourd'hui
+    # ne revient pas dans la révision du jour (elle revient demain), et les questions du jour ont un nombre fixe
+    client, cid, cm1, glossary = _subject(tmp_path, monkeypatch)
+    before = client.get(f"/api/progress?course={cid}").json()["today"]["cards"]
+    client.post(f"/api/courses/{cid}/cards/a/review", json={"rating": "again"})
+    after = client.get(f"/api/progress?course={cid}").json()
+    assert after["today"]["cards"] == before - 1 and after["done_today"]["cards"] == 1
+    assert "a" not in {i["card"]["id"] for i in client.get(f"/api/session?mode=today&course={cid}").json()["items"] if i["kind"] == "card"}
+    main.store.log_activity(cid, questions=20, questions_ok=0)  # toutes les questions du jour répondues (même fausses)
+    assert client.get(f"/api/progress?course={cid}").json()["today"]["questions"] == 0
+    assert not [i for i in client.get(f"/api/session?mode=today&course={cid}").json()["items"] if i["kind"] == "question"]

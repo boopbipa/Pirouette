@@ -1396,9 +1396,14 @@ def _same_notion(notion: tuple, others: list) -> bool:
 def _today_counts(ids: list[str]) -> dict:
     """Ce que comptera la révision du jour (plafonnée à la taille choisie dans les Réglages)."""
     size, cards = _daily_size(), len(store.today_cards(ids))
-    questions = min(SESSION_QUESTIONS, len(store.weak_questions(ids)) + len(store.review_questions(ids)))
-    questions = min(questions, max(3, size // 4)) if cards else min(questions, size)
+    questions = min(_questions_left_today(ids, size), len(store.weak_questions(ids)) + len(store.review_questions(ids)))
     return {"cards": min(cards, size - questions), "questions": questions}
+
+
+def _questions_left_today(ids: list[str], size: int) -> int:
+    """Les questions de quiz de la révision du jour : un nombre fixe par jour (une fois répondues, justes ou fausses,
+    c'est fini pour aujourd'hui ; sinon de nouvelles questions arrivaient sans fin et la révision n'était jamais finie)."""
+    return max(0, min(SESSION_QUESTIONS, max(3, size // 4)) - _done_today(ids)["questions"])
 
 
 def _done_today(ids: list[str]) -> dict:
@@ -1717,7 +1722,8 @@ def _session(mode: str, course: str, folder: str, filter: str, questions: bool, 
         weak = [i for i in (_question_item(e) for e in store.weak_questions(ids)) if keep(i)][:SESSION_QUESTIONS]
         later = [i for i in (_question_item(e) for e in store.review_questions(ids)) if keep(i)]
         asked = (weak + later[:SESSION_QUESTIONS - len(weak)]) if questions else []
-        cards, asked = _daily_pick(cards, asked, _daily_size())
+        asked = asked[:_questions_left_today(ids, _daily_size())]
+        cards, asked = _daily_pick(cards, asked, _daily_size(), n_questions=len(asked))
     elif mode == "weak":
         cards = [i for i in (_card_item(e) for e in store.weak_cards(ids) if in_chapter(e)) if keep(i)][:30]
         asked = [i for i in (_question_item(e) for e in store.weak_questions(ids)) if keep(i)][:20] if questions else []

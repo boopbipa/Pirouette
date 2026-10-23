@@ -609,8 +609,7 @@ code { font-family: "SF Mono", Menlo, monospace; font-size: .88em; background: v
 /* Confirmation / petit message aux couleurs de l'app */
 .confirm-dialog { width: min(420px, calc(100vw - 32px)); padding: 22px 22px 18px; }
 .confirm-dialog .confirm-head { display: flex; gap: 14px; align-items: flex-start; padding-right: 24px; }
-.confirm-cat { flex: none; width: 40px; height: 40px; padding: 8px; border-radius: 12px;
-               background: var(--accent-soft); color: var(--accent); }
+.confirm-cat { flex: none; width: 40px; height: 40px; border-radius: 22.5%; box-shadow: 0 6px 14px -8px rgba(120, 50, 20, .6); }
 .confirm-dialog h2 { font-size: 17.5px; line-height: 1.35; margin: 2px 0 0; }
 .confirm-dialog p { margin: 6px 0 0; font-size: 14.5px; white-space: pre-line; }
 .confirm-dialog .actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 20px; }
@@ -1237,10 +1236,6 @@ main { padding-bottom: 120px; }
 @media (max-width: 640px) { .mode-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 
 /* Mes cours et Réviser : même grille, contenu différent */
-.course-edit { flex: none; display: grid; place-items: center; width: 30px; height: 30px; border-radius: 50%; color: var(--muted);
-               background: var(--sunken); }
-.course-edit .ico { width: 15px; height: 15px; }
-.course-card:hover .course-edit { color: var(--accent-ink); }
 
 /* Touches du clavier rappelées à l'écran */
 kbd.key-hint { display: inline-grid; place-items: center; min-width: 22px; height: 22px; padding: 0 6px; margin-left: auto;

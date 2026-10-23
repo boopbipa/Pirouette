@@ -429,7 +429,6 @@ function courseCard(c) {
       </span>
       ${p?.cards ? acqPill(p.known, p.cards) : ""}
       ${p?.cards ? `<span class="mastery-ring${p.today ? "" : " done"}" style="--m:${ring.pct}%" title="${ring.title}"><span>${ring.text}</span></span>` : ""}
-      <span class="course-edit" data-course-manage="${c.id}" title="Mes cours de cette matière" role="button">${ICON_EDIT}</span>
       <span class="card-glare" aria-hidden="true"></span>
     </a>`;
 }
@@ -496,13 +495,6 @@ $("#new-folder").addEventListener("click", async () => {
   loadCourses();
 });
 
-// Le crayon d'une matière : sa page « Mes cours » (et pas la révision)
-$("#view-courses").addEventListener("click", (e) => {
-  const manage = e.target.closest("[data-course-manage]");
-  if (!manage || drag.justDropped) return;
-  e.preventDefault();
-  go(`#/cours/${manage.dataset.courseManage}`);
-}, true);
 // Au survol, la tuile se soulève un peu avec un reflet qui suit la souris (comme les flashcards). Elle grandit sans
 // bouger de place : la souris ne peut pas en sortir en la faisant bouger (pas de tremblement sur les bords).
 $("#course-tabs").addEventListener("pointermove", (e) => {
@@ -5062,6 +5054,10 @@ const WELCOME = [
 ];
 // Les nouveautés de chaque version (le carton « Quoi de neuf » ne s'affiche que si la version en a)
 const WHATS_NEW = {
+  "0.74.3": [
+    ["✓", "La révision du jour se termine vraiment", "Toutes tes cartes et tes questions du jour passées une fois (justes ou fausses) : 100 %, puis ✓"],
+    ["🐱", "Petites retouches", "« Quitter la révision ? » avec la nouvelle icône, « Clair / Sombre » pendant les quiz, plus de crayon sur les matières"],
+  ],
   "0.74.2": [
     ["◔", "L'avancement du jour", "Les ronds se remplissent au fil de ta révision du jour (en %), puis ✓ quand c'est fini"],
     ["★", "Ce que tu sais déjà", "La pastille ★ à côté de chaque matière : la part de cartes acquises (passe dessus pour le détail)"],
@@ -6330,9 +6326,9 @@ $("#exam-submit").addEventListener("click", () => submitExam(false));
 
 // On quitte un quiz, une révision ou un partiel en cours (menu, fil d'Ariane) : on demande d'abord.
 function leaveQuestion() {
-  if (state.exam?.running && !$("#view-exam").hidden) return "Tu es sûr de vouloir quitter le partiel ? Tes réponses seront perdues.";
-  if (!$("#view-quiz").hidden) return "Tu es sûr de vouloir quitter le quiz ?";
-  if (!$("#view-cards").hidden && $("#cards-done").hidden) return "Tu es sûr de vouloir quitter la révision ?";
+  if (state.exam?.running && !$("#view-exam").hidden) return "Quitter le partiel ? Tes réponses seront perdues.";
+  if (!$("#view-quiz").hidden) return "Quitter le quiz ?";
+  if (!$("#view-cards").hidden && $("#cards-done").hidden) return "Quitter la révision ?";
   return null;
 }
 let leaveConfirmed = false;
