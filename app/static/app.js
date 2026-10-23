@@ -4090,13 +4090,16 @@ async function renderScopeMain() {
     : reviewScope().folder ? c.folder_id === reviewScope().folder : true));
   const ids = new Set(scoped.map((c) => c.id));
   state.scopePlan = plan;
-  // La maîtrise (cartes sues) de la matière, du semestre ou de tout, dans l'anneau du bandeau
-  const cardsTotal = scoped.reduce((n, c) => n + (c.cards || 0), 0), cardsKnown = scoped.reduce((n, c) => n + (c.known || 0), 0);
+  // L'anneau du bandeau : l'avancement de la révision du jour (déjà fait / à faire), puis ✓ quand c'est fini
+  const done = data.done_today.cards + (mixQuestions() ? data.done_today.questions : 0);
+  const left = data.today.cards + (mixQuestions() ? data.today.questions : 0);
   const ring = $("#hero-ring");
-  ring.hidden = !cardsTotal;
-  ring.style.setProperty("--m", `${cardsTotal ? Math.round((100 * cardsKnown) / cardsTotal) : 0}%`);
+  ring.hidden = false;
+  ring.classList.toggle("done", !left);
+  ring.style.setProperty("--m", `${left ? Math.round((100 * done) / (done + left)) : 100}%`);
   ring.style.setProperty("--c", scope.single ? subjectColor(reviewScope().course) : "var(--accent)");
-  ring.querySelector("span").textContent = `${cardsTotal ? Math.round((100 * cardsKnown) / cardsTotal) : 0}%`;
+  ring.querySelector("span").textContent = left ? `${done}/${done + left}` : "✓";
+  ring.title = left ? `${plural(done, "fait", "faits")} sur ${done + left} aujourd'hui` : "Révision du jour faite";
   $("#review-exam").hidden = true;  // les partiels sont rappelés sur la page Matières, à côté du bonjour
 
   // Plan de révision
@@ -5033,6 +5036,9 @@ const WELCOME = [
 ];
 // Les nouveautés de chaque version (le carton « Quoi de neuf » ne s'affiche que si la version en a)
 const WHATS_NEW = {
+  "0.74.1": [
+    ["◔", "L'avancement du jour", "Le rond de « Révision du jour » se remplit au fil de ta révision (12/30…), puis ✓ quand c'est fini"],
+  ],
   "0.74.0": [
     ["⤢", "Un zoom tout doux", "Pince la carte : elle suit tes doigts comme une photo, sans trembler ni flou, et le reste s'efface autour"],
     ["↓", "Les flèches dans les quiz", "↓ et ↑ passent d'une réponse à l'autre, Entrée valide"],

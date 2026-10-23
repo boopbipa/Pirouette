@@ -1401,6 +1401,13 @@ def _today_counts(ids: list[str]) -> dict:
     return {"cards": min(cards, size - questions), "questions": questions}
 
 
+def _done_today(ids: list[str]) -> dict:
+    """Ce qui a déjà été révisé aujourd'hui (cartes et questions de quiz), pour l'avancement de la révision du jour."""
+    day = store.activity().get(date.today().isoformat(), {})
+    picked = [entry for cid, entry in day.items() if cid in ids]
+    return {"cards": max(0, sum(e.get("cards", 0) for e in picked)), "questions": max(0, sum(e.get("questions", 0) for e in picked))}
+
+
 def _daily_pick(cards: list, asked: list, size: int, n_questions: int | None = None) -> tuple[list, list]:
     """La séance du jour : au plus `size` éléments, pris dans l'ordre de priorité (le reste attend demain), sans deux
     fois la même notion (une carte en double, ou une question de quiz qui pose la même chose qu'une carte)."""
@@ -2111,6 +2118,7 @@ async def progress(course: str = "", folder: str = "") -> dict:
     return data | {
         "exam": exam,
         "today": _today_counts(ids),
+        "done_today": _done_today(ids),
         "weak": {"cards": len(store.weak_cards(ids)), "questions": len(store.weak_questions(ids))},
         "hard": _hard_cards(ids),
         "new_per_day": store.new_per_day(),

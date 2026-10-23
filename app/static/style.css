@@ -2581,3 +2581,5 @@ body.same-subject #view-review-scope:not([hidden]) > :not(.scope-head):not(.scop
 button, a, label, summary, [role="button"], [role="tab"], [role="menuitem"], .choice, .flashcard, .gcard, .filters, .chips,
 .course-tab, .rating, .m1, kbd, .tabs, nav { -webkit-user-select: none; user-select: none; }
 input, textarea, [contenteditable] { -webkit-user-select: text; user-select: text; }
+.hero-ring span { font-size: 13px; letter-spacing: -.02em; }
+.hero-ring.done span { font-size: 22px; color: var(--c, var(--accent)); }
