@@ -377,6 +377,19 @@ function renderTodayBar(profile, progress) {
   $("#today-go").hidden = !due;
 }
 $("#today-go").addEventListener("click", () => startSession({ mode: "today" }, { title: "Révision du jour", back: "#/cours" }));
+$("#today-bar").addEventListener("click", (e) => {
+  if (e.target.closest("button, a") || $("#today-go").hidden) return;
+  $("#today-go").click();
+});
+$("#today-bar").addEventListener("keydown", (e) => {
+  if ((e.key === "Enter" || e.key === " ") && e.target.id === "today-bar" && !$("#today-go").hidden) { e.preventDefault(); $("#today-go").click(); }
+});
+$("#today-bar").addEventListener("pointermove", (e) => {
+  if (e.pointerType === "touch") return;
+  const bar = e.currentTarget, box = bar.getBoundingClientRect();
+  bar.style.setProperty("--gx", `${((e.clientX - box.left) / box.width) * 100}%`);
+  bar.style.setProperty("--gy", `${((e.clientY - box.top) / box.height) * 100}%`);
+});
 
 // Une couleur par matière, adoucie : le serveur donne à chaque nouvelle matière la couleur la moins prise
 // (autant de couleurs que storage.SUBJECT_COLORS). Sans numéro connu, on la tire de l'identifiant.
@@ -417,7 +430,9 @@ function todayRing(done, left) {
 // le crayon : la gérer (ses cours, chapitres, quiz et flashcards).
 function courseCard(c) {
   const p = state.courseProgress?.[c.id];
-  const ring = todayRing(p?.done_today || 0, p?.today || 0);
+  const day = p?.day;  // comme le grand rond de la matière : ses cartes et ses questions du jour
+  const ring = day ? todayRing(day.done.cards + (mixQuestions() ? day.done.questions : 0), day.left.cards + (mixQuestions() ? day.left.questions : 0))
+    : todayRing(0, p?.today || 0);
   const status = !c.files.length && !c.card_count && !c.quiz_count ? "Vide : ajoute un cours"
     : p?.today ? `<b>${p.today}</b> à revoir` : p?.cards ? "À jour" : c.quiz_count ? plural(c.quiz_count, "quiz", "quiz") : "Rien à réviser encore";
   return `
@@ -428,7 +443,7 @@ function courseCard(c) {
         <small>${status}</small>
       </span>
       ${p?.cards ? acqPill(p.known, p.cards) : ""}
-      ${p?.cards ? `<span class="mastery-ring${p.today ? "" : " done"}" style="--m:${ring.pct}%" title="${ring.title}"><span>${ring.text}</span></span>` : ""}
+      ${p?.cards ? `<span class="mastery-ring${ring.text === "✓" ? " done" : ""}" style="--m:${ring.pct}%" title="${ring.title}"><span>${ring.text}</span></span>` : ""}
       <span class="card-glare" aria-hidden="true"></span>
     </a>`;
 }
@@ -5054,6 +5069,10 @@ const WELCOME = [
 ];
 // Les nouveautés de chaque version (le carton « Quoi de neuf » ne s'affiche que si la version en a)
 const WHATS_NEW = {
+  "0.74.4": [
+    ["◔", "Les mêmes chiffres partout", "Le rond d'une matière dans la liste et celui de sa révision du jour comptent la même chose ; ronds un peu plus grands"],
+    ["✦", "Bandeau du jour cliquable", "Sur Mes matières, tout le bandeau lance la révision du jour, avec le reflet au survol"],
+  ],
   "0.74.3": [
     ["✓", "La révision du jour se termine vraiment", "Toutes tes cartes et tes questions du jour passées une fois (justes ou fausses) : 100 %, puis ✓"],
     ["🐱", "Petites retouches", "« Quitter la révision ? » avec la nouvelle icône, « Clair / Sombre » pendant les quiz, plus de crayon sur les matières"],

@@ -2592,3 +2592,14 @@ input, textarea, [contenteditable] { -webkit-user-select: text; user-select: tex
 .acq-pill:hover .acq-word { max-width: 60px; opacity: 1; }
 .subject-title .acq-pill { margin-left: 2px; font-size: 13px; padding: 4px 11px; align-self: center; }
 .mastery-ring.done span { font-size: 15px; color: var(--c, var(--accent)); }
+/* Bandeau du jour de Mes matières : cliquable partout, il grandit à peine avec un halo et un reflet (comme dans une matière) */
+.today-bar { position: relative; overflow: hidden; isolation: isolate; cursor: pointer; transition: transform .2s, box-shadow .2s; }
+.today-bar:hover { transform: scale(1.006); box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 35%, transparent),
+  0 16px 32px -18px color-mix(in srgb, var(--accent) 65%, transparent); }
+.today-bar:hover .card-glare { opacity: 1; }
+@media (prefers-reduced-motion: reduce) { .today-bar:hover { transform: none; } }
+/* Les ronds des matières : un peu plus grands, pour que « 47% » respire */
+.course-card .mastery-ring { width: 46px; height: 46px; }
+.course-card .mastery-ring::before { inset: 4px; }
+.course-card .mastery-ring span { font-size: 11.5px; letter-spacing: -.03em; }
+.course-card .mastery-ring.done span { font-size: 16px; }

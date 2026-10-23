@@ -2121,6 +2121,9 @@ async def progress(course: str = "", folder: str = "") -> dict:
     if folder:
         day = store.get_folder(folder).get("exam_week")
         exam = {"date": day, "days": (date.fromisoformat(day) - date.today()).days, "from": "dossier"} if day else None
+    # Chaque matière : sa révision du jour (à faire et déjà faite), les mêmes chiffres que dans la matière
+    for c in data["courses"]:
+        c["day"] = {"left": _today_counts([c["id"]]), "done": _done_today([c["id"]])}
     return data | {
         "exam": exam,
         "today": _today_counts(ids),

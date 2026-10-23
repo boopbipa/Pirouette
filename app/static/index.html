@@ -69,10 +69,12 @@
           <button class="ghost small" type="submit">OK</button>
           <button class="link-button" type="button" id="name-skip">Plus tard</button>
         </form>
-      <div class="today-bar" id="today-bar" hidden>
+      <!-- Tout le bandeau est le bouton (comme « Révision du jour » dans une matière), avec le reflet qui suit la souris -->
+      <div class="today-bar" id="today-bar" role="button" tabindex="0" aria-label="Commencer la révision du jour" hidden>
         <span class="mastery-ring" id="today-ring"><span></span></span>
         <span class="today-text"><b id="today-title"></b><small id="today-sub"></small></span>
         <button class="primary" type="button" id="today-go">Commencer</button>
+        <span class="card-glare" aria-hidden="true"></span>
       </div>
       <div class="page-head list-head">
         <h1>Matières <span class="muted count" id="course-count"></span></h1>
