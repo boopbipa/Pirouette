@@ -2571,3 +2571,12 @@ body.focus .choice:has(input:checked):not(.right):not(.wrong), body.focus.day .c
 #view-cards > :not(#card-stage):not(.zoom-veil), #card-stage > :not(.tcg-table), .tcg-pile { transition: filter .3s ease; }
 body.card-zoomed #view-cards > :not(#card-stage):not(.zoom-veil), body.card-zoomed #card-stage > :not(.tcg-table),
 body.card-zoomed .tcg-pile { filter: blur(8px); }
+
+/* Aujourd'hui : le bandeau du jour, à la couleur de la matière ; au survol, comme les cases de l'accueil : il grandit
+   à peine, un fin halo l'entoure et un reflet suit la souris */
+#scope-main .today-hero { position: relative; overflow: hidden; isolation: isolate; transition: transform .2s, box-shadow .2s;
+  background: linear-gradient(135deg, color-mix(in srgb, var(--c, var(--accent)) 16%, var(--surface)), var(--surface)); }
+#scope-main .today-hero:hover { transform: scale(1.006); box-shadow: 0 0 0 1px color-mix(in srgb, var(--c, var(--accent)) 35%, transparent),
+  0 16px 32px -18px color-mix(in srgb, var(--c, var(--accent)) 65%, transparent); }
+#scope-main .today-hero:hover .card-glare { opacity: 1; }
+@media (prefers-reduced-motion: reduce) { #scope-main .today-hero:hover { transform: none; } }

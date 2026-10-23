@@ -483,6 +483,12 @@ $("#course-tabs").addEventListener("pointermove", (e) => {
   row.style.setProperty("--gx", `${((e.clientX - box.left) / box.width) * 100}%`);
   row.style.setProperty("--gy", `${((e.clientY - box.top) / box.height) * 100}%`);
 });
+$("#today-hero").addEventListener("pointermove", (e) => {
+  if (e.pointerType === "touch") return;
+  const hero = e.currentTarget, box = hero.getBoundingClientRect();
+  hero.style.setProperty("--gx", `${((e.clientX - box.left) / box.width) * 100}%`);
+  hero.style.setProperty("--gy", `${((e.clientY - box.top) / box.height) * 100}%`);
+});
 $("#view-courses").addEventListener("pointermove", (e) => {
   const card = e.target.closest(".course-card");
   if (!card || e.pointerType === "touch") return;
@@ -3991,6 +3997,9 @@ async function openReviewScope(kind, id = "", sub = "") {
   $("#review-scope-title").textContent = name;
   $("#review-scope-dot").hidden = kind !== "cours";
   if (kind === "cours") $("#review-scope-dot").style.background = subjectColor(id);
+  // Le bandeau du jour prend la couleur de la matière (son fond, son halo au survol)
+  if (kind === "cours") $("#today-hero").style.setProperty("--c", subjectColor(id));
+  else $("#today-hero").style.removeProperty("--c");
   renderReviewFiles();
   $("#scope-manage").hidden = kind !== "cours";
   if (kind === "cours") $("#scope-manage").href = `#/cours/${id}`;
@@ -5021,6 +5030,9 @@ const WELCOME = [
 ];
 // Les nouveautés de chaque version (le carton « Quoi de neuf » ne s'affiche que si la version en a)
 const WHATS_NEW = {
+  "0.69.2": [
+    ["●", "Révision du jour à ta couleur", "Le bandeau prend la couleur de la matière, avec le même halo au survol que sur l'accueil"],
+  ],
   "0.69.1": [
     ["⤢", "Zoom sur une carte", "La carte reste nette (seul le fond se floute) et vient au milieu de la fenêtre"],
   ],
