@@ -103,7 +103,10 @@ function show(view) {
   document.querySelectorAll(".view").forEach((v) => (v.hidden = v.id !== `view-${view}`));
   document.body.classList.toggle("on-home", view === "home");  // l'accueil a déjà son grand logo au centre
   // Séances, quiz et partiels : mode concentration (fond noir, rien que la carte ou la question)
-  document.body.classList.toggle("focus", ["cards", "quiz", "exam", "live"].includes(view));
+  const focus = ["cards", "quiz", "exam", "live"].includes(view);
+  // En entrant dans une séance ou un quiz : le mode jour ou nuit choisi dans les Réglages (l'interrupteur ne vaut que pour la séance)
+  if (focus && !document.body.classList.contains("focus")) applyFocusTheme();
+  document.body.classList.toggle("focus", focus);
   if (view !== "live") stopLive();
   if (view !== "cards") document.body.classList.remove("card-zoomed");
   pageScroll().scrollTo(0, 0);
@@ -657,8 +660,6 @@ const PREFS = [
     cards: ["claude-app-card", "settings-key-form", "local-ai"], icon: '<path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z"/>' },
   { id: "appareils", label: "Téléphone et tablette", desc: "Tes quiz et tes flashcards, aussi sur ton iPhone, ton iPad ou ton Android.", cards: ["devices-card"],
     icon: '<rect x="7" y="3" width="10" height="18" rx="2.5"/><path d="M11 18h2"/>' },
-  { id: "apparence", label: "Apparence", desc: "Clair ou sombre, et la couleur de l'app.", cards: ["theme-card", "appearance-card"],
-    icon: '<circle cx="12" cy="12" r="8"/><path d="M12 4a8 8 0 0 1 0 16z" fill="currentColor"/>' },
   { id: "clavier", label: "Clavier", desc: "Les touches pour réviser sans la souris.", cards: ["keys-card"],
     icon: '<rect x="3" y="7" width="18" height="11" rx="2"/><path d="M7 11h.01M11 11h.01M15 11h.01M8 15h8"/>' },
   { id: "donnees", label: "Sauvegarde", desc: "Tes sauvegardes, et récupérer tes anciens cours.", cards: ["data-card"],
@@ -666,17 +667,19 @@ const PREFS = [
   { id: "apropos", label: "Mises à jour", desc: "La version de Pirouette et ses nouveautés.", cards: ["version-card"],
     icon: '<circle cx="12" cy="12" r="8"/><path d="M12 11v5M12 8h.01"/>' },
 ];
-const PROFILE_PREF = { id: "profil", label: "Ton prénom", desc: "Pour te dire bonjour en ouvrant Pirouette.", cards: ["settings-name-form"] };
+const PROFILE_PREF = { id: "profil", label: "Profil et apparence", desc: "Ton prénom, clair ou sombre, et la couleur de l'app.",
+  cards: ["settings-name-form", "theme-card", "appearance-card"] };
 function renderPrefsSide() {
   const name = state.profile?.name || "";
   const initials = (name || "?").split(/[\s-]+/).filter(Boolean).map((w) => w[0]).join("").slice(0, 2).toUpperCase();
   $("#prefs-side").innerHTML = `<button type="button" class="pref-item pref-me" data-pref="profil"><span class="pref-avatar">${escapeHtml(initials)}</span>
-      <span><b>${escapeHtml(name || "Ton prénom")}</b><small>${name ? "Modifier ton prénom" : "Pour te dire bonjour"}</small></span></button>`
+      <span><b>${escapeHtml(name || "Ton prénom")}</b><small>Prénom et apparence</small></span></button>`
     + PREFS.map((x) => `<button type="button" class="pref-item" data-pref="${x.id}"><span class="pref-ic">${PREF_ICON(x.icon)}</span>${x.label}</button>`).join("");
 }
 function showPref(id) {
   let saved = null;
   try { saved = localStorage.getItem("pirouette.prefs"); } catch {}
+  if (id === "apparence" || saved === "apparence") id = "profil";  // l'apparence a rejoint le profil
   const pref = [PROFILE_PREF, ...PREFS].find((x) => x.id === id) || [PROFILE_PREF, ...PREFS].find((x) => x.id === saved) || PREFS[0];
   try { localStorage.setItem("pirouette.prefs", pref.id); } catch {}
   renderPrefsSide();
@@ -1160,14 +1163,6 @@ function updatePicker({ keepHex = false, hex = null } = {}) {
   $("#hex-swatch").style.background = hex;
   if (!keepHex) $("#color-hex").value = hex;
   document.querySelectorAll(".preset").forEach((b) => b.classList.toggle("selected", b.dataset.hex === hex));
-  const p = derivePalette(hex);
-  const apply = (el, accent, ink, soft) => {
-    el.style.setProperty("--accent", accent);
-    el.style.setProperty("--accent-ink", ink);
-    el.style.setProperty("--accent-soft", soft);
-  };
-  apply($("#preview-light"), p.accent, p.ink, p.soft);
-  apply($("#preview-dark"), p.d_accent, p.d_ink, p.d_soft);
   picker.current = hex;
   $("#color-save").disabled = hex === picker.saved;
 }
@@ -1582,7 +1577,10 @@ async function openCourse(id, tab, { keepScroll = false } = {}) {
   const empty = !course.files.length && !course.quizzes.length && !course.cards.total;
   $("#start-drop").hidden = !empty;
   $("#course-tree").hidden = empty;
-  $("#manage-back").href = `#/reviser/cours/${course.id}`;
+  // Les onglets de la matière restent là : on revient en un clic à Aujourd'hui, Quiz, Cartes ou Suivi
+  document.querySelectorAll("[data-course-tab]").forEach((a) => {
+    a.href = `#/reviser/cours/${course.id}${a.dataset.courseTab ? `/${a.dataset.courseTab}` : ""}`;
+  });
   renderQuizPanel(course);
   renderFiles(course);
   await loadDeck();
@@ -1730,7 +1728,7 @@ document.addEventListener("click", (e) => {
 }, true);
 document.addEventListener("dblclick", (e) => {
   const tab = e.target.closest("[data-file-focus]");
-  if (tab) renameFile(tab.dataset.fileFocus);
+  if (tab && !e.target.closest(".kebab")) renameFile(tab.dataset.fileFocus);
 });
 
 // Déplacer un fichier vers un autre cours (ou un nouveau), avec ou sans ses quiz et ses flashcards
@@ -1882,8 +1880,8 @@ function refocus(id) {
 }
 document.addEventListener("click", (e) => {
   const pick = e.target.closest("[data-file-focus]");
-  if (!pick) return;
-  e.preventDefault();  // dans le titre repliable « Modifier » : on change de cours sans le déplier
+  if (!pick || e.target.closest(".kebab")) return;  // « ⋯ » du cours : ses options, pas un changement de cours
+  e.preventDefault();
   e.stopPropagation();
   refocus(pick.dataset.fileFocus);
 }, true);
@@ -1922,10 +1920,16 @@ function renderFiles(course) {
   $("#course-tabs").innerHTML = focus ? course.files.map((f) => {
     const quizzes = course.quizzes.filter((q) => ownerFile(q.scope, q.sources, course.files)?.id === f.id).length;
     const cards = deck ? deck.filter((c) => ownerFile(c.scope, c.origin, course.files)?.id === f.id).length : null;
-    return `<button type="button" role="tab" class="course-tab${f === focus ? " active" : ""}" data-file-focus="${f.id}"
+    // Le cours ouvert a ses options dans « ⋯ » (le bandeau du dessous, en double, a disparu)
+    const options = f === focus ? kebab(`<button type="button" role="menuitem" data-rename-file="${f.id}">Renommer</button>
+      <button type="button" role="menuitem" data-replace-file="${f.id}">Nouvelle version du fichier</button>
+      ${f.definitions ? `<button type="button" role="menuitem" data-show-defs="${f.id}">${plural(f.definitions, "définition repérée", "définitions repérées")}</button>` : ""}
+      <button type="button" role="menuitem" data-move-file="${f.id}">Déplacer vers une autre matière</button>
+      <button type="button" role="menuitem" class="danger" data-remove-file="${f.id}">Retirer ce cours</button>`, "Options du cours") : "";
+    return `<div role="tab" tabindex="0" class="course-tab${f === focus ? " active" : ""}" data-file-focus="${f.id}"
       aria-selected="${f === focus}" title="${escapeHtml(f.name)}"><span class="row-doc">${ICON_FILE}</span><span class="row-name">${escapeHtml(fileLabel(f))}</span>
-      ${quizzes ? chip(quizzes, "quiz", "quiz") : ""}${cards ? chip(cards, "carte", "cartes") : ""}
-      <span class="row-chev" aria-hidden="true">›</span><span class="card-glare" aria-hidden="true"></span></button>`;
+      ${quizzes ? chip(quizzes, "quiz", "quiz") : ""}${cards ? chip(cards, "carte", "cartes") : ""}${options}
+      <span class="row-chev" aria-hidden="true">›</span><span class="card-glare" aria-hidden="true"></span></div>`;
   }).join("") + `<label class="course-tab add" for="file-input">+ Ajouter un cours<span class="card-glare" aria-hidden="true"></span></label>` : "";
   const shown = focus ? [focus] : course.files;
   $("#source-names").innerHTML = shown.map((f) => `<span class="source-name">${ICON_FILE}<strong>${escapeHtml(fileLabel(f))}</strong>
@@ -2360,6 +2364,18 @@ const startDrop = $("#start-drop");
   startDrop.addEventListener(ev, (e) => { e.preventDefault(); startDrop.classList.remove("over"); }));
 startDrop.addEventListener("drop", (e) => uploadFiles(e.dataTransfer.files));
 $("#file-input").addEventListener("change", (e) => { uploadFiles(e.target.files); e.target.value = ""; });
+// Glisser un fichier sur « + Ajouter un cours »
+["dragenter", "dragover"].forEach((ev) => $("#course-tabs").addEventListener(ev, (e) => {
+  const add = e.target.closest(".course-tab.add");
+  if (add) { e.preventDefault(); add.classList.add("over"); }
+}));
+["dragleave", "drop"].forEach((ev) => $("#course-tabs").addEventListener(ev, (e) => {
+  const add = e.target.closest(".course-tab.add");
+  if (!add) return;
+  e.preventDefault();
+  add.classList.remove("over");
+  if (ev === "drop") uploadFiles(e.dataTransfer.files);
+}));
 
 async function uploadFiles(fileList) {
   const files = [...fileList];  // copie : la liste du champ est vidée juste après l'appel
@@ -3100,15 +3116,13 @@ function showItem() {
   $("#cards-counter").textContent = `${s.index + 1} / ${s.items.length}`;
   $("#session-prev").hidden = s.index === 0;
   $("#cards-bar").style.width = `${(s.index / s.items.length) * 100}%`;
-  const several = new Set(s.items.map((i) => i.course_id)).size > 1;
-  // Juste la matière, pour le contexte (ni « Question de quiz » ni le cours ou le chapitre)
-  $("#session-origin").textContent = item.kind === "question" || several ? item.course_name || "" : "";
+  // Juste la matière, pour le contexte (ni « Question de quiz » ni le cours ou le chapitre), cartes comprises
+  $("#session-origin").textContent = item.course_name || "";
   const after = s.items[s.index - 1]?.kind;
   $("#card-stage").hidden = item.kind !== "card";
   $("#question-stage").hidden = item.kind !== "question";
   $("#session-mode").hidden = item.kind !== "card";
   // Mélanger : utile s'il reste au moins deux cartes à tirer
-  $("#session-shuffle").hidden = item.kind !== "card" || s.items.length - s.index < 3;
   if (item.kind === "card") showCard();
   else showSessionQuestion(item);
   if (item.kind === "question") slideIn($("#question-stage"));
@@ -3132,6 +3146,7 @@ function showCard() {
   $("#typed-result").hidden = true;
   $("#ratings").hidden = false;
   $("#ratings").classList.add("locked");  // les deux boutons attendent que la réponse soit vue
+  $("#ratings").classList.toggle("typing", typing);  // en mode Écrire, on répond d'abord (pas de « Retourner »)
   renderKeyHints();
   (typing ? $("#typed-answer") : $("#flashcard")).focus();
 }
@@ -3387,6 +3402,7 @@ function rateCard(rating, { thrown = false } = {}) {
   }, 360);
 }
 $("#ratings").addEventListener("click", (e) => {
+  if (e.target.closest("#rating-flip")) return flipCard();
   const button = e.target.closest("[data-rating]");
   if (!button) return;
   if ($("#ratings").classList.contains("locked")) return flipCard();  // réponse pas encore vue : on la montre
@@ -3444,24 +3460,6 @@ function endSwipe() {
 $("#flashcard").addEventListener("pointerup", endSwipe);
 $("#flashcard").addEventListener("pointercancel", endSwipe);
 
-// Mélanger le paquet : les cartes qui restent sont rebattues ; la carte en main y retourne si sa réponse n'a pas été vue
-$("#session-shuffle").addEventListener("click", () => {
-  const s = state.session;
-  if (!s || s.leaving || s.items[s.index]?.kind !== "card") return;
-  const keep = s.revealed ? s.index + 1 : s.index;
-  const rest = s.items.slice(keep);
-  for (let i = rest.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [rest[i], rest[j]] = [rest[j], rest[i]];
-  }
-  s.items = [...s.items.slice(0, keep), ...rest];
-  if (!s.revealed) showItem();  // nouvelle carte tirée (avec l'animation de tirage)
-  const pile = $("#tcg-pile");
-  pile.classList.remove("shuffling");
-  void pile.offsetWidth;
-  pile.classList.add("shuffling");
-  showCardToast("Paquet mélangé");
-});
 
 function nextItem() {
   const s = state.session;
@@ -3673,7 +3671,7 @@ function finishSession() {
   $("#cards-bar").style.width = "100%";
   $("#cards-summary").innerHTML = parts.join("<br>");
   $("#session-correction-btn").hidden = !s.results.length;
-  $("#card-stage").hidden = $("#question-stage").hidden = $("#session-mode").hidden = $("#session-shuffle").hidden = true;
+  $("#card-stage").hidden = $("#question-stage").hidden = $("#session-mode").hidden = true;
   $("#session-correction").hidden = true;
   $("#session-origin").textContent = "";
   $("#cards-done").hidden = false;
@@ -3986,7 +3984,7 @@ async function openReviewScope(kind, id = "", sub = "") {
   if (kind === "cours") $("#today-hero").style.setProperty("--c", subjectColor(id));
   else $("#today-hero").style.removeProperty("--c");
   renderReviewFiles();
-  $("#scope-manage").hidden = kind !== "cours";
+  $("#scope-manage-pill").hidden = kind !== "cours";
   if (kind === "cours") $("#scope-manage").href = `#/cours/${id}`;
   document.querySelectorAll("[data-scope-tab]").forEach((a) => {
     const t = a.dataset.scopeTab;
@@ -4153,8 +4151,6 @@ $("#card-decks").addEventListener("input", (e) => {
 const cardDue = (c) => !c.reviews || (c.due ? c.due <= new Date().toISOString().slice(0, 10) : c.status !== "known");
 const cardWeak = (c) => Boolean(c.reviews) && (c.last_rating === "again" || c.status === "review" || (c.lapses || 0) >= 2 || (c.ease ?? 2.5) <= 2.1);
 const GRID_TESTS = { all: () => true, due: cardDue, weak: cardWeak, known: (c) => Boolean(c.reviews) && !cardDue(c) && !cardWeak(c) };
-const cardState = (c) => !c.reviews ? "new" : cardWeak(c) ? "weak" : cardDue(c) ? "due" : "known";
-const CARD_STATES = { due: "À revoir", weak: "Je bloque", known: "Sue", new: "Nouvelle" };
 async function toggleCardGrid() {
   const box = $("#deck-grid"), btn = $("#grid-btn");
   const open = box.hidden;
@@ -4175,10 +4171,11 @@ function drawCardGrid(full = true) {
   const g = state.grid, shown = gridShown();
   const count = (f) => g.items.filter((i) => GRID_TESTS[f](i.card)).length;
   const several = new Set(g.items.map((i) => i.course_id)).size > 1;
-  const cards = shown.map((i) => `<button type="button" class="gcard" style="--c:${subjectColor(i.course_id)}">
-      <span class="gface gfront">${several ? `<span class="gtag"><i></i>${escapeHtml(i.course_name)}</span>` : ""}<span class="gtxt">${escapeHtml(plainMd(i.card.front))}</span>
-        <span class="gstate ${cardState(i.card)}">${CARD_STATES[cardState(i.card)]}</span></span>
-      <span class="gface gback"><span class="gtxt">${escapeHtml(plainMd(i.card.back))}</span></span></button>`).join("")
+  // Le même visuel que dans « Mes cours » et pendant les révisions : la plaque claire, crème ou nacrée selon où on en est
+  const cards = shown.map((i) => { const r = cardRarity(i.card); return `<button type="button" class="gcard ${r.cls}" style="--c:${subjectColor(i.course_id)}">
+      <span class="gface gfront"><span class="ghead">${several ? `<span class="gtag"><i></i>${escapeHtml(i.course_name)}</span>` : "<span></span>"}<span class="grarity">${r.label}</span></span>
+        <span class="gtxt">${escapeHtml(plainMd(i.card.front))}</span></span>
+      <span class="gface gback"><span class="gtxt">${escapeHtml(plainMd(i.card.back))}</span></span></button>`; }).join("")
     || `<p class="muted small-text">Aucune carte ici.</p>`;
   if (!full && $("#grid-cards")) { $("#grid-cards").innerHTML = cards; $("#grid-go").textContent = `Réviser ces ${plural(shown.length, "carte", "cartes")}`; return; }
   $("#deck-grid").innerHTML = `<div class="grid-head">
@@ -4739,7 +4736,9 @@ function applyShortcuts(settings) {
   const saved = Object.entries(settings.shortcuts || {}).filter(([id]) => id in DEFAULT_KEYS);
   state.keys = { ...DEFAULT_KEYS, ...Object.fromEntries(saved) };
   state.keysInstant = Boolean(settings.keys_instant);
-  setFocusLight(Boolean(settings.focus_light));
+  state.focusTheme = settings.focus_theme || "dark";
+  renderFocusChoice();
+  if (!document.body.classList.contains("focus")) applyFocusTheme();
   renderKeyHints();
 }
 api("/api/settings").then(applyShortcuts).catch(() => {});
@@ -4758,6 +4757,7 @@ const isKey = (e, id) => pressedKey(e) === state.keys[id];
 
 // Les touches rappelées sur l'écran : sous les boutons et devant les réponses
 function renderKeyHints() {
+  $("#flip-key").textContent = keyName(state.keys.flip);
   $("#validate-key").textContent = keyName(state.keys.validate);
   document.querySelectorAll("#ratings [data-rating]").forEach((b) => {
     let hint = b.querySelector("kbd");
@@ -4903,6 +4903,11 @@ const WELCOME = [
 ];
 // Les nouveautés de chaque version (le carton « Quoi de neuf » ne s'affiche que si la version en a)
 const WHATS_NEW = {
+  "0.72.0": [
+    ["✎", "Mes cours à côté des onglets", "Un clic pour y aller, un clic pour revenir à Aujourd'hui, Quiz, Cartes ou Suivi"],
+    ["☾", "Jour ou nuit pendant les quiz", "Choisis-le dans Réglages, ou « Automatique » pour suivre ton ordinateur"],
+    ["▢", "Des cartes plus simples", "Le nom de la matière au-dessus, et « Retourner la carte » (Espace) avant de répondre"],
+  ],
   "0.71.0": [
     ["✦", "Plus simple, plus léger", "Plus de chapitres ni de découpe : tout se range par cours. Les options secondaires sont dans « ⋯ »"],
     ["◎", "Prêt pour les partiels ?", "Dans Suivi : où tu en es pour la matière, et cours par cours"],
@@ -7873,13 +7878,30 @@ document.querySelectorAll("#view-cards .quiz-head, #view-quiz .quiz-head").forEa
   button.setAttribute("role", "switch");
   button.setAttribute("aria-label", "Mode nuit");
   pills.before(button);
-  button.addEventListener("click", async () => {
-    const light = !document.body.classList.contains("day");
-    setFocusLight(light);
-    await api("/api/settings", jsonBody("PUT", { focus_light: light })).catch(() => {});
-  });
+  button.addEventListener("click", () => setFocusLight(!document.body.classList.contains("day")));
 });
-setFocusLight(false);
+// Jour ou nuit par défaut pendant les quiz : choisi, ou automatique (comme l'ordinateur)
+state.focusTheme = "dark";
+const systemLight = matchMedia("(prefers-color-scheme: light)");
+function applyFocusTheme() {
+  setFocusLight(state.focusTheme === "auto" ? matchMedia("(prefers-color-scheme: light)").matches : state.focusTheme === "light");
+}
+systemLight.addEventListener("change", () => { if (state.focusTheme === "auto") applyFocusTheme(); });
+function renderFocusChoice() {
+  document.querySelectorAll("[data-focus-choice]").forEach((b) => {
+    b.classList.toggle("active", b.dataset.focusChoice === state.focusTheme);
+    b.setAttribute("aria-checked", String(b.dataset.focusChoice === state.focusTheme));
+  });
+}
+document.querySelector(".focus-choice").addEventListener("click", async (e) => {
+  const choice = e.target.closest("[data-focus-choice]")?.dataset.focusChoice;
+  if (!choice) return;
+  state.focusTheme = choice;
+  renderFocusChoice();
+  applyFocusTheme();
+  await api("/api/settings", jsonBody("PUT", { focus_theme: choice })).catch(() => {});
+});
+applyFocusTheme();
 document.querySelector(".theme-choice").addEventListener("click", async (e) => {
   const theme = e.target.closest("[data-theme-choice]")?.dataset.themeChoice;
   if (!theme) return;

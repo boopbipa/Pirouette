@@ -500,9 +500,8 @@ code { font-family: "SF Mono", Menlo, monospace; font-size: .88em; background: v
 .download small { color: var(--muted); font-variant-numeric: tabular-nums; }
 .setup-banner { margin: 12px auto 0; max-width: 560px; padding: 8px 14px; border-radius: 10px; background: var(--accent-soft); font-size: 15px; }
 
-/* Couleur de l'app : roue chromatique et aperçus */
-.appearance { display: grid; grid-template-columns: 240px 1fr; gap: 22px; margin-top: 14px; align-items: start; }
-@media (max-width: 700px) { .appearance { grid-template-columns: 1fr; } }
+/* Couleur de l'app : roue chromatique */
+.appearance { margin-top: 14px; }
 .wheel-wrap { position: relative; width: 220px; height: 220px; touch-action: none; }
 #color-wheel { width: 220px; height: 220px; border-radius: 50%; cursor: crosshair; display: block; }
 .wheel-handle { position: absolute; width: 18px; height: 18px; margin: -9px 0 0 -9px; border-radius: 50%; border: 3px solid #fff;
@@ -515,31 +514,6 @@ code { font-family: "SF Mono", Menlo, monospace; font-size: .88em; background: v
 .presets { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
 .preset { width: 28px; height: 28px; border-radius: 50%; padding: 0; border: 2px solid var(--surface); box-shadow: 0 0 0 1px var(--border); }
 .preset.selected { box-shadow: 0 0 0 2px var(--text); }
-
-.previews { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-@media (max-width: 520px) { .previews { grid-template-columns: 1fr; } }
-.accent-preview { position: relative; border: 1px solid var(--border); border-radius: 14px; padding: 14px; background: var(--bg); color: var(--text); overflow: hidden; }
-.accent-preview:not(.pv-dark) {  /* l'aperçu « clair » reste clair, même quand l'app est en sombre */
-  --bg: #FAF8F3; --surface: #FFFEFB; --sunken: #F3F0E8; --text: #171512; --muted: #6E685E; --border: #E6E0D4;
-}
-.accent-preview.pv-dark {
-  --bg: #1D1512; --surface: #271E1A; --sunken: #171110; --text: #F5EBE1; --muted: #B5A394; --border: #3B2E28;
-}
-.pv-label { position: absolute; top: 10px; right: 12px; font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); }
-.pv-top { display: flex; align-items: center; gap: 6px; font: 600 14px/1 var(--display); padding-bottom: 10px; border-bottom: 1px solid var(--border); }
-.pv-logo { width: 16px; height: 16px; }
-.pv-greet { display: flex; align-items: center; gap: 8px; font: 400 23px/1.2 var(--display); margin: 14px 0 0; }
-.pv-icon { width: 30px; height: 30px; border-radius: 8px; background: var(--accent); color: #FAF8F3; display: grid; place-items: center; flex: none; }
-.pv-icon svg { width: 19px; height: 19px; }
-.accent-preview .stats-line { margin: 6px 0 10px; font-size: 13px; color: var(--muted); }
-.accent-preview .stats-line strong { color: var(--accent-ink); }
-.accent-preview .course-card { padding: 16px 12px 10px; font-size: 13px; }
-.accent-preview .course-card strong { font-size: 15px; }
-.accent-preview .course-card:hover { transform: none; }
-.pv-row { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 10px; }
-.accent-preview .progress { margin: 10px 0 0; }
-.pv-bar { width: 62%; height: 100%; background: var(--accent); }
-.accent-preview .pill { font-size: 13px; padding: 2px 10px; }
 
 /* Chapitres */
 .card-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; flex-wrap: wrap; }
@@ -2497,3 +2471,62 @@ body.card-zoomed .tcg-pile, body.card-zoomed .focus-close, body.card-zoomed .day
 .prep-bar i { display: block; height: 100%; border-radius: 99px; }
 .prep-pct { text-align: right; font-weight: 600; font-variant-numeric: tabular-nums; }
 .prep-todo { grid-column: 1 / -1; margin-top: -2px; }
+
+/* Les onglets d'une matière, et « Mes cours » à part, dans sa propre pastille (même allure) */
+.scope-nav { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin: 14px 0 6px; }
+.scope-nav .scope-tabs { margin: 0; }
+.manage-pill a { display: inline-flex; align-items: center; gap: 7px; }
+.manage-pill svg { width: 14px; height: 14px; }
+.course-nav { margin: 6px 0 18px; }
+/* Un menu « ⋯ » ouvert passe au-dessus des éléments qui suivent (le quiz suivant cachait « Exporter », « Supprimer ») */
+.quiz-item:has(.kebab-menu:not([hidden])), .binder-slot:has(.kebab-menu:not([hidden])), .file-item:has(.kebab-menu:not([hidden])),
+.head-actions:has(.kebab-menu:not([hidden])), .course-tab:has(.kebab-menu:not([hidden])) { position: relative; z-index: 40; }
+
+/* Onglet Cartes, la grille : les cartes de « Mes cours » et des révisions (plaque claire, crème « en cours », nacrée « acquise ») */
+.gcard { height: auto; aspect-ratio: 63 / 88; }
+.gface { border: 0; border-radius: 18px; padding: 14px; gap: 8px; color: #1D1D1F;
+  background: linear-gradient(155deg, #FFFFFF 0%, #F4F3F0 48%, #E9E7E2 100%);
+  box-shadow: inset 0 0 0 .5px rgba(0, 0, 0, .07), 0 14px 26px -18px rgba(60, 40, 20, .5); }
+.gcard.rare .gface { background: linear-gradient(155deg, #FBF6EC 0%, #EFE3CC 50%, #E2D1B0 100%); }
+.gcard.holo .gface { background: linear-gradient(155deg, #FDFDFF 0%, #EEF0F6 40%, #E7E9F2 100%); }
+.gface.gback { background: linear-gradient(155deg, #FFFFFF 0%, #F4F3F0 48%, #E9E7E2 100%); }
+.gcard:hover .gface { border-color: transparent; box-shadow: inset 0 0 0 .5px rgba(0, 0, 0, .07), 0 18px 30px -16px rgba(60, 40, 20, .55); }
+.ghead { display: flex; justify-content: space-between; align-items: center; gap: 6px; }
+.grarity { flex: none; padding: 2px 8px; border-radius: 999px; background: rgba(0, 0, 0, .05); color: #3A3A3C; font-size: 10.5px; font-weight: 700; }
+.gface .gtxt { display: flex; align-items: center; justify-content: center; text-align: center; font-weight: 600; font-size: 14.5px; -webkit-line-clamp: unset; }
+.gface.gback .gtxt { font-weight: 500; }
+.gtag { color: #86868B; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .gface, :root:not([data-theme="light"]) .gcard.rare .gface, :root:not([data-theme="light"]) .gcard.holo .gface {
+    color: #F5F5F7; background: linear-gradient(160deg, #2C2C2E, #1C1C1E 60%, #141415); box-shadow: inset 0 0 0 .5px rgba(255, 255, 255, .12), 0 14px 26px -18px #000; }
+  :root:not([data-theme="light"]) .gcard.rare .gface { box-shadow: inset 0 0 0 1px rgba(226, 190, 120, .55), 0 14px 26px -18px #000; }
+  :root:not([data-theme="light"]) .grarity { background: rgba(255, 255, 255, .08); color: #D1D1D6; }
+}
+:root[data-theme="dark"] .gface, :root[data-theme="dark"] .gcard.rare .gface, :root[data-theme="dark"] .gcard.holo .gface {
+  color: #F5F5F7; background: linear-gradient(160deg, #2C2C2E, #1C1C1E 60%, #141415); box-shadow: inset 0 0 0 .5px rgba(255, 255, 255, .12), 0 14px 26px -18px #000; }
+:root[data-theme="dark"] .gcard.rare .gface { box-shadow: inset 0 0 0 1px rgba(226, 190, 120, .55), 0 14px 26px -18px #000; }
+:root[data-theme="dark"] .grarity { background: rgba(255, 255, 255, .08); color: #D1D1D6; }
+
+/* Avant de retourner la carte : un seul bouton « Retourner la carte (Espace) » ; une fois retournée, il se partage
+   en « Je ne savais pas » et « Je savais » */
+.rating-flip { display: none; }
+.ratings.locked .rating { display: none; }
+.ratings.locked .rating-flip { display: inline-flex; align-items: center; justify-content: center; gap: 10px; flex: 1;
+  padding: 13px 18px; border-radius: 999px; border: 1px solid var(--border); background: var(--surface); color: var(--text);
+  font-weight: 600; cursor: pointer; animation: flip-in .25s ease both; }
+.ratings.locked .rating-flip:hover { border-color: var(--text); }
+body.focus .ratings.locked .rating-flip { background: rgba(255, 255, 255, .1); border: 0; color: #F5F5F7; box-shadow: inset 0 .5px 0 rgba(255, 255, 255, .15); }
+body.focus.day .ratings.locked .rating-flip { background: rgba(0, 0, 0, .05); color: #1D1D1F; box-shadow: none; }
+.ratings:not(.locked) .rating.again { animation: split-left .3s cubic-bezier(.2, .8, .2, 1) both; }
+.ratings:not(.locked) .rating.good { animation: split-right .3s cubic-bezier(.2, .8, .2, 1) both; }
+@keyframes flip-in { from { opacity: 0; transform: scale(.97); } }
+@keyframes split-left { from { opacity: 0; transform: translateX(40%) scaleX(.7); } }
+@keyframes split-right { from { opacity: 0; transform: translateX(-40%) scaleX(.7); } }
+@media (prefers-reduced-motion: reduce) { .ratings:not(.locked) .rating { animation: none !important; } }
+.ratings.locked.typing .rating-flip { display: none; }
+.course-tabs .course-tab:has(.kebab-menu:not([hidden])) { overflow: visible; }
+
+/* Clair ou sombre : une ligne pour l'app, une pour les quiz et les cartes */
+.theme-row { display: flex; align-items: center; justify-content: space-between; gap: 10px 16px; flex-wrap: wrap; margin-top: 12px; }
+.theme-row > span { font-size: 14px; font-weight: 600; }
+.theme-row .filters { margin: 0; }

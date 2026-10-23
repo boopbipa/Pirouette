@@ -39,7 +39,7 @@
     <nav class="crumbs" id="crumbs" aria-label="Où je suis" hidden></nav>
 
     <!-- Accueil : phrase du jour, compteurs, la révision du jour -->
-    <section id="view-home" class="view home">
+    <section id="view-home" class="view home" hidden>
       <div class="home-brand"><span class="app-icon"><svg viewBox="0 0 100 100" aria-hidden="true"><use href="#app-icon"/></svg><span class="beta-badge">bêta</span></span>Pirouette</div>
       <div class="hero">
         <h1 class="greeting" id="greeting">On révise ?</h1>
@@ -190,14 +190,17 @@
       <!-- En haut : le nom de la matière et, à part, « Mes cours » (ajouter, modifier ses cours) ; dessous, les onglets pour réviser -->
       <div class="scope-head">
         <h1 class="subject-title"><span class="subject-dot" id="review-scope-dot" hidden></span><span id="review-scope-title"></span></h1>
-        <a class="manage-link" id="scope-manage" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16z"/></svg>Mes cours</a>
       </div>
-      <nav class="filters scope-tabs" id="scope-tabs" role="tablist" aria-label="Réviser">
-        <a role="tab" data-scope-tab="">Aujourd'hui</a>
-        <a role="tab" data-scope-tab="quiz">Quiz</a>
-        <a role="tab" data-scope-tab="cartes">Cartes</a>
-        <a role="tab" data-scope-tab="suivi">Suivi</a>
-      </nav>
+      <!-- Les onglets pour réviser, et à part (même allure) « Mes cours » : ajouter, modifier ses cours -->
+      <div class="scope-nav">
+        <nav class="filters scope-tabs" id="scope-tabs" role="tablist" aria-label="Réviser">
+          <a role="tab" data-scope-tab="">Aujourd'hui</a>
+          <a role="tab" data-scope-tab="quiz">Quiz</a>
+          <a role="tab" data-scope-tab="cartes">Cartes</a>
+          <a role="tab" data-scope-tab="suivi">Suivi</a>
+        </nav>
+        <nav class="filters scope-tabs manage-pill" id="scope-manage-pill" hidden><a id="scope-manage"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16z"/></svg>Mes cours</a></nav>
+      </div>
       <!-- Une matière à plusieurs cours : réviser toute la matière ou un seul cours -->
       <div class="chips chapter-chips review-files" id="review-files" role="radiogroup" aria-label="Cours à réviser" hidden></div>
 
@@ -512,10 +515,21 @@
 
       <div class="card" id="theme-card">
         <h2>Clair ou sombre</h2>
-        <div class="filters theme-choice" role="radiogroup" aria-label="Clair ou sombre">
-          <button type="button" role="radio" data-theme-choice="auto">◐ Automatique</button>
-          <button type="button" role="radio" data-theme-choice="light">☀︎ Clair</button>
-          <button type="button" role="radio" data-theme-choice="dark">☾ Sombre</button>
+        <div class="theme-row">
+          <span>Dans l'app</span>
+          <div class="filters theme-choice" role="radiogroup" aria-label="Clair ou sombre dans l'app">
+            <button type="button" role="radio" data-theme-choice="auto">◐ Automatique</button>
+            <button type="button" role="radio" data-theme-choice="light">☀︎ Clair</button>
+            <button type="button" role="radio" data-theme-choice="dark">☾ Sombre</button>
+          </div>
+        </div>
+        <div class="theme-row">
+          <span>Pendant les quiz et les cartes</span>
+          <div class="filters focus-choice" role="radiogroup" aria-label="Jour ou nuit pendant les quiz">
+            <button type="button" role="radio" data-focus-choice="auto">◐ Automatique</button>
+            <button type="button" role="radio" data-focus-choice="light">☀︎ Jour</button>
+            <button type="button" role="radio" data-focus-choice="dark">☾ Nuit</button>
+          </div>
         </div>
       </div>
 
@@ -535,24 +549,6 @@
               <input type="text" id="color-hex" maxlength="7" spellcheck="false" aria-label="Code couleur">
             </div>
             <div class="presets" id="color-presets"></div>
-          </div>
-          <div class="previews">
-            <div class="accent-preview" id="preview-light"><span class="pv-label">Clair</span>
-              <div class="pv-top"><svg class="pv-logo" aria-hidden="true"><use href="#logo"/></svg>Pirouette</div>
-              <div class="pv-greet"><span class="pv-icon"><svg aria-hidden="true"><use href="#logo"/></svg></span>On révise ?</div>
-              <p class="stats-line"><strong>4</strong> matières · <strong>12</strong> quiz faits</p>
-              <div class="course-card"><strong>Biologie, chap. 4</strong><span class="muted">2 fichiers · 3 quiz</span></div>
-              <div class="pv-row"><span class="pill">3 / 10</span><span class="badge">Meilleur score 8/10</span></div>
-              <div class="progress"><div class="pv-bar"></div></div>
-            </div>
-            <div class="accent-preview pv-dark" id="preview-dark"><span class="pv-label">Sombre</span>
-              <div class="pv-top"><svg class="pv-logo" aria-hidden="true"><use href="#logo"/></svg>Pirouette</div>
-              <div class="pv-greet"><span class="pv-icon"><svg aria-hidden="true"><use href="#logo"/></svg></span>On révise ?</div>
-              <p class="stats-line"><strong>4</strong> matières · <strong>12</strong> quiz faits</p>
-              <div class="course-card"><strong>Biologie, chap. 4</strong><span class="muted">2 fichiers · 3 quiz</span></div>
-              <div class="pv-row"><span class="pill">3 / 10</span><span class="badge">Meilleur score 8/10</span></div>
-              <div class="progress"><div class="pv-bar"></div></div>
-            </div>
           </div>
         </div>
         <div class="actions">
@@ -809,7 +805,15 @@
       </label>
 
       <!-- « Mes cours » : une page à part pour organiser ; on revient aux révisions par ce lien -->
-      <a class="manage-back" id="manage-back">‹ Retour aux révisions</a>
+      <div class="scope-nav course-nav">
+        <nav class="filters scope-tabs" aria-label="Réviser">
+          <a data-course-tab="">Aujourd'hui</a>
+          <a data-course-tab="quiz">Quiz</a>
+          <a data-course-tab="cartes">Cartes</a>
+          <a data-course-tab="suivi">Suivi</a>
+        </nav>
+        <nav class="filters scope-tabs manage-pill"><a class="active" aria-current="page"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16z"/></svg>Mes cours</a></nav>
+      </div>
       <p class="status" id="course-status" hidden></p>
       <!-- Un cours tout juste ajouté (ni quiz ni flashcards) : un seul bouton, Claude découpe puis crée tout -->
       <div class="ready-card" id="ready-card" hidden>
@@ -840,22 +844,14 @@
         <!-- Une matière, plusieurs cours : un onglet par cours (fichier), chacun avec ses chapitres, quiz et flashcards -->
         <nav class="course-tabs" id="course-tabs" role="tablist" aria-label="Cours de la matière" hidden></nav>
         <div class="tree-body">
-        <details class="card tree-source" id="panel-fichiers">
-          <summary class="source-summary">
-            <span class="source-names" id="source-names"></span>
-            <span class="source-toggle muted small-text">Modifier</span>
-          </summary>
-          <div class="fold-body">
-            <p id="upload-status" class="status" hidden></p>
-            <ul id="file-list" class="file-list source-list"></ul>
-            <label id="dropzone" class="dropzone dropzone-slim" for="file-input">
-              <input type="file" id="file-input" multiple accept=".pdf,.docx,.pptx,.pages,.key,.txt,.md,.markdown" hidden>
-              <input type="file" id="replace-input" accept=".pdf,.docx,.pptx,.pages,.key,.txt,.md,.markdown" hidden>
-              <span class="muted">Glisse un fichier ici, ou clique</span>
-            </label>
-          </div>
-          <p id="chapters-status" class="status" hidden></p>
-        </details>
+        <!-- Le cours (fichier) se gère depuis son onglet, en haut (« ⋯ ») : plus de bandeau en double ici -->
+        <div id="panel-fichiers" hidden>
+          <span id="source-names"></span><ul id="file-list"></ul><label id="dropzone" hidden></label>
+        </div>
+        <input type="file" id="file-input" multiple accept=".pdf,.docx,.pptx,.pages,.key,.txt,.md,.markdown" hidden>
+        <input type="file" id="replace-input" accept=".pdf,.docx,.pptx,.pages,.key,.txt,.md,.markdown" hidden>
+        <p id="upload-status" class="status" hidden></p>
+        <p id="chapters-status" class="status" hidden></p>
 
         <!-- Chapitres, quiz et flashcards se replient d'un coup (beaucoup de cours = une longue page) -->
         <button type="button" class="tree-toggle" id="tree-toggle" aria-expanded="true" aria-controls="tree-branches">
@@ -1077,8 +1073,6 @@
         <p class="muted small-text session-origin" id="session-origin"></p>
         <div class="session-tools">
           <button class="ghost small" type="button" id="session-prev" title="Revenir à la carte ou la question d'avant, et changer ta réponse" hidden>← Précédent</button>
-          <button class="ghost small shuffle-btn" type="button" id="session-shuffle" title="Rebattre les cartes qui restent">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 4h4v4M4 20 20 4M20 16v4h-4M15 15l5 5M4 4l5 5"/></svg>Mélanger</button>
           <div class="filters mini" id="session-mode" role="radiogroup" aria-label="Façon de réviser les cartes">
             <button type="button" role="radio" data-card-mode="flip">Retourner</button>
             <button type="button" role="radio" data-card-mode="type">Écrire</button>
@@ -1119,6 +1113,7 @@
         </div>
         <div class="typed-result" id="typed-result" hidden></div>
         <div class="ratings" id="ratings" hidden>
+          <button type="button" class="rating-flip" id="rating-flip">Retourner la carte <kbd class="key-hint" id="flip-key">Espace</kbd></button>
           <button type="button" class="rating again" data-rating="again"><span class="rating-ic" aria-hidden="true">✕</span><b>Je ne savais pas</b></button>
           <button type="button" class="rating good" data-rating="good"><span class="rating-ic" aria-hidden="true">✓</span><b>Je savais</b></button>
         </div>
