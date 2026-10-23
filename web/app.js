@@ -323,10 +323,23 @@ function quizzesOf(courseId) {
   return Object.values(current().quiz).filter((q) => q.course_id === courseId)
     .sort((a, b) => String(b.created_at || "").localeCompare(String(a.created_at || "")));
 }
+// L'avancée globale d'une matière (★), comme sur l'ordinateur (« Prêt pour les partiels ? ») : chaque carte et chaque
+// question compte ; acquise 1, en cours 0,6, difficile 0,25 ; question réussie 1 (0,7 si plus souvent ratée), ratée 0,2
 function mastery(courseId) {
   const cards = current().deck[courseId]?.cards || [];
-  const known = cards.filter((c) => c.status === "known").length;
-  return { cards: cards.length, known, pct: cards.length ? Math.round((100 * known) / cards.length) : 0 };
+  let score = 0, items = 0;
+  for (const c of cards) {
+    items += 1;
+    score += c.status === "known" || (c.interval || 0) >= 21 ? 1 : !c.reviews ? 0 : isWeak(c) ? 0.25 : 0.6;
+  }
+  for (const quiz of quizzesOf(courseId)) {
+    quiz.questions.forEach((q, i) => {
+      const st = quiz.stats?.[i];
+      items += 1;
+      score += !st ? 0 : st.last === false ? 0.2 : (st.right || 0) >= (st.wrong || 0) ? 1 : 0.7;
+    });
+  }
+  return { cards: items, pct: items ? Math.round((100 * score) / items) : 0 };
 }
 
 // ---------- Écrans ----------
@@ -482,7 +495,7 @@ function dayRing(courseId) {
   const pct = left ? Math.round((100 * done) / (done + left)) : 100;
   return { pct, left, text: left ? `${pct}%` : "✓" };
 }
-const acqPill = (m) => (m.cards ? `<span class="acq-pill" role="button" tabindex="0" aria-label="${m.pct} % des cartes acquises"><span class="acq-star">★</span> ${m.pct} %<span class="acq-word">&nbsp;acquis</span></span>` : "");
+const acqPill = (m) => (m.cards ? `<span class="acq-pill" role="button" tabindex="0" aria-label="Avancée : ${m.pct} %"><span class="acq-star">★</span> ${m.pct} %<span class="acq-word">&nbsp;acquis</span></span>` : "");
 document.addEventListener("click", (e) => {
   const pill = e.target.closest(".acq-pill");
   if (!pill) return;

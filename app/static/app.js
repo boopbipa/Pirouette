@@ -407,18 +407,19 @@ function subjectColor(id) {
   return SUBJECT_COLORS[h % SUBJECT_COLORS.length];
 }
 
-// La part de cartes acquises : une pastille « ★ 34 % » ; au survol, « acquis » apparaît et elle prend la couleur
-// de la matière. Le rond, lui, reste pour la révision du jour.
-const acqPct = (known, total) => (total ? Math.round((100 * known) / total) : 0);
-function acqPill(known, total) {
-  return `<span class="acq-pill" title="${known} cartes acquises sur ${total}"><span class="acq-star">★</span> ${acqPct(known, total)} %<span class="acq-word">&nbsp;acquis</span></span>`;
+// L'avancée globale d'une matière : une pastille « ★ 34 % » (la même que « Prêt pour les partiels ? » dans Suivi :
+// cartes et questions de quiz, en comptant ce qui est en bonne voie) ; au survol, « acquis » apparaît et elle prend la
+// couleur de la matière. Le rond, lui, reste pour la révision du jour.
+const ACQ_TITLE = "Ton avancée : cartes et quiz réunis (comme « Prêt pour les partiels ? »)";
+function acqPill(pct) {
+  return `<span class="acq-pill" title="${ACQ_TITLE}"><span class="acq-star">★</span> ${pct} %<span class="acq-word">&nbsp;acquis</span></span>`;
 }
-function setAcqPill(el, known, total, color) {
-  el.hidden = !total;
-  if (!total) return;
-  el.title = `${known} cartes acquises sur ${total}`;
+function setAcqPill(el, ready, color) {
+  el.hidden = !ready?.items;
+  if (el.hidden) return;
+  el.title = ACQ_TITLE;
   el.style.setProperty("--c", color);
-  el.innerHTML = `<span class="acq-star">★</span> ${acqPct(known, total)} %<span class="acq-word">&nbsp;acquis</span>`;
+  el.innerHTML = `<span class="acq-star">★</span> ${ready.pct} %<span class="acq-word">&nbsp;acquis</span>`;
 }
 // L'avancement du jour d'un rond : déjà fait / (fait + à faire), en %, ou ✓ quand il ne reste rien
 function todayRing(done, left) {
@@ -442,7 +443,7 @@ function courseCard(c) {
         <strong>${escapeHtml(c.name)}</strong>
         <small>${status}</small>
       </span>
-      ${p?.cards ? acqPill(p.known, p.cards) : ""}
+      ${p?.ready?.items ? acqPill(p.ready.pct) : ""}
       ${p?.cards ? `<span class="mastery-ring${ring.text === "✓" ? " done" : ""}" style="--m:${ring.pct}%" title="${ring.title}"><span>${ring.text}</span></span>` : ""}
       <span class="card-glare" aria-hidden="true"></span>
     </a>`;
@@ -1602,7 +1603,9 @@ async function openCourse(id, tab, { keepScroll = false } = {}) {
   if (!TABS.includes(tab)) tab = null;
   state.tab = tab;
   $("#course-name").textContent = course.name;
-  setAcqPill($("#course-acq"), course.cards?.known || 0, course.cards?.total || 0, subjectColor(course.id));
+  api(`/api/readiness?course=${course.id}`).then((r) => {
+    if (state.course?.id === course.id) setAcqPill($("#course-acq"), r, subjectColor(course.id));
+  }).catch(() => {});
   $("#course-dot").style.background = subjectColor(course.id);
   $("#course-tree").style.setProperty("--c", subjectColor(course.id));
   setCrumbs(courseCrumbs(course));
@@ -4072,6 +4075,12 @@ async function openReviewScope(kind, id = "", sub = "") {
   if (state.reviewScope?.base !== base) state.deckChapter = null;  // autre cours : tous les chapitres
   state.reviewScope = { params, name, hash: location.hash, base, single: kind === "cours", owner, parent };
   $("#review-scope-title").textContent = name;
+  // ★ : l'avancée globale (exactement le pourcentage de « Prêt pour les partiels ? »), sur tous les onglets
+  if (state.acqBase !== base) $("#review-scope-acq").hidden = true;  // même matière : on garde la pastille (pas de clignement)
+  state.acqBase = base;
+  api(`/api/readiness?${new URLSearchParams(params)}`).then((r) => {
+    if (state.reviewScope?.base === base) setAcqPill($("#review-scope-acq"), r, kind === "cours" ? subjectColor(id) : "var(--accent)");
+  }).catch(() => {});
   $("#review-scope-dot").hidden = kind !== "cours";
   if (kind === "cours") $("#review-scope-dot").style.background = subjectColor(id);
   // Le bandeau du jour prend la couleur de la matière (son fond, son halo au survol)
@@ -4120,8 +4129,6 @@ async function renderScopeMain() {
     : reviewScope().folder ? c.folder_id === reviewScope().folder : true));
   const ids = new Set(scoped.map((c) => c.id));
   state.scopePlan = plan;
-  const cardsTotal = scoped.reduce((n, c) => n + (c.cards || 0), 0), cardsKnown = scoped.reduce((n, c) => n + (c.known || 0), 0);
-  setAcqPill($("#review-scope-acq"), cardsKnown, cardsTotal, scope.single ? subjectColor(reviewScope().course) : "var(--accent)");
   // L'anneau du bandeau : l'avancement de la révision du jour (déjà fait / à faire), puis ✓ quand c'est fini
   const done = data.done_today.cards + (mixQuestions() ? data.done_today.questions : 0);
   const left = data.today.cards + (mixQuestions() ? data.today.questions : 0);
@@ -5069,6 +5076,9 @@ const WELCOME = [
 ];
 // Les nouveautés de chaque version (le carton « Quoi de neuf » ne s'affiche que si la version en a)
 const WHATS_NEW = {
+  "0.74.5": [
+    ["★", "Un seul pourcentage d'avancée", "La pastille ★ et « Prêt pour les partiels ? » donnent le même chiffre : tes cartes et tes quiz réunis"],
+  ],
   "0.74.4": [
     ["◔", "Les mêmes chiffres partout", "Le rond d'une matière dans la liste et celui de sa révision du jour comptent la même chose ; ronds un peu plus grands"],
     ["✦", "Bandeau du jour cliquable", "Sur Mes matières, tout le bandeau lance la révision du jour, avec le reflet au survol"],

@@ -2032,6 +2032,24 @@ def _question_readiness(stat: dict | None) -> float:
     return 1.0 if stat.get("right", 0) >= stat.get("wrong", 0) else 0.7
 
 
+def _readiness_by_course(ids: list[str]) -> dict[str, dict]:
+    """L'avancée de chaque matière (cartes et questions de quiz, comme « Prêt pour les partiels ? ») : {id: {pct, items}}."""
+    out = {cid: {"score": 0.0, "items": 0} for cid in ids}
+    for c, cards in store._decks(ids):
+        for card in cards:
+            out[c["id"]]["score"] += _card_readiness(card)
+            out[c["id"]]["items"] += 1
+    for summary in store.list_quizzes():
+        entry = out.get(summary.get("course_id"))
+        if entry is None:
+            continue
+        stats = (store.get_quiz(summary["id"]).get("stats") or {})
+        for i in range(summary.get("count", 0)):
+            entry["score"] += _question_readiness(stats.get(str(i)))
+            entry["items"] += 1
+    return {cid: {"pct": round(100 * e["score"] / e["items"]) if e["items"] else 0, "items": e["items"]} for cid, e in out.items()}
+
+
 @app.get("/api/readiness")
 async def readiness(course: str = "", folder: str = "") -> dict:
     """Où j'en suis avant les partiels : un pourcentage pour la matière (ou le semestre), et un par cours (fichier)
@@ -2065,10 +2083,10 @@ async def readiness(course: str = "", folder: str = "") -> dict:
             r = _question_readiness(stats.get(str(i)))
             g["score"] += r; g["items"] += 1; g["questions"] += 1; g["todo"] += r < 1
     rows = sorted(groups.values(), key=lambda g: g["name"].lower())
+    total, score = sum(g["items"] for g in rows), sum(g["score"] for g in rows)
     for g in rows:
         g["pct"] = round(100 * g.pop("score") / g["items"]) if g["items"] else 0
-    total = sum(g["items"] for g in rows)
-    pct = round(sum(g["pct"] * g["items"] for g in rows) / total) if total else 0
+    pct = round(100 * score / total) if total else 0  # le même calcul que la pastille ★ (sans arrondi intermédiaire)
     exams = [store.exam_info(c) for c in courses.values()]
     exams = [e for e in exams if e and e["days"] >= 0]
     exam = min(exams, key=lambda e: e["days"]) if exams else None
@@ -2122,8 +2140,10 @@ async def progress(course: str = "", folder: str = "") -> dict:
         day = store.get_folder(folder).get("exam_week")
         exam = {"date": day, "days": (date.fromisoformat(day) - date.today()).days, "from": "dossier"} if day else None
     # Chaque matière : sa révision du jour (à faire et déjà faite), les mêmes chiffres que dans la matière
+    ready = _readiness_by_course([c["id"] for c in data["courses"]])
     for c in data["courses"]:
         c["day"] = {"left": _today_counts([c["id"]]), "done": _done_today([c["id"]])}
+        c["ready"] = ready[c["id"]]  # l'avancée globale (★), la même que « Prêt pour les partiels ? »
     return data | {
         "exam": exam,
         "today": _today_counts(ids),
