@@ -2210,14 +2210,16 @@ body.focus .feedback.ok, body.focus .feedback.ko { background: color-mix(in srgb
 .c1-row .m1 { flex: 1; }
 .c1-note { margin: 10px 0 0; }
 
-.grid-toggle { display: flex; flex-direction: column; align-items: center; gap: 6px; margin: 22px 0 4px; }
-.grid-btn { position: relative; width: 44px; height: 44px; border-radius: 50%; border: 1.5px dashed var(--border); background: transparent;
-  color: var(--muted); display: grid; place-items: center; padding: 0; cursor: pointer; transition: background .15s, color .15s, border-color .15s; }
-.grid-btn::before { content: ""; position: absolute; inset: -10px; border-radius: 50%; }
-.grid-btn svg { width: 19px; height: 19px; display: block; }
-.grid-btn:hover, .grid-btn.open { background: var(--accent-ink); border: 1.5px solid var(--accent-ink); color: var(--on-accent); }
-.card-grid-wrap { margin-top: 16px; animation: grid-in .22s ease; }
-@keyframes grid-in { from { opacity: 0; transform: translateY(-6px); } }
+.card-grid-wrap { margin-top: 22px; transition: max-height .5s ease; }
+/* Onglet Cartes : le haut des premières cartes dépasse dans un fondu, une flèche ; en faisant défiler, la grille se dévoile */
+.card-grid-wrap.peek { max-height: 150px; overflow: hidden; cursor: pointer;
+  -webkit-mask-image: linear-gradient(to bottom, #000 25%, transparent 95%); mask-image: linear-gradient(to bottom, #000 25%, transparent 95%); }
+.card-grid-wrap.peek .grid-head { display: none; }
+.card-grid-wrap.peek .gcard { pointer-events: none; }
+.peek-arrow { display: block; margin: -6px auto 0; width: 44px; height: 30px; padding: 0; border: 0; background: none; color: var(--accent-ink);
+  cursor: pointer; animation: peek-bob 1.8s ease-in-out infinite; }
+.peek-arrow svg { width: 26px; height: 26px; }
+@keyframes peek-bob { 50% { transform: translateY(5px); } }
 .grid-head { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 14px; }
 .grid-head input { flex: 1; min-width: 140px; }
 .grid-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 12px; }
@@ -2530,3 +2532,21 @@ body.focus.day .ratings.locked .rating-flip { background: rgba(0, 0, 0, .05); co
 .theme-row { display: flex; align-items: center; justify-content: space-between; gap: 10px 16px; flex-wrap: wrap; margin-top: 12px; }
 .theme-row > span { font-size: 14px; font-weight: 600; }
 .theme-row .filters { margin: 0; }
+
+/* Mes cours en accordéon : le cours ouvert se déplie sous sa ligne ; « + » pour en ajouter un, au bout de la liste */
+.course-tabs > .tree-body { margin: 2px 0 10px; }
+.course-tabs .course-tab.add { align-self: flex-start; width: 44px; height: 44px; padding: 0; border-radius: 50%; font-size: 22px; font-weight: 400; line-height: 1; }
+.course-tabs .course-tab.add.over { color: var(--accent-ink); border-color: var(--accent); }
+/* Grille des cartes : un crayon au survol pour modifier la carte (la même fenêtre que partout) */
+.gcard { position: relative; }
+.gedit { position: absolute; left: 10px; bottom: 10px; z-index: 3; width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center;
+  background: var(--surface); color: var(--muted); box-shadow: 0 1px 4px rgba(0, 0, 0, .15); opacity: 0; transition: opacity .15s; cursor: pointer; }
+.gedit svg { width: 15px; height: 15px; }
+.gcard:hover .gedit, .gcard:focus-visible .gedit { opacity: 1; }
+.gedit:hover { color: var(--accent-ink); }
+.grid-write { white-space: nowrap; }
+.grid-head #grid-search { flex: 1 1 140px; min-width: 0; }
+.cards-link { display: flex; align-items: center; gap: 10px; padding: 16px 20px; color: var(--text); text-decoration: none; }
+.cards-link small { color: var(--muted); }
+.cards-link span:last-child { margin-left: auto; color: var(--accent-ink); font-weight: 600; font-size: 14px; }
+.grid-head #grid-go { margin-left: auto; }

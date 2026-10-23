@@ -1883,7 +1883,11 @@ document.addEventListener("click", (e) => {
   if (!pick || e.target.closest(".kebab")) return;  // « ⋯ » du cours : ses options, pas un changement de cours
   e.preventDefault();
   e.stopPropagation();
-  refocus(pick.dataset.fileFocus);
+  // Un clic déplie le cours sous sa ligne ; un second clic sur le même le replie
+  const same = pick.classList.contains("active");
+  state.fileOpen = !same;
+  if (same) renderFiles(state.course);
+  else refocus(pick.dataset.fileFocus);
 }, true);
 
 function chapterChip() {
@@ -1917,20 +1921,27 @@ function renderFiles(course) {
   // Une ligne par cours (fichier), avec ses chiffres ; celui ouvert montre dessous ses chapitres, quiz et flashcards
   const deck = state.deck?.course_id === course.id ? state.deck.cards : null;
   const chip = (n, one, many) => `<span class="row-chip">${plural(n, one, many)}</span>`;
+  $("#course-tree").append($("#tree-body"));
   $("#course-tabs").innerHTML = focus ? course.files.map((f) => {
     const quizzes = course.quizzes.filter((q) => ownerFile(q.scope, q.sources, course.files)?.id === f.id).length;
     const cards = deck ? deck.filter((c) => ownerFile(c.scope, c.origin, course.files)?.id === f.id).length : null;
-    // Le cours ouvert a ses options dans « ⋯ » (le bandeau du dessous, en double, a disparu)
-    const options = f === focus ? kebab(`<button type="button" role="menuitem" data-rename-file="${f.id}">Renommer</button>
+    // Chaque cours a ses options dans « ⋯ » (le bandeau du dessous, en double, a disparu)
+    const open = f === focus && state.fileOpen !== false;
+    const options = kebab(`<button type="button" role="menuitem" data-rename-file="${f.id}">Renommer</button>
       <button type="button" role="menuitem" data-replace-file="${f.id}">Nouvelle version du fichier</button>
       ${f.definitions ? `<button type="button" role="menuitem" data-show-defs="${f.id}">${plural(f.definitions, "définition repérée", "définitions repérées")}</button>` : ""}
       <button type="button" role="menuitem" data-move-file="${f.id}">Déplacer vers une autre matière</button>
-      <button type="button" role="menuitem" class="danger" data-remove-file="${f.id}">Retirer ce cours</button>`, "Options du cours") : "";
-    return `<div role="tab" tabindex="0" class="course-tab${f === focus ? " active" : ""}" data-file-focus="${f.id}"
-      aria-selected="${f === focus}" title="${escapeHtml(f.name)}"><span class="row-doc">${ICON_FILE}</span><span class="row-name">${escapeHtml(fileLabel(f))}</span>
+      <button type="button" role="menuitem" class="danger" data-remove-file="${f.id}">Retirer ce cours</button>`, "Options du cours");
+    return `<div role="tab" tabindex="0" class="course-tab${open ? " active" : ""}" data-file-focus="${f.id}"
+      aria-selected="${open}" aria-expanded="${open}" title="${escapeHtml(f.name)}"><span class="row-doc">${ICON_FILE}</span><span class="row-name">${escapeHtml(fileLabel(f))}</span>
       ${quizzes ? chip(quizzes, "quiz", "quiz") : ""}${cards ? chip(cards, "carte", "cartes") : ""}${options}
       <span class="row-chev" aria-hidden="true">›</span><span class="card-glare" aria-hidden="true"></span></div>`;
-  }).join("") + `<label class="course-tab add" for="file-input">+ Ajouter un cours<span class="card-glare" aria-hidden="true"></span></label>` : "";
+  }).join("") + `<label class="course-tab add" for="file-input" title="Ajouter un cours (ou glisse un fichier ici)" aria-label="Ajouter un cours">+</label>` : "";
+  // Le cours ouvert se déplie juste sous sa ligne (accordéon), plutôt que tout en bas de la liste
+  const body = $("#tree-body"), opened = $("#course-tabs .course-tab.active");
+  if (opened) opened.after(body);
+  else $("#course-tree").append(body);
+  body.hidden = Boolean(focus) && !opened;
   const shown = focus ? [focus] : course.files;
   $("#source-names").innerHTML = shown.map((f) => `<span class="source-name">${ICON_FILE}<strong>${escapeHtml(fileLabel(f))}</strong>
       <button class="icon rename-file" type="button" data-rename-file="${f.id}" title="Renommer ce cours" aria-label="Renommer ce cours">${ICON_EDIT}</button></span>`).join("")
@@ -2241,9 +2252,16 @@ async function importTextFile(file) {
   const form = new FormData();
   form.append("file", file);
   try {
-    const r = await api(`/api/courses/${state.course.id}/import`, { method: "POST", body: form });
+    // Depuis l'onglet Cartes (pas de cours ouvert dans Mes cours) : le cours de l'onglet
+    const inCards = !state.course && state.reviewScope?.single;
+    const r = await api(`/api/courses/${inCards ? state.reviewScope.params.course : state.course.id}/import`, { method: "POST", body: form });
     const skipped = r.skipped ? ` (${r.skipped} ignorée${r.skipped > 1 ? "s" : ""} : illisible${r.skipped > 1 ? "s" : ""} ou déjà là)` : "";
     state.deck = null;
+    if (inCards) {
+      await route();
+      return notify(r.kind === "cards" ? `${plural(r.added, "carte ajoutée", "cartes ajoutées")}${skipped}.`
+        : `Quiz « ${r.title} » importé : ${plural(r.added, "question", "questions")}${skipped}.`);
+    }
     await refreshCourse();
     $(r.kind === "cards" ? "#panel-cartes" : "#panel-quiz").open = true;  // des cartes importées depuis « Quiz » : on les montre
     setStatus(r.kind === "cards" ? "#cards-status" : "#quiz-status", r.kind === "cards"
@@ -2897,6 +2915,8 @@ function renderCardGrid() {
   const none = !cards.length;
   $("#cards-foot").hidden = none;
   $("#fold-cards-count").textContent = none ? "· aucune pour l'instant" : `· ${cards.length}`;
+  $("#cards-link-count").textContent = $("#fold-cards-count").textContent;
+  $("#cards-link").href = `#/reviser/cours/${state.course.id}/cartes`;
   $("#cards-empty").hidden = !none;
   $("#cards-empty").textContent = "Pas encore de flashcards pour ce cours : clique sur « + Ajouter des cartes ».";
   $("#cards-chip").innerHTML = chapterChip();
@@ -3009,8 +3029,9 @@ $("#cards-menu").addEventListener("click", async (e) => {
 });
 
 // ---------- Écrire ou corriger une carte ----------
-function openCardDialog(card = null, { onSaved = null } = {}) {
-  state.editing = { card, onSaved };
+function openCardDialog(card = null, { onSaved = null, onDeleted = null, courseId = null } = {}) {
+  state.editing = { card, onSaved, onDeleted, courseId: courseId || state.course?.id };
+  $("#card-delete").hidden = !(card && onDeleted);
   $("#card-dialog-title").textContent = card ? "Modifier la carte" : "Nouvelle carte";
   $("#card-front-input").value = card?.front || "";
   $("#card-back-input").value = card?.back || "";
@@ -3022,17 +3043,19 @@ function openCardDialog(card = null, { onSaved = null } = {}) {
 }
 
 async function saveCardDialog(keepOpen) {
-  const { card, onSaved } = state.editing;
+  const { card, onSaved, courseId } = state.editing;
   const body = { front: $("#card-front-input").value, back: $("#card-back-input").value };
   try {
     if (card) {
-      Object.assign(card, await api(`/api/courses/${state.course.id}/cards/${card.id}`, jsonBody("PATCH", body)));
+      Object.assign(card, await api(`/api/courses/${courseId}/cards/${card.id}`, jsonBody("PATCH", body)));
     } else {
-      const result = await api(`/api/courses/${state.course.id}/cards/manual`, jsonBody("POST", body));
-      state.deck?.cards.push(result.card);
+      const result = await api(`/api/courses/${courseId}/cards/manual`, jsonBody("POST", body));
+      if (state.deck?.course_id === courseId) state.deck.cards.push(result.card);
       state.newCards = new Set([...(state.newCards || []), result.card.id]);
-      state.course.cards.total += 1;
-      state.course.cards.review += 1;
+      if (state.course?.id === courseId) {
+        state.course.cards.total += 1;
+        state.course.cards.review += 1;
+      }
       if (keepOpen) {
         $("#card-front-input").value = $("#card-back-input").value = "";
         $("#card-front-input").focus();
@@ -3057,6 +3080,17 @@ async function saveCardDialog(keepOpen) {
 $("#card-form").addEventListener("submit", (e) => { e.preventDefault(); saveCardDialog(false); });
 $("#card-save-next").addEventListener("click", () => saveCardDialog(true));
 $("#card-cancel").addEventListener("click", () => $("#card-dialog").close());
+$("#card-delete").addEventListener("click", async () => {
+  const { card, courseId, onDeleted } = state.editing;
+  if (!await askConfirm("Supprimer cette carte ? Elle disparaît du cours et de tes révisions.")) return;
+  try {
+    await api(`/api/courses/${courseId}/cards/${card.id}`, { method: "DELETE" });
+  } catch (err) {
+    return setStatus("#card-dialog-status", err.message, false);
+  }
+  $("#card-dialog").close();
+  onDeleted();
+});
 $("#card-write").addEventListener("click", () => openCardDialog());
 
 
@@ -4096,7 +4130,7 @@ async function renderScopeMain() {
 
 // Onglet Cartes : ton paquet, et la barre pour choisir combien de cartes (d'abord celles à revoir, puis celles où tu
 // bloques, puis les autres). Dessous, un bouton rond déplie la grille de toutes les cartes.
-const GRID_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" aria-hidden="true"><rect x="4" y="4" width="7" height="7" rx="1.5"/><rect x="13" y="4" width="7" height="7" rx="1.5"/><rect x="4" y="13" width="7" height="7" rx="1.5"/><rect x="13" y="13" width="7" height="7" rx="1.5"/></svg>';
+const PEEK_ARROW = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>';
 function renderDecks() {
   const data = state.cardDecks;
   if (!data) return;
@@ -4105,7 +4139,10 @@ function renderDecks() {
   const n = data.all;
   $("#mode-cartes-note").textContent = n.total ? `${plural(n.total, "carte", "cartes")}${n.due ? ` · ${n.due} à revoir` : ""}` : "aucune carte";
   if (!n.total) {
-    $("#card-decks").innerHTML = `<p class="muted">Pas encore de flashcards : crée-les depuis « Mes cours ».</p>`;
+    const single = state.reviewScope?.single;
+    $("#card-decks").innerHTML = `<p class="muted">Pas encore de flashcards${single ? "." : " : crée-les depuis une matière."}</p>`
+      + (single ? `<div class="head-actions"><a class="primary small button" href="#/cours/${state.reviewScope.params.course}/nouveau/cartes">+ Créer avec Claude</a>
+        <button class="ghost small" type="button" id="grid-write">+ Écrire une carte</button></div>` : "");
     return;
   }
   $("#card-decks").innerHTML = `<div class="c1">
@@ -4116,9 +4153,10 @@ function renderDecks() {
         <p class="muted small-text c1-note">${n.due ? `D'abord les ${plural(n.due, "carte", "cartes")} à revoir aujourd'hui, ` : "Tout est à jour : "}${n.weak ? `puis les ${n.weak} où tu bloques, ` : ""}puis les autres.</p>
       </div>
     </div>
-    <div class="grid-toggle"><button class="grid-btn" type="button" id="grid-btn" aria-expanded="false" title="Voir toutes les cartes">${GRID_ICON}</button>
-      <span class="muted small-text">Voir toutes les cartes</span></div>
-    <div class="card-grid-wrap" id="deck-grid" hidden></div>`;
+    <div class="card-grid-wrap peek" id="deck-grid"></div>
+    <button class="peek-arrow" type="button" id="peek-arrow" title="Voir toutes les cartes" aria-label="Voir toutes les cartes">${PEEK_ARROW}</button>`;
+  state.grid = { items: [], filter: "all", q: "" };
+  reloadCardGrid();
   const min = Math.min(5, n.total);
   state.deckCount = m1Bar($("#deck-bar"), { min, max: n.total, value: Math.min(n.total, Math.max(min, state.deckValue || n.due || 10)),
     unit: ["carte", "cartes"], onChange: (v) => { state.deckValue = v; } });
@@ -4136,9 +4174,36 @@ $("#card-decks").addEventListener("click", async (e) => {
     const items = order.slice(0, state.deckCount ? state.deckCount() : 10);
     if (items.length) runSession(items, { title: "Flashcards", back: state.reviewScope.hash });
   }
-  if (e.target.closest("#grid-btn")) toggleCardGrid();
+  if (e.target.closest("#peek-arrow, .card-grid-wrap.peek")) return revealCardGrid();
   const filter = e.target.closest("[data-grid-filter]");
   if (filter) { state.grid.filter = filter.dataset.gridFilter; drawCardGrid(); }
+  // Modifier ou supprimer une carte : la même fenêtre que dans la séance, sans quitter la grille
+  const edit = e.target.closest("[data-grid-edit]");
+  if (edit) {
+    const item = state.grid.items.find((i) => i.card.id === edit.dataset.gridEdit);
+    return openCardDialog(item.card, { courseId: item.course_id, onSaved: () => drawCardGrid(),
+      onDeleted: () => { state.grid.items.splice(state.grid.items.indexOf(item), 1); state.deck = null; drawCardGrid(); } });
+  }
+  // Ce qui était dans « Flashcards » de Mes cours : l'onglet Cartes est maintenant le seul endroit des cartes
+  const act = e.target.closest("[data-grid-act]")?.dataset.gridAct;
+  const course = state.reviewScope?.single ? { id: state.reviewScope.params.course, name: state.reviewScope.name } : null;
+  if (act && course) {
+    if (act === "clarify") {
+      await copyText(clarifyRequest(course));
+      setStatus("#grid-status", "Demande copiée : colle-la dans l'app Claude. Il reformule les cartes et questions peu claires, ton suivi est gardé.", true);
+    }
+    if (act === "import") { state.importFrom = "cartes"; $("#import-input").click(); }
+    if (act === "export") exportItem("cards", course.id, "#grid-status");
+    if (act === "clear" && await askConfirm("Effacer toutes les flashcards de ce cours (et leur suivi) ?")) {
+      await api(`/api/courses/${course.id}/cards`, { method: "DELETE" });
+      state.deck = null;
+      route();
+    }
+    return;
+  }
+  if (e.target.closest("#grid-write")) {
+    return openCardDialog(null, { courseId: state.reviewScope.params.course, onSaved: () => ($("#deck-grid") ? reloadCardGrid() : route()) });
+  }
   const card = e.target.closest(".gcard");
   if (card) card.classList.toggle("flipped");
   if (e.target.closest("#grid-go")) runSession(gridShown(), { title: "Flashcards", back: state.reviewScope.hash });
@@ -4151,16 +4216,27 @@ $("#card-decks").addEventListener("input", (e) => {
 const cardDue = (c) => !c.reviews || (c.due ? c.due <= new Date().toISOString().slice(0, 10) : c.status !== "known");
 const cardWeak = (c) => Boolean(c.reviews) && (c.last_rating === "again" || c.status === "review" || (c.lapses || 0) >= 2 || (c.ease ?? 2.5) <= 2.1);
 const GRID_TESTS = { all: () => true, due: cardDue, weak: cardWeak, known: (c) => Boolean(c.reviews) && !cardDue(c) && !cardWeak(c) };
-async function toggleCardGrid() {
-  const box = $("#deck-grid"), btn = $("#grid-btn");
-  const open = box.hidden;
-  box.hidden = !open;
-  btn.setAttribute("aria-expanded", String(open));
-  btn.classList.toggle("open", open);
-  if (!open) return;
+// La grille se dévoile : flèche, clic sur le haut des cartes, ou simplement en faisant défiler vers le bas
+function revealCardGrid() {
+  const box = $("#deck-grid");
+  if (!box?.classList.contains("peek")) return;
+  box.style.maxHeight = "150px";
+  box.classList.remove("peek");
+  $("#peek-arrow").remove();
+  requestAnimationFrame(() => { box.style.maxHeight = `${box.scrollHeight}px`; });
+  box.addEventListener("transitionend", () => { box.style.maxHeight = ""; }, { once: true });
+}
+const peeking = () => !$("#view-review-scope").hidden && $("#deck-grid")?.classList.contains("peek") && $("#deck-grid").offsetParent;
+pageScroll().addEventListener("wheel", (e) => { if (e.deltaY > 0 && peeking()) revealCardGrid(); }, { passive: true });
+pageScroll().addEventListener("touchmove", () => { if (peeking()) revealCardGrid(); }, { passive: true });
+document.addEventListener("keydown", (e) => {
+  if (["ArrowDown", "PageDown"].includes(e.key) && !e.target.closest("input, textarea") && peeking()) revealCardGrid();
+});
+async function reloadCardGrid() {
   const items = await deckItems("cards");  // toujours dans le même ordre : par cours, puis comme dans le paquet
   items.sort((a, b) => a.course_name.localeCompare(b.course_name) || a.card.id.localeCompare(b.card.id));
-  state.grid = { items, filter: "all", q: "" };
+  state.grid = { ...state.grid, items };
+  state.deck = null;
   drawCardGrid();
 }
 function gridShown() {
@@ -4172,7 +4248,8 @@ function drawCardGrid(full = true) {
   const count = (f) => g.items.filter((i) => GRID_TESTS[f](i.card)).length;
   const several = new Set(g.items.map((i) => i.course_id)).size > 1;
   // Le même visuel que dans « Mes cours » et pendant les révisions : la plaque claire, crème ou nacrée selon où on en est
-  const cards = shown.map((i) => { const r = cardRarity(i.card); return `<button type="button" class="gcard ${r.cls}" style="--c:${subjectColor(i.course_id)}">
+  const cards = shown.map((i) => { const r = cardRarity(i.card); return `<button type="button" class="gcard ${r.cls}" style="--c:${subjectColor(i.course_id)}" data-gcard="${i.card.id}">
+      <span class="gedit" role="button" tabindex="-1" data-grid-edit="${i.card.id}" title="Modifier la carte" aria-label="Modifier la carte">${ICON_EDIT}</span>
       <span class="gface gfront"><span class="ghead">${several ? `<span class="gtag"><i></i>${escapeHtml(i.course_name)}</span>` : "<span></span>"}<span class="grarity">${r.label}</span></span>
         <span class="gtxt">${escapeHtml(plainMd(i.card.front))}</span></span>
       <span class="gface gback"><span class="gtxt">${escapeHtml(plainMd(i.card.back))}</span></span></button>`; }).join("")
@@ -4182,8 +4259,14 @@ function drawCardGrid(full = true) {
       <div class="filters mini">${[["all", `Toutes · ${g.items.length}`], ["due", `À revoir · ${count("due")}`], ["weak", `Je bloque · ${count("weak")}`], ["known", `Sues · ${count("known")}`]]
         .map(([f, label]) => `<button type="button" class="${g.filter === f ? "active" : ""}" data-grid-filter="${f}">${label}</button>`).join("")}</div>
       <input type="text" id="grid-search" placeholder="Rechercher…" value="${escapeHtml(g.q)}" autocomplete="off">
+      ${state.reviewScope?.single ? `<button class="ghost small grid-write" type="button" id="grid-write">+ Écrire une carte</button>
+      <a class="ghost small button grid-write" href="#/cours/${state.reviewScope.params.course}/nouveau/cartes">+ Créer avec Claude</a>
+      ${kebab(`<button type="button" role="menuitem" data-grid-act="clarify">Relire avec Claude</button>
+        <button type="button" role="menuitem" data-grid-act="import">Importer des cartes</button>
+        <button type="button" role="menuitem" data-grid-act="export">Exporter les cartes</button>
+        <button type="button" role="menuitem" class="danger" data-grid-act="clear">Effacer toutes les cartes</button>`, "Options des cartes")}` : ""}
       <button class="primary small" type="button" id="grid-go">Réviser ces ${plural(shown.length, "carte", "cartes")}</button>
-    </div><div class="grid-cards" id="grid-cards">${cards}</div>`;
+    </div><p class="status" id="grid-status" hidden></p><div class="grid-cards" id="grid-cards">${cards}</div>`;
 }
 state.deckChapter = null;
 
@@ -4903,6 +4986,11 @@ const WELCOME = [
 ];
 // Les nouveautés de chaque version (le carton « Quoi de neuf » ne s'affiche que si la version en a)
 const WHATS_NEW = {
+  "0.73.0": [
+    ["▢", "Toutes tes cartes dans Cartes", "Elles dépassent sous la barre : fais défiler pour les voir. Le crayon pour modifier, « + Écrire une carte » pour en ajouter"],
+    ["≡", "Mes cours en accordéon", "Un clic sur un cours le déplie juste en dessous, un second le replie"],
+    ["+", "Ajouter un cours", "Le petit « + » au bout de la liste (tu peux aussi y glisser un fichier)"],
+  ],
   "0.72.0": [
     ["✎", "Mes cours à côté des onglets", "Un clic pour y aller, un clic pour revenir à Aujourd'hui, Quiz, Cartes ou Suivi"],
     ["☾", "Jour ou nuit pendant les quiz", "Choisis-le dans Réglages, ou « Automatique » pour suivre ton ordinateur"],

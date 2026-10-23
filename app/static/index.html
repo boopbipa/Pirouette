@@ -843,7 +843,7 @@
       <div class="course-tree" id="course-tree">
         <!-- Une matière, plusieurs cours : un onglet par cours (fichier), chacun avec ses chapitres, quiz et flashcards -->
         <nav class="course-tabs" id="course-tabs" role="tablist" aria-label="Cours de la matière" hidden></nav>
-        <div class="tree-body">
+        <div class="tree-body" id="tree-body">
         <!-- Le cours (fichier) se gère depuis son onglet, en haut (« ⋯ ») : plus de bandeau en double ici -->
         <div id="panel-fichiers" hidden>
           <span id="source-names"></span><ul id="file-list"></ul><label id="dropzone" hidden></label>
@@ -882,7 +882,10 @@
             </div>
           </details>
 
-          <details class="card tree-fold" id="panel-cartes">
+          <!-- Les flashcards se voient, se révisent et se modifient dans l'onglet Cartes (un seul endroit) -->
+          <a class="card tree-fold cards-link" id="cards-link" href="#/cours"><strong>Flashcards</strong><small id="cards-link-count"></small>
+            <span>Les voir et les modifier dans Cartes →</span></a>
+          <details class="card tree-fold" id="panel-cartes" hidden>
             <summary><span class="fold-title">Flashcards</span><small class="muted" id="fold-cards-count"></small>
               <button class="ghost small fold-action" type="button" id="cards-revise" hidden>Réviser →</button></summary>
             <div class="fold-body">
@@ -1560,6 +1563,7 @@
         <button class="primary" type="submit" id="card-save">Enregistrer</button>
         <button class="ghost" type="button" id="card-save-next">Ajouter et en écrire une autre</button>
         <button class="ghost" type="button" id="card-cancel">Fermer</button>
+        <button class="link-button danger" type="button" id="card-delete" hidden>Supprimer la carte</button>
       </div>
     </form>
   </dialog>
