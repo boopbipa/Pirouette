@@ -3621,10 +3621,7 @@ function ringAnswer(correct) {
 }
 
 // « J'avais faux » à gauche, « J'avais bon » à droite : les mêmes touches que pour noter une carte (← / → par défaut)
-function selfGradeButtons(prefix) {
-  return `<div class="actions self-grade"><button class="ghost" id="${prefix}-wrong">J'avais faux <kbd class="key-hint">${escapeHtml(keyName(state.keys.again))}</kbd></button>`
-    + `<button class="primary" id="${prefix}-right">J'avais bon <kbd class="key-hint on-accent">${escapeHtml(keyName(state.keys.good))}</kbd></button></div>`;
-}
+const gradeKeys = () => ({ again: escapeHtml(keyName(state.keys.again)), good: escapeHtml(keyName(state.keys.good)) });
 document.addEventListener("keydown", (e) => {
   if (document.querySelector("dialog[open]") || e.metaKey || e.ctrlKey || e.altKey) return;
   const right = [...document.querySelectorAll("#sq-right, #self-right")].find((b) => b.offsetParent);
@@ -3664,7 +3661,8 @@ function validateSessionQuestion() {
     fb.className = "feedback neutral";
     fb.innerHTML = `<p><strong>Réponse attendue :</strong> ${escapeHtml(q.answer)}</p>
       ${q.explanation ? `<p>${escapeHtml(cleanExplanation(q.explanation))}</p>` : ""}${sourceHtml(q)}
-      ${selfGradeButtons("sq")}${SQ_DELETE}`;
+      <div class="actions self-grade"><button class="ghost" id="sq-wrong">J'avais faux <kbd class="key-hint">${gradeKeys().again}</kbd></button>
+        <button class="primary" id="sq-right">J'avais bon <kbd class="key-hint on-accent">${gradeKeys().good}</kbd></button></div>${SQ_DELETE}`;
     fb.hidden = false;
     $("#sq-validate").hidden = true;
     $("#sq-dunno").hidden = true;
@@ -5060,6 +5058,9 @@ const WELCOME = [
 ];
 // Les nouveautés de chaque version (le carton « Quoi de neuf » ne s'affiche que si la version en a)
 const WHATS_NEW = {
+  "0.69.11": [
+    ["⤢", "Plein écran", "Sur un Mac à encoche, le haut de la page n'est plus caché sous la barre"],
+  ],
   "0.69.10": [
     ["⇆", "« J'avais bon / faux » au clavier", "Flèche gauche : j'avais faux · flèche droite : j'avais bon (comme pour les cartes)"],
   ],
@@ -5598,7 +5599,8 @@ function validateShort(q) {
     ${q.explanation ? `<p>${escapeHtml(cleanExplanation(q.explanation))}</p>` : ""}
     ${sourceHtml(q)}
     ${keyTermsHtml(q)}
-    ${selfGradeButtons("self")}
+    <div class="actions self-grade"><button class="ghost" id="self-wrong">J'avais faux <kbd class="key-hint">${gradeKeys().again}</kbd></button>
+      <button class="primary" id="self-right">J'avais bon <kbd class="key-hint on-accent">${gradeKeys().good}</kbd></button></div>
 `;
   fb.hidden = false;
   $("#validate-btn").hidden = true;
@@ -7134,12 +7136,17 @@ document.querySelectorAll("dialog").forEach((dialog) => {
   });
 });
 
-// Hauteur de la barre du haut : la page commence juste dessous (elle passe dessous en défilant, effet verre)
+// Bas de la barre du haut : la page commence juste dessous (elle passe dessous en défilant, effet verre).
+// Le bas, et pas la hauteur : en plein écran sur un Mac à encoche, la barre est décalée sous la bande noire
+// de la caméra, et la page se retrouvait cachée dessous (le titre « Bonjour… » coupé).
 function measureTopbar() {
-  document.documentElement.style.setProperty("--topbar-h", `${document.querySelector(".topbar").offsetHeight}px`);
+  const bar = document.querySelector(".topbar");
+  if (!bar.offsetHeight) return;  // cachée (pendant une séance) : on garde la dernière mesure
+  const bottom = Math.max(bar.offsetHeight, Math.round(bar.getBoundingClientRect().bottom));
+  document.documentElement.style.setProperty("--topbar-h", `${bottom}px`);
 }
 measureTopbar();
-addEventListener("resize", measureTopbar);
+addEventListener("resize", () => { measureTopbar(); setTimeout(measureTopbar, 400); });  // après l'animation du plein écran
 // Les petits menus flottants se ferment quand la page défile (ils restent sinon à leur place à l'écran)
 pageScroll().addEventListener("scroll", () => {
   ["#chapter-menu", "#cards-menu"].forEach((id) => { const m = $(id); if (m && !m.hidden) m.hidden = true; });
