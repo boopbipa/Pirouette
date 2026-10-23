@@ -4924,6 +4924,9 @@ const WELCOME = [
 ];
 // Les nouveautés de chaque version (le carton « Quoi de neuf » ne s'affiche que si la version en a)
 const WHATS_NEW = {
+  "0.67.1": [
+    ["☺", "Amis plus clairs", "Une poubelle pour retirer un ami, et l'ajout par code toujours visible"],
+  ],
   "0.67.0": [
     ["✦", "Une présentation à jour", "Elle se remontre une fois : le « + », les onglets d'une matière, le téléphone"],
     ["+", "Le « + » plus précis", "Il s'ouvre seulement quand la souris est dessus, et devient orange"],
@@ -7134,7 +7137,6 @@ async function renderFriends() {
   $("#friend-my-code").textContent = code || "";
   $("#friend-my-code-line").hidden = !code;
   $("#friend-search").hidden = data.friends.length <= 6;
-  if (!data.friends.length && !data.received.length) toggleFriendAdd(true);
   drawFriends();
 }
 function drawFriends() {
@@ -7153,7 +7155,7 @@ function drawFriends() {
     if (data.received.length && !q) parts.push(`<li class="friend-head">Amis · ${data.friends.length}</li>`);
     parts.push(...friends.map((f) => `<li class="friend-row">
       <button class="friend-open" type="button" data-chat-friend="${f.id}" title="Écrire à ${escapeHtml(f.pseudo)}">${avatar(f.pseudo)}<span class="friend-name">${escapeHtml(f.pseudo)}</span></button>
-      <button class="icon friend-more" type="button" data-remove-friend="${f.id}" title="Retirer de mes amis" aria-label="Retirer ${escapeHtml(f.pseudo)}">⋯</button></li>`));
+      <button class="icon friend-more" type="button" data-remove-friend="${f.id}" title="Retirer de mes amis" aria-label="Retirer ${escapeHtml(f.pseudo)}">${ICON_TRASH}</button></li>`));
     if (q && !friends.length) parts.push(`<li class="empty muted">Personne ne s'appelle comme ça.</li>`);
   }
   if (data.sent.length && !q) {
@@ -7161,13 +7163,6 @@ function drawFriends() {
   }
   $("#online-friends").innerHTML = parts.join("") || `<li class="empty muted">Pas encore d'amis : envoie-leur ton code ami.</li>`;
 }
-function toggleFriendAdd(open = $("#friend-add").hidden) {
-  $("#friend-add").hidden = !open;
-  $("#friend-add-toggle").setAttribute("aria-expanded", String(open));
-  $("#friend-add-toggle").classList.toggle("on", open);
-  if (open) setTimeout(() => $("#online-friend-code").focus(), 0);
-}
-$("#friend-add-toggle").addEventListener("click", () => toggleFriendAdd());
 $("#friend-search").addEventListener("input", drawFriends);
 $("#online-friend-code").addEventListener("keydown", (e) => { if (e.key === "Enter") $("#online-add").click(); });
 $("#friend-copy").addEventListener("click", async () => {
