@@ -3143,8 +3143,8 @@ function showItem() {
   $("#session-prev").hidden = s.index === 0;
   $("#cards-bar").style.width = `${(s.index / s.items.length) * 100}%`;
   const several = new Set(s.items.map((i) => i.course_id)).size > 1;
-  $("#session-origin").textContent = item.kind === "question"
-    ? `Question de quiz · ${several ? `${item.course_name} · ` : ""}${item.quiz_title}` : several ? item.course_name : "";
+  // Juste la matière, pour le contexte (ni « Question de quiz » ni le cours ou le chapitre)
+  $("#session-origin").textContent = item.kind === "question" || several ? item.course_name || "" : "";
   const after = s.items[s.index - 1]?.kind;
   $("#card-stage").hidden = item.kind !== "card";
   $("#question-stage").hidden = item.kind !== "question";
@@ -5032,6 +5032,9 @@ const WELCOME = [
 ];
 // Les nouveautés de chaque version (le carton « Quoi de neuf » ne s'affiche que si la version en a)
 const WHATS_NEW = {
+  "0.69.8": [
+    ["●", "La matière en contexte", "Pendant les quiz, le nom de la matière revient discrètement au-dessus de la question"],
+  ],
   "0.69.7": [
     ["⤢", "Zoom plus fluide", "La carte suit tes doigts sans effet de flou quand tu zoomes vite"],
   ],

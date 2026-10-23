@@ -2562,8 +2562,7 @@ body.focus .choice:has(input:checked):not(.right):not(.wrong), body.focus.day .c
   background: transparent; box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 50%, transparent); }
 
 /* Séances et quiz : ni l'origine (« Question de quiz · … ») ni le type (« Réponse courte · Question de cours ») */
-#session-origin, #sq-type, #question-type { display: none !important; }
-.session-top { justify-content: flex-end; }
+#sq-type, #question-type { display: none !important; }
 
 /* Carte zoomée : sur Mac (WebKit), le flou « derrière le voile » (backdrop-filter) floutait aussi la carte. Le voile
    ne fait plus qu'assombrir, et ce sont les autres éléments de la séance qui se floutent, jamais la carte. */
