@@ -2552,3 +2552,11 @@ body.focus.day .tcg-table::after { background: radial-gradient(ellipse at 50% 50
 body.focus.day .day-night { background: rgba(0, 0, 0, .06); border-color: transparent; }
 body.focus .day-night { background: rgba(255, 255, 255, .1); border-color: transparent; }
 body.focus .quiz-head .day-night { margin-left: 0; }
+
+/* Réponse choisie (avant de valider) : la couleur de l'app remplit doucement tout le choix, depuis l'endroit cliqué,
+   et reste quand la souris s'en va */
+.choice:has(input:checked):not(.right):not(.wrong)::before { opacity: 1; animation: choice-fill .35s cubic-bezier(.2, .8, .2, 1) both;
+  background: radial-gradient(circle at var(--px, 24px) var(--py, 50%), color-mix(in srgb, var(--accent) 30%, transparent), color-mix(in srgb, var(--accent) 14%, transparent) 70%); }
+.choice:has(input:checked):not(.right):not(.wrong) { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 50%, transparent); }
+body.focus .choice:has(input:checked):not(.right):not(.wrong), body.focus.day .choice:has(input:checked):not(.right):not(.wrong) {
+  background: transparent; box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 50%, transparent); }

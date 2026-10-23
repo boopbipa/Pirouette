@@ -5001,6 +5001,9 @@ const WELCOME = [
 ];
 // Les nouveautés de chaque version (le carton « Quoi de neuf » ne s'affiche que si la version en a)
 const WHATS_NEW = {
+  "0.68.1": [
+    ["◉", "Ta réponse bien visible", "La réponse choisie se remplit de couleur et le reste, même quand la souris s'en va"],
+  ],
   "0.68.0": [
     ["▦", "Tes flashcards en un coup d'œil", "Choisis combien de cartes réviser, et déplie la grille de tout ton paquet"],
     ["☾", "Mode jour ou nuit", "Un petit interrupteur en haut des quiz et des séances"],
