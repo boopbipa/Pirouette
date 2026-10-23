@@ -2647,3 +2647,29 @@ body.card-zoomed .tcg-pile, body.card-zoomed .focus-close, body.card-zoomed .day
   border-radius: 999px; font-weight: 700; font-size: 14px; color: #FFF; background: var(--fc); }
 .feedback.ok::before { content: "✓ Juste"; }
 .feedback.ko::before { content: "✗ Faux"; }
+
+/* Mes cours › Flashcards : les cartes ont le même visuel que pendant les révisions (plaque claire unie, crème
+   « en cours », nacrée « acquise »), plus les anciens cadres argent / or / holo */
+.fcard.binder .fcard-face { padding: 0; border-radius: 18px; color: #1D1D1F;
+  background: linear-gradient(155deg, #FFFFFF 0%, #F4F3F0 48%, #E9E7E2 100%);
+  box-shadow: inset 0 0 0 .5px rgba(0, 0, 0, .07), 0 14px 26px -18px rgba(60, 40, 20, .5); }
+.fcard.binder.rare .fcard-face { background: linear-gradient(155deg, #FBF6EC 0%, #EFE3CC 50%, #E2D1B0 100%); }
+.fcard.binder.holo .fcard-face { background: linear-gradient(155deg, #FDFDFF 0%, #EEF0F6 40%, #E7E9F2 100%); }
+.fcard.binder .binder-body, .fcard.binder .fcard-back .binder-body { background: transparent; border-radius: 18px; padding: 16px 14px; }
+.fcard.binder .binder-head { top: 14px; left: 16px; right: 16px; color: #86868B; }
+.fcard.binder .binder-rarity { padding: 2px 8px; border-radius: 999px; background: rgba(0, 0, 0, .05); color: #3A3A3C; }
+.fcard.binder .fcard-back small { color: #86868B; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .fcard.binder .fcard-face { color: #F5F5F7; background: linear-gradient(160deg, #2C2C2E, #1C1C1E 60%, #141415);
+    box-shadow: inset 0 0 0 .5px rgba(255, 255, 255, .12), 0 14px 26px -18px #000; }
+  :root:not([data-theme="light"]) .fcard.binder.rare .fcard-face { box-shadow: inset 0 0 0 1px rgba(226, 190, 120, .55), 0 14px 26px -18px #000; }
+  :root:not([data-theme="light"]) .fcard.binder .binder-rarity { background: rgba(255, 255, 255, .08); color: #D1D1D6; }
+}
+:root[data-theme="dark"] .fcard.binder .fcard-face { color: #F5F5F7; background: linear-gradient(160deg, #2C2C2E, #1C1C1E 60%, #141415);
+  box-shadow: inset 0 0 0 .5px rgba(255, 255, 255, .12), 0 14px 26px -18px #000; }
+:root[data-theme="dark"] .fcard.binder.rare .fcard-face { box-shadow: inset 0 0 0 1px rgba(226, 190, 120, .55), 0 14px 26px -18px #000; }
+:root[data-theme="dark"] .fcard.binder .binder-rarity { background: rgba(255, 255, 255, .08); color: #D1D1D6; }
+
+/* « Quoi de neuf » et les cartons de bienvenue : l'icône actuelle de l'app */
+.w-logo.app-logo { background: none; padding: 0; overflow: hidden; box-shadow: 0 10px 24px -12px rgba(120, 50, 20, .55); }
+.w-logo.app-logo svg { width: 100%; height: 100%; }

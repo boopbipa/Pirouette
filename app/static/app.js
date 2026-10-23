@@ -5059,10 +5059,11 @@ $("#keys-reset").addEventListener("click", () => {
 
 // ---------- Cartons de bienvenue (premier lancement) et « Quoi de neuf » (après une mise à jour) ----------
 const LOGO_SVG = `<svg aria-hidden="true"><use href="#logo"/></svg>`;
+const APP_ICON_SVG = `<svg viewBox="0 0 100 100" aria-hidden="true"><use href="#app-icon"/></svg>`;  // l'icône actuelle de l'app
 const WELCOME_VERSION = "2";  // à augmenter quand l'interface change beaucoup : la présentation se remontre une fois
 const WELCOME = [
   { art: `<span class="w-spark" style="left:30%;top:24%">✦</span><span class="w-spark" style="right:30%;bottom:22%">✦</span>
-          <div class="w-logo">${LOGO_SVG}</div>`,
+          <div class="w-logo app-logo">${APP_ICON_SVG}</div>`,
     title: "Bienvenue dans Pirouette",
     text: "Tes cours deviennent des <b>quiz</b> et des <b>flashcards</b>, et Pirouette organise tes révisions jusqu'aux partiels." },
   { art: `<div class="w-col"><div class="w-plus">+</div><div class="w-pills"><span>Un cours</span><span>Un semestre</span></div></div>`,
@@ -5094,6 +5095,9 @@ const WELCOME = [
 ];
 // Les nouveautés de chaque version (le carton « Quoi de neuf » ne s'affiche que si la version en a)
 const WHATS_NEW = {
+  "0.70.2": [
+    ["✦", "Tes cartes, partout pareilles", "Dans « Mes cours », les flashcards ont le même visuel que pendant les révisions"],
+  ],
   "0.70.1": [
     ["✓", "Juste ou faux, sans hésiter", "Une pastille « ✓ Juste » ou « ✗ Faux » et une couleur plus franche après chaque réponse"],
   ],
@@ -5425,7 +5429,7 @@ function showWelcome(settings, { replay = false } = {}) {
 }
 function showWhatsNew(version) {
   const items = WHATS_NEW[version];
-  openWelcome([{ small: true, art: `<span class="w-new">VERSION ${escapeHtml(version.replace(/\.0$/, ""))}</span><div class="w-logo small">${LOGO_SVG}</div>`,
+  openWelcome([{ small: true, art: `<span class="w-new">VERSION ${escapeHtml(version.replace(/\.0$/, ""))}</span><div class="w-logo small app-logo">${APP_ICON_SVG}</div>`,
     title: "Quoi de neuf", done: "C'est parti",
     html: `<ul class="w-whatsnew">${items.map(([icon, title, text]) => `<li><span class="w-ic">${icon === "🐱" ? LOGO_SVG : NEWS_ICONS[icon] ? svgIcon(ICONS[NEWS_ICONS[icon]]) : icon}</span><div>${title}<small>${text}</small></div></li>`).join("")}</ul>` }],
   { onDone: () => api("/api/settings", jsonBody("PUT", { welcome_seen: version })).catch(() => {}) });
