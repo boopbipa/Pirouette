@@ -5094,6 +5094,9 @@ const WELCOME = [
 ];
 // Les nouveautés de chaque version (le carton « Quoi de neuf » ne s'affiche que si la version en a)
 const WHATS_NEW = {
+  "0.70.1": [
+    ["✓", "Juste ou faux, sans hésiter", "Une pastille « ✓ Juste » ou « ✗ Faux » et une couleur plus franche après chaque réponse"],
+  ],
   "0.70.0": [
     ["▤", "Quiz rangés par cours", "Dans une matière à plusieurs cours, chaque cours a ses quiz et sa jauge « au hasard »"],
     ["☾", "Jour / nuit sur le téléphone", "L'interrupteur soleil / lune en haut des quiz et des cartes, aussi sur ton téléphone"],

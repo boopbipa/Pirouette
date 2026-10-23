@@ -2638,3 +2638,12 @@ body.card-zoomed .tcg-pile, body.card-zoomed .focus-close, body.card-zoomed .day
 #scope-main .quiz-mix.file-mix { padding: 10px 12px; margin-bottom: 4px; box-shadow: none; background: color-mix(in srgb, var(--surface) 70%, transparent);
   border: 1px solid var(--border); }
 .file-mix .m1 { flex: 1; height: 38px; }
+
+/* Juste ou faux : plus net. Un fond teinté franc, un contour de la couleur, et une pastille « ✓ Juste » / « ✗ Faux » en tête */
+.feedback.ok, .feedback.ko, body.focus .feedback.ok, body.focus .feedback.ko, body.focus.day .feedback.ok, body.focus.day .feedback.ko {
+  background: color-mix(in srgb, var(--fc) 13%, var(--surface));
+  box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--fc) 55%, transparent), 0 14px 28px -20px color-mix(in srgb, var(--fc) 55%, transparent); }
+.feedback.ok::before, .feedback.ko::before { display: inline-flex; align-items: center; gap: 6px; margin-bottom: 8px; padding: 4px 12px;
+  border-radius: 999px; font-weight: 700; font-size: 14px; color: #FFF; background: var(--fc); }
+.feedback.ok::before { content: "✓ Juste"; }
+.feedback.ko::before { content: "✗ Faux"; }
