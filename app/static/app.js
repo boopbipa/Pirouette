@@ -5030,8 +5030,11 @@ const WELCOME = [
 ];
 // Les nouveautés de chaque version (le carton « Quoi de neuf » ne s'affiche que si la version en a)
 const WHATS_NEW = {
+  "0.69.3": [
+    ["○", "Bandeau du jour plus sobre", "Fond uni : la couleur n'apparaît qu'au passage de la souris"],
+  ],
   "0.69.2": [
-    ["●", "Révision du jour à ta couleur", "Le bandeau prend la couleur de la matière, avec le même halo au survol que sur l'accueil"],
+    ["●", "Révision du jour à ta couleur", "Au survol, le bandeau s'éclaire de la couleur de la matière, comme sur l'accueil"],
   ],
   "0.69.1": [
     ["⤢", "Zoom sur une carte", "La carte reste nette (seul le fond se floute) et vient au milieu de la fenêtre"],
