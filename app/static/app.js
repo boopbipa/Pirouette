@@ -3620,6 +3620,20 @@ function ringAnswer(correct) {
   setTimeout(() => target.classList.remove("answer-ring", "ok", "ko"), 2400);
 }
 
+// « J'avais faux » à gauche, « J'avais bon » à droite : les mêmes touches que pour noter une carte (← / → par défaut)
+function selfGradeButtons(prefix) {
+  return `<div class="actions self-grade"><button class="ghost" id="${prefix}-wrong">J'avais faux <kbd class="key-hint">${escapeHtml(keyName(state.keys.again))}</kbd></button>`
+    + `<button class="primary" id="${prefix}-right">J'avais bon <kbd class="key-hint on-accent">${escapeHtml(keyName(state.keys.good))}</kbd></button></div>`;
+}
+document.addEventListener("keydown", (e) => {
+  if (document.querySelector("dialog[open]") || e.metaKey || e.ctrlKey || e.altKey) return;
+  const right = [...document.querySelectorAll("#sq-right, #self-right")].find((b) => b.offsetParent);
+  if (!right) return;
+  const wrong = right.id === "sq-right" ? $("#sq-wrong") : $("#self-wrong");
+  if (isKey(e, "good")) { e.preventDefault(); e.stopPropagation(); right.click(); }
+  else if (isKey(e, "again")) { e.preventDefault(); e.stopPropagation(); wrong.click(); }
+}, true);
+
 function sessionFeedback(q, correct, verdict = "") {
   const fb = $("#sq-feedback");
   ringAnswer(correct);
@@ -3650,7 +3664,7 @@ function validateSessionQuestion() {
     fb.className = "feedback neutral";
     fb.innerHTML = `<p><strong>Réponse attendue :</strong> ${escapeHtml(q.answer)}</p>
       ${q.explanation ? `<p>${escapeHtml(cleanExplanation(q.explanation))}</p>` : ""}${sourceHtml(q)}
-      <div class="actions"><button class="primary" id="sq-right">J'avais bon</button><button class="ghost" id="sq-wrong">J'avais faux</button></div>${SQ_DELETE}`;
+      ${selfGradeButtons("sq")}${SQ_DELETE}`;
     fb.hidden = false;
     $("#sq-validate").hidden = true;
     $("#sq-dunno").hidden = true;
@@ -5046,6 +5060,9 @@ const WELCOME = [
 ];
 // Les nouveautés de chaque version (le carton « Quoi de neuf » ne s'affiche que si la version en a)
 const WHATS_NEW = {
+  "0.69.10": [
+    ["⇆", "« J'avais bon / faux » au clavier", "Flèche gauche : j'avais faux · flèche droite : j'avais bon (comme pour les cartes)"],
+  ],
   "0.69.9": [
     ["◯", "Juste ou faux, d'un coup d'œil", "Quand tu valides une réponse écrite, un contour vert ou rouge en fait le tour puis s'efface"],
     ["⤢", "Zoom sur une carte", "La carte reste claire : seul le reste de l'écran s'efface"],
@@ -5581,8 +5598,7 @@ function validateShort(q) {
     ${q.explanation ? `<p>${escapeHtml(cleanExplanation(q.explanation))}</p>` : ""}
     ${sourceHtml(q)}
     ${keyTermsHtml(q)}
-    <div class="actions"><button class="primary" id="self-right">J'avais bon</button>
-    <button class="ghost" id="self-wrong">J'avais faux</button></div>
+    ${selfGradeButtons("self")}
 `;
   fb.hidden = false;
   $("#validate-btn").hidden = true;
