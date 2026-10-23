@@ -617,9 +617,9 @@ function renderSubject(id, tab = "") {
 // est un interrupteur caché qu'on bascule (Safari le fait « cliquer » sous le doigt)
 function tick() {
   const now = Date.now();
-  if (now - (tick.last || 0) < 30) return;
+  if (now - (tick.last || 0) < 120) return;
   tick.last = now;
-  if (navigator.vibrate) { navigator.vibrate(4); return; }
+  if (navigator.vibrate) { navigator.vibrate(2); return; }
   if (!tick.label) {
     tick.label = Object.assign(document.createElement("label"), { ariaHidden: "true" });
     tick.label.style.cssText = "position:fixed;width:1px;height:1px;opacity:0;pointer-events:none;overflow:hidden";
@@ -642,7 +642,8 @@ function m1Bar(box, { min, max, value, onChange, unit = ["question", "questions"
     box.querySelector(".m1-text").textContent = v === max ? `${unit[1] === "cartes" ? "Tout le paquet" : "Toutes"} (${v})` : plural(v, ...unit);
     box.classList.toggle("full", share > .7);
     box.setAttribute("aria-valuenow", v);
-    if (box.dataset.last && Number(box.dataset.last) !== v) tick();
+    // Un « tic » seulement aux repères (5, 10, 15… et aux deux bouts) : très discret
+    if (box.dataset.last && Number(box.dataset.last) !== v && (v % 5 === 0 || v === min || v === max)) tick();
     box.dataset.last = v;
     onChange(v);
   };

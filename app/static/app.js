@@ -2010,7 +2010,8 @@ function m1Bar(box, { min, max, value, onChange = () => {}, unit = ["question", 
     box.querySelector(".m1-fill").style.width = `calc(${(share * 100).toFixed(2)}% * .72 + 28%)`;
     box.querySelector(".m1-text").textContent = n === max ? `Toutes (${n})` : plural(n, ...unit);
     box.classList.toggle("full", share > .7);
-    if (box.dataset.ready && n !== Number(box.dataset.last)) haptic();
+    // Un « tic » seulement aux repères (5, 10, 15… et aux deux bouts), pas à chaque nombre : très discret
+    if (box.dataset.ready && n !== Number(box.dataset.last) && (n % 5 === 0 || n === min || n === max)) haptic();
     box.dataset.last = n;
     onChange(n);
   };
@@ -2034,10 +2035,10 @@ function m1Bar(box, { min, max, value, onChange = () => {}, unit = ["question", 
   box.dataset.ready = "1";
   return () => Number(box.dataset.value);
 }
-// Un « tic » très léger du trackpad sur Mac (voir desktop.py), au plus toutes les 25 ms
+// Un « tic » très léger du trackpad sur Mac (voir desktop.py), au plus un toutes les 120 ms
 function haptic() {
   const now = Date.now();
-  if (now - (haptic.last || 0) < 25) return;
+  if (now - (haptic.last || 0) < 120) return;
   haptic.last = now;
   window.pywebview?.api?.haptic?.().catch?.(() => {});
 }
@@ -4915,6 +4916,9 @@ const WELCOME = [
 ];
 // Les nouveautés de chaque version (le carton « Quoi de neuf » ne s'affiche que si la version en a)
 const WHATS_NEW = {
+  "0.66.5": [
+    ["〰", "Un tic plus discret", "La barre orange ne fait plus « tic » à chaque nombre, seulement aux repères (5, 10, 15…)"],
+  ],
   "0.66.4": [
     ["+", "Le « + » des matières", "Il fait un quart de tour, et les choix sortent dessous"],
     ["▯", "Le téléphone, plus simple", "Une seule séance du jour, préparée pour toi (cartes et questions de toutes tes matières), et une barre en bas : Aujourd'hui · Matières · Réglages"],
