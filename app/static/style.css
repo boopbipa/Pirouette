@@ -2583,3 +2583,13 @@ body.card-zoomed .tcg-pile { filter: blur(8px); }
 
 /* « Je retourne / J'écris » : seulement pendant la séance (en haut à droite), plus sur la page de la matière */
 #scope-main .revise-options { display: none !important; }
+
+/* L'interrupteur jour / nuit : en haut à droite (en face de la croix), et bien visible sur le noir */
+body.focus .day-night { position: fixed; top: 21px; right: 20px; z-index: 30; margin: 0;
+  background: rgba(255, 255, 255, .14); border: 1px solid rgba(255, 255, 255, .22); }
+body.focus .day-night .dn-knob { background: #5A5A5E; box-shadow: 0 1px 3px rgba(0, 0, 0, .5); }
+body.focus .day-night[aria-checked="true"] .dn-knob { color: #E9E4FF; }
+body.focus .day-night:hover { background: rgba(255, 255, 255, .2); }
+body.focus.day .day-night { background: rgba(0, 0, 0, .07); border-color: rgba(0, 0, 0, .1); }
+body.focus.day .day-night .dn-knob { background: #FFF; box-shadow: 0 1px 3px rgba(0, 0, 0, .25); }
+body.focus.day .day-night:hover { background: rgba(0, 0, 0, .1); }
