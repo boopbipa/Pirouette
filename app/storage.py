@@ -286,6 +286,7 @@ class Store:
                 "exam": self.exam_info(course, today),
                 "cards": len(cards), "known": sum(c["status"] == "known" for c in cards),
                 "today": len(self.today_cards([course["id"]], today)),
+                "done_today": max(0, activity.get(today.isoformat(), {}).get(course["id"], {}).get("cards", 0)),
                 "weak": len(self.weak_cards([course["id"]])) + len(self.weak_questions([course["id"]])),
                 "cards_success": round(100 * sum(e.get("cards_ok", 0) for e in recent) / reviewed) if reviewed else None,
                 "questions_success": round(100 * sum(e.get("questions_ok", 0) for e in recent) / answered) if answered else None,

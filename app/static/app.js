@@ -361,11 +361,13 @@ function renderTodayBar(profile, progress) {
   const list = progress.courses || [];
   const total = list.reduce((n, c) => n + (c.cards || 0), 0), known = list.reduce((n, c) => n + (c.known || 0), 0);
   $("#today-bar").hidden = !total && !today.questions;
-  const mastery = total ? Math.round((100 * known) / total) : 0;
-  $("#today-ring").style.setProperty("--m", `${mastery}%`);
-  $("#today-ring span").textContent = mastery;
-  $("#today-ring").title = total ? `${known} cartes sues sur ${total}` : "";
   const due = today.cards + (mixQuestions() ? today.questions : 0);
+  const doneAll = (progress.done_today?.cards || 0) + (mixQuestions() ? progress.done_today?.questions || 0 : 0);
+  const ring = todayRing(doneAll, due);
+  $("#today-ring").style.setProperty("--m", `${ring.pct}%`);
+  $("#today-ring").classList.toggle("done", !due);
+  $("#today-ring span").textContent = ring.text;
+  $("#today-ring").title = ring.title;
   const subjects = list.filter((c) => c.today).length;
   const parts = [today.cards ? plural(today.cards, "carte", "cartes") : "",
     mixQuestions() && today.questions ? plural(today.questions, "question", "questions") : ""].filter(Boolean);
@@ -392,11 +394,30 @@ function subjectColor(id) {
   return SUBJECT_COLORS[h % SUBJECT_COLORS.length];
 }
 
+// La part de cartes acquises : une pastille « ★ 34 % » ; au survol, « acquis » apparaît et elle prend la couleur
+// de la matière. Le rond, lui, reste pour la révision du jour.
+const acqPct = (known, total) => (total ? Math.round((100 * known) / total) : 0);
+function acqPill(known, total) {
+  return `<span class="acq-pill" title="${known} cartes acquises sur ${total}"><span class="acq-star">★</span> ${acqPct(known, total)} %<span class="acq-word">&nbsp;acquis</span></span>`;
+}
+function setAcqPill(el, known, total, color) {
+  el.hidden = !total;
+  if (!total) return;
+  el.title = `${known} cartes acquises sur ${total}`;
+  el.style.setProperty("--c", color);
+  el.innerHTML = `<span class="acq-star">★</span> ${acqPct(known, total)} %<span class="acq-word">&nbsp;acquis</span>`;
+}
+// L'avancement du jour d'un rond : déjà fait / (fait + à faire), en %, ou ✓ quand il ne reste rien
+function todayRing(done, left) {
+  const pct = left ? Math.round((100 * done) / (done + left)) : 100;
+  return { pct, text: left ? `${pct}%` : "✓", title: left ? `Révision du jour : ${pct} % fait` : "Révision du jour faite" };
+}
+
 // Une matière : une seule ligne utile (ce qui est à revoir) et un anneau de maîtrise. Un clic : réviser ;
 // le crayon : la gérer (ses cours, chapitres, quiz et flashcards).
 function courseCard(c) {
   const p = state.courseProgress?.[c.id];
-  const mastery = p?.cards ? Math.round((100 * p.known) / p.cards) : 0;
+  const ring = todayRing(p?.done_today || 0, p?.today || 0);
   const status = !c.files.length && !c.card_count && !c.quiz_count ? "Vide : ajoute un cours"
     : p?.today ? `<b>${p.today}</b> à revoir` : p?.cards ? "À jour" : c.quiz_count ? plural(c.quiz_count, "quiz", "quiz") : "Rien à réviser encore";
   return `
@@ -406,7 +427,8 @@ function courseCard(c) {
         <strong>${escapeHtml(c.name)}</strong>
         <small>${status}</small>
       </span>
-      ${p?.cards ? `<span class="mastery-ring" style="--m:${mastery}%" title="${p.known} cartes sues sur ${p.cards}"><span>${mastery}</span></span>` : ""}
+      ${p?.cards ? acqPill(p.known, p.cards) : ""}
+      ${p?.cards ? `<span class="mastery-ring${p.today ? "" : " done"}" style="--m:${ring.pct}%" title="${ring.title}"><span>${ring.text}</span></span>` : ""}
       <span class="course-edit" data-course-manage="${c.id}" title="Mes cours de cette matière" role="button">${ICON_EDIT}</span>
       <span class="card-glare" aria-hidden="true"></span>
     </a>`;
@@ -1573,6 +1595,7 @@ async function openCourse(id, tab, { keepScroll = false } = {}) {
   if (!TABS.includes(tab)) tab = null;
   state.tab = tab;
   $("#course-name").textContent = course.name;
+  setAcqPill($("#course-acq"), course.cards?.known || 0, course.cards?.total || 0, subjectColor(course.id));
   $("#course-dot").style.background = subjectColor(course.id);
   $("#course-tree").style.setProperty("--c", subjectColor(course.id));
   setCrumbs(courseCrumbs(course));
@@ -4090,15 +4113,18 @@ async function renderScopeMain() {
     : reviewScope().folder ? c.folder_id === reviewScope().folder : true));
   const ids = new Set(scoped.map((c) => c.id));
   state.scopePlan = plan;
+  const cardsTotal = scoped.reduce((n, c) => n + (c.cards || 0), 0), cardsKnown = scoped.reduce((n, c) => n + (c.known || 0), 0);
+  setAcqPill($("#review-scope-acq"), cardsKnown, cardsTotal, scope.single ? subjectColor(reviewScope().course) : "var(--accent)");
   // L'anneau du bandeau : l'avancement de la révision du jour (déjà fait / à faire), puis ✓ quand c'est fini
   const done = data.done_today.cards + (mixQuestions() ? data.done_today.questions : 0);
   const left = data.today.cards + (mixQuestions() ? data.today.questions : 0);
   const ring = $("#hero-ring");
   ring.hidden = false;
   ring.classList.toggle("done", !left);
-  ring.style.setProperty("--m", `${left ? Math.round((100 * done) / (done + left)) : 100}%`);
+  const pct = left ? Math.round((100 * done) / (done + left)) : 100;
+  ring.style.setProperty("--m", `${pct}%`);
   ring.style.setProperty("--c", scope.single ? subjectColor(reviewScope().course) : "var(--accent)");
-  ring.querySelector("span").textContent = left ? `${done}/${done + left}` : "✓";
+  ring.querySelector("span").textContent = left ? `${pct}%` : "✓";
   ring.title = left ? `${plural(done, "fait", "faits")} sur ${done + left} aujourd'hui` : "Révision du jour faite";
   $("#review-exam").hidden = true;  // les partiels sont rappelés sur la page Matières, à côté du bonjour
 
@@ -5036,8 +5062,12 @@ const WELCOME = [
 ];
 // Les nouveautés de chaque version (le carton « Quoi de neuf » ne s'affiche que si la version en a)
 const WHATS_NEW = {
+  "0.74.2": [
+    ["◔", "L'avancement du jour", "Les ronds se remplissent au fil de ta révision du jour (en %), puis ✓ quand c'est fini"],
+    ["★", "Ce que tu sais déjà", "La pastille ★ à côté de chaque matière : la part de cartes acquises (passe dessus pour le détail)"],
+  ],
   "0.74.1": [
-    ["◔", "L'avancement du jour", "Le rond de « Révision du jour » se remplit au fil de ta révision (12/30…), puis ✓ quand c'est fini"],
+    ["◔", "L'avancement du jour", "Le rond de « Révision du jour » se remplit au fil de ta révision (en %), puis ✓ quand c'est fini"],
   ],
   "0.74.0": [
     ["⤢", "Un zoom tout doux", "Pince la carte : elle suit tes doigts comme une photo, sans trembler ni flou, et le reste s'efface autour"],

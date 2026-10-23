@@ -458,6 +458,29 @@ function doneToday() {
     .reduce((n, e) => n + (e.kind === "card" ? 1 : e.kind === "answers" ? (e.payload.answers || []).length : 0), 0);
   return meta + pending;
 }
+// Cartes déjà revues aujourd'hui dans une matière (le Mac les a comptées, ou elles attendent d'être envoyées)
+function cardsDoneToday(courseId) {
+  const day = dayOf(new Date());
+  const meta = current().meta?.activity?.[day]?.[courseId]?.cards || 0;
+  const pending = [...S.remote, ...S.outbox].filter((e) => e.kind === "card" && e.payload.course_id === courseId && e.payload.at?.startsWith(day)).length;
+  return Math.max(0, meta) + pending;
+}
+// Le rond d'une matière : l'avancement de la révision du jour (en %, ✓ quand c'est fait) ;
+// la pastille « ★ 34 % » : la part de cartes acquises (touchée, elle dit « acquis » et prend la couleur de la matière)
+function dayRing(courseId) {
+  const left = todayCards([courseId]).length, done = cardsDoneToday(courseId);
+  const pct = left ? Math.round((100 * done) / (done + left)) : 100;
+  return { pct, left, text: left ? `${pct}%` : "✓" };
+}
+const acqPill = (m) => (m.cards ? `<span class="acq-pill" role="button" tabindex="0" aria-label="${m.pct} % des cartes acquises"><span class="acq-star">★</span> ${m.pct} %<span class="acq-word">&nbsp;acquis</span></span>` : "");
+document.addEventListener("click", (e) => {
+  const pill = e.target.closest(".acq-pill");
+  if (!pill) return;
+  e.preventDefault();  // dans la ligne d'une matière : la pastille s'ouvre, sans ouvrir la matière
+  e.stopPropagation();
+  pill.classList.toggle("open");
+}, true);
+
 function renderHome() {
   const v = current();
   if (!v.meta) {
@@ -516,10 +539,10 @@ function renderSubjects() {
   const list = courses();
   const folders = v.meta.folders || [];
   const card = (c) => {
-    const n = todayCards([c.id]).length, m = mastery(c.id);
+    const n = todayCards([c.id]).length, m = mastery(c.id), r = dayRing(c.id);
     return `<a class="subject-card" href="#/m/${encodeURIComponent(c.id)}" style="--c:${colorOf(c)}">
       <i class="sc-dot"></i><span class="sc-text"><b>${esc(c.name)}</b><small>${n ? `<em>${n}</em> à revoir` : m.cards ? "À jour" : plural(quizzesOf(c.id).length, "quiz", "quiz")}</small></span>
-      <span class="ring" style="--m:${m.pct}%"><i>${m.pct}%</i></span></a>`;
+      ${acqPill(m)}${m.cards ? `<span class="ring${r.left ? "" : " done"}" style="--m:${r.pct}%"><i>${r.text}</i></span>` : ""}</a>`;
   };
   const groups = [...folders.filter((f) => !f.archived).map((f) => ({ f, items: list.filter((c) => c.folder_id === f.id) })),
     { f: null, items: list.filter((c) => !folders.some((f) => f.id === c.folder_id)) }].filter((g) => g.items.length);
@@ -597,7 +620,7 @@ function renderSubject(id, tab = "") {
   let body = "";
   if (!tab) {
     body = `<section class="hero">
-        <span class="ring big" style="--m:${m.pct}%;--c:${colorOf(course)}"><i>${due.length ? `${m.pct}%` : "✓"}</i></span>
+        <span class="ring big${due.length ? "" : " done"}" style="--m:${dayRing(id).pct}%;--c:${colorOf(course)}"><i>${dayRing(id).text}</i></span>
         <h2>${due.length ? "Ta révision du jour" : "C'est fait pour aujourd'hui"}</h2>
         <p>${due.length ? `${plural(due.length, "carte", "cartes")} · environ ${Math.max(1, Math.round(due.length * 0.2))} min` : "Reviens demain, ou fais un quiz"}</p>
         ${due.length ? `<button class="primary" type="button" id="due">Commencer →</button>` : pool ? `<a class="ghost" href="${href("quiz")}">Faire un quiz</a>` : ""}
@@ -623,7 +646,7 @@ function renderSubject(id, tab = "") {
         <button class="peek-arrow" type="button" id="peek-arrow" aria-label="Voir toutes les cartes">${ICON.down}</button></section>`;
   }
   app.innerHTML = `<header class="top sub"><a class="icon-btn" href="#/matieres" aria-label="Retour">${ICON.back}</a></header>
-    <h1 class="subject" style="--c:${colorOf(course)}"><span class="dot"></span>${esc(course.name)}</h1>
+    <h1 class="subject" style="--c:${colorOf(course)}"><span class="dot"></span><span class="subject-name">${esc(course.name)}</span>${acqPill(m)}</h1>
     <nav class="seg" role="tablist">${[["", "Aujourd'hui"], ["quiz", "Quiz"], ["cartes", "Cartes"]].map(([t, label]) =>
       `<a role="tab" href="${href(t)}" class="${t === tab ? "on" : ""}" aria-selected="${t === tab}">${label}</a>`).join("")}</nav>
     ${body}`;

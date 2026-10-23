@@ -372,3 +372,21 @@ body.with-tabbar .toast { bottom: calc(env(safe-area-inset-bottom) + 82px); }
 button, a, label, [role="button"], [role="tab"], .choice, .flash, .gcard, .seg, .rate, .m1, .tabbar { -webkit-user-select: none; user-select: none;
   -webkit-touch-callout: none; }
 input, textarea { -webkit-user-select: text; user-select: text; }
+
+/* « ★ 34 % » : la part de cartes acquises ; touchée, « acquis » apparaît et elle prend la couleur de la matière.
+   Le rond, lui, montre la révision du jour (en %, ✓ quand c'est fait). */
+.acq-pill { display: inline-flex; align-items: center; flex: none; padding: 3px 9px; border-radius: 999px; white-space: nowrap;
+  font: 700 12px/1.4 var(--sans); letter-spacing: 0; color: var(--muted); background: var(--sunken); cursor: pointer;
+  transition: background .2s, color .2s, box-shadow .2s; }
+.acq-star { margin-right: 3px; color: color-mix(in srgb, var(--c, var(--accent)) 70%, var(--muted)); transition: color .2s; }
+.acq-word { display: inline-block; max-width: 0; overflow: hidden; opacity: 0; vertical-align: bottom; transition: max-width .25s ease, opacity .2s ease; }
+.acq-pill.open, .acq-pill:hover { color: var(--c, var(--accent)); background: color-mix(in srgb, var(--c, var(--accent)) 16%, var(--surface));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--c, var(--accent)) 35%, transparent), 0 4px 14px -6px color-mix(in srgb, var(--c, var(--accent)) 60%, transparent); }
+.acq-pill.open .acq-star, .acq-pill:hover .acq-star { color: var(--c, var(--accent)); }
+.acq-pill.open .acq-word, .acq-pill:hover .acq-word { max-width: 60px; opacity: 1; }
+.subject .subject-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.subject .acq-pill { font-size: 13px; padding: 4px 10px; }
+.ring.done i { color: var(--c, var(--accent)); font-size: 14px; }
+.subject-card .ring i { font-size: 10px; }
+.ring.big.done i { font-size: 30px; }
+.subject-card .ring.done i { font-size: 14px; }

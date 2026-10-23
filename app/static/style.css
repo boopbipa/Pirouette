@@ -2581,5 +2581,19 @@ body.same-subject #view-review-scope:not([hidden]) > :not(.scope-head):not(.scop
 button, a, label, summary, [role="button"], [role="tab"], [role="menuitem"], .choice, .flashcard, .gcard, .filters, .chips,
 .course-tab, .rating, .m1, kbd, .tabs, nav { -webkit-user-select: none; user-select: none; }
 input, textarea, [contenteditable] { -webkit-user-select: text; user-select: text; }
-.hero-ring span { font-size: 13px; letter-spacing: -.02em; }
+.hero-ring span { font-size: 14px; }
 .hero-ring.done span { font-size: 22px; color: var(--c, var(--accent)); }
+
+/* « ★ 34 % » : la part de cartes acquises ; au survol, « acquis » apparaît et la pastille prend la couleur de la matière */
+.acq-pill { display: inline-flex; align-items: center; flex: none; padding: 3px 10px; border-radius: 999px; white-space: nowrap;
+  font: 700 12px/1.4 var(--sans); letter-spacing: 0; color: var(--muted); background: var(--sunken); cursor: default;
+  transition: background .2s, color .2s, box-shadow .2s; }
+.acq-star { margin-right: 4px; color: color-mix(in srgb, var(--c, var(--accent)) 70%, var(--muted)); transition: color .2s; }
+.acq-word { display: inline-block; max-width: 0; overflow: hidden; opacity: 0; vertical-align: bottom;
+  transition: max-width .25s ease, opacity .2s ease; }
+.acq-pill:hover { color: var(--c, var(--accent)); background: color-mix(in srgb, var(--c, var(--accent)) 16%, var(--surface));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--c, var(--accent)) 35%, transparent), 0 4px 14px -6px color-mix(in srgb, var(--c, var(--accent)) 60%, transparent); }
+.acq-pill:hover .acq-star { color: var(--c, var(--accent)); }
+.acq-pill:hover .acq-word { max-width: 60px; opacity: 1; }
+.subject-title .acq-pill { margin-left: 2px; font-size: 13px; padding: 4px 11px; align-self: center; }
+.mastery-ring.done span { font-size: 15px; color: var(--c, var(--accent)); }
