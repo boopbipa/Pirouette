@@ -2400,3 +2400,4 @@ body.focus .feedback, body.focus .feedback.ok, body.focus .feedback.ko, body.foc
   transform: translate(-50%, -6px); pointer-events: none; transition: opacity .18s ease, transform .18s ease; }
 .add-fab:hover .add-fab-plus, .add-fab.open .add-fab-plus { transform: rotate(90deg); color: var(--accent-ink); border-color: var(--accent); border-style: solid; }
 .add-fab:hover .add-fab-menu, .add-fab.open .add-fab-menu, .add-fab:focus-within .add-fab-menu { opacity: 1; transform: translate(-50%, 0); pointer-events: auto; }
+.add-fab-plus svg { width: 20px; height: 20px; display: block; }  /* un vrai « + » dessiné : il tourne pile sur son centre */

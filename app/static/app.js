@@ -4919,6 +4919,9 @@ const WHATS_NEW = {
   "0.66.5": [
     ["〰", "Un tic plus discret", "La barre orange ne fait plus « tic » à chaque nombre, seulement aux repères (5, 10, 15…)"],
   ],
+  "0.66.6": [
+    ["+", "Un « + » bien centré", "Il tourne pile sur son centre"],
+  ],
   "0.66.4": [
     ["+", "Le « + » des matières", "Il fait un quart de tour, et les choix sortent dessous"],
     ["▯", "Le téléphone, plus simple", "Une seule séance du jour, préparée pour toi (cartes et questions de toutes tes matières), et une barre en bas : Aujourd'hui · Matières · Réglages"],
