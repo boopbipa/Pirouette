@@ -2601,3 +2601,31 @@ body.focus.day .day-night:hover { background: rgba(0, 0, 0, .1); }
 .flashcard.tcg.zoomed { transform: translate(var(--dx), calc(var(--dy) + var(--zy, 0px))) rotate(var(--dr)) scale(var(--zoom)); }
 .flashcard.tcg.zoomed .tcg-glare { opacity: 0 !important; }
 #view-cards > :not(#card-stage):not(.zoom-veil), #card-stage > :not(.tcg-table), .tcg-pile { transition: none !important; }
+
+/* Réponse écrite validée : un trait vert ou rouge fait le tour de la réponse (comme un stylo), avec un léger halo,
+   puis tout s'efface en douceur */
+@property --sweep { syntax: "<angle>"; inherits: false; initial-value: 0deg; }
+.answer-ring { position: relative; }
+.answer-ring.ok { --rc: var(--right); }
+.answer-ring.ko { --rc: var(--wrong); }
+div.answer-ring::after { content: ""; position: absolute; inset: -4px; border-radius: 14px; padding: 2px; pointer-events: none;
+  background: conic-gradient(from 0deg, var(--rc) var(--sweep), transparent 0);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
+  animation: ring-draw .6s cubic-bezier(.4, 0, .2, 1) forwards, ring-fade .7s ease 1.5s forwards; }
+div.answer-ring::before { content: ""; position: absolute; inset: -4px; border-radius: 14px; pointer-events: none; opacity: 0;
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--rc) 14%, transparent), 0 0 22px color-mix(in srgb, var(--rc) 30%, transparent);
+  animation: ring-glow 2.2s ease forwards; }
+input.answer-ring { animation: field-ring 2.2s ease forwards; }
+@keyframes ring-draw { to { --sweep: 360deg; } }
+@keyframes ring-fade { to { opacity: 0; } }
+@keyframes ring-glow { 25% { opacity: 1; } 65% { opacity: 1; } 100% { opacity: 0; } }
+@keyframes field-ring { 15%, 65% { box-shadow: 0 0 0 2px var(--rc), 0 0 16px color-mix(in srgb, var(--rc) 35%, transparent); }
+  100% { box-shadow: 0 0 0 0 transparent; } }
+@media (prefers-reduced-motion: reduce) { div.answer-ring::after { animation: ring-fade .7s ease 1.5s forwards; --sweep: 360deg; } }
+
+/* Carte zoomée, sur Mac : le voile sombre passait aussi devant la carte. Plus de voile coloré (il reste invisible,
+   pour fermer le zoom d'un clic à côté) : ce sont les autres éléments qui s'effacent et se floutent. */
+.zoom-veil, body.card-zoomed .zoom-veil { background: transparent !important; }
+body.card-zoomed #view-cards > :not(#card-stage):not(.zoom-veil), body.card-zoomed #card-stage > :not(.tcg-table),
+body.card-zoomed .tcg-pile, body.card-zoomed .focus-close, body.card-zoomed .day-night { filter: blur(8px); opacity: .25; }

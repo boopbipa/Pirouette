@@ -3609,8 +3609,20 @@ $("#sq-feedback").addEventListener("click", async (e) => {
   nextItem();
 });
 
+// Réponse écrite validée : un contour vert (juste) ou rouge (faux) fait le tour de la réponse, puis s'efface
+function ringAnswer(correct) {
+  const field = [...document.querySelectorAll("#sq-short, #short-answer")].find((f) => f.offsetParent);
+  if (!field) return;  // QCM, vrai / faux : les propositions se colorent déjà
+  const target = field.tagName === "TEXTAREA" ? field.parentElement : field;
+  target.classList.remove("answer-ring", "ok", "ko");
+  void target.offsetWidth;  // pour rejouer l'animation
+  target.classList.add("answer-ring", correct ? "ok" : "ko");
+  setTimeout(() => target.classList.remove("answer-ring", "ok", "ko"), 2400);
+}
+
 function sessionFeedback(q, correct, verdict = "") {
   const fb = $("#sq-feedback");
+  ringAnswer(correct);
   fb.className = `feedback ${correct ? "ok" : "ko"}`;
   fb.innerHTML = `${verdict}${q.explanation ? `<p>${escapeHtml(cleanExplanation(q.explanation))}</p>` : ""}${sourceHtml(q)}${keyTermsHtml(q)}${SQ_DELETE}`;
   fb.hidden = false;
@@ -3633,6 +3645,7 @@ function validateSessionQuestion() {
       recordSessionAnswer(item, given, true);
       return sessionFeedback(q, true, `<p><strong>Bonne réponse !</strong></p>`);
     }
+    ringAnswer(false);  // pas la réponse attendue (on peut quand même dire « J'avais bon »)
     const fb = $("#sq-feedback");
     fb.className = "feedback neutral";
     fb.innerHTML = `<p><strong>Réponse attendue :</strong> ${escapeHtml(q.answer)}</p>
@@ -4814,6 +4827,7 @@ function showAnswered(q, result) {
     else if (q.choices[i] === result.given) label.classList.add("wrong");
   });
   const fb = $("#feedback");
+  ringAnswer(result.correct);
   fb.className = `feedback ${result.correct ? "ok" : "ko"}`;
   fb.innerHTML = `${q.choices?.length ? "" : `<p><strong>${result.correct ? "Bonne réponse" : "Réponse attendue"} :</strong> ${escapeHtml(q.answer)}</p>`}
     ${q.explanation ? `<p>${escapeHtml(cleanExplanation(q.explanation))}</p>` : ""}${sourceHtml(q)}${keyTermsHtml(q)}`;
@@ -5032,6 +5046,10 @@ const WELCOME = [
 ];
 // Les nouveautés de chaque version (le carton « Quoi de neuf » ne s'affiche que si la version en a)
 const WHATS_NEW = {
+  "0.69.9": [
+    ["◯", "Juste ou faux, d'un coup d'œil", "Quand tu valides une réponse écrite, un contour vert ou rouge en fait le tour puis s'efface"],
+    ["⤢", "Zoom sur une carte", "La carte reste claire : seul le reste de l'écran s'efface"],
+  ],
   "0.69.8": [
     ["●", "La matière en contexte", "Pendant les quiz, le nom de la matière revient discrètement au-dessus de la question"],
   ],
@@ -5591,6 +5609,7 @@ function record(q, given, correct) {
   showReportButton(q, given);
   state.results.push({ question: q, given, correct });
   const fb = $("#feedback");
+  ringAnswer(correct);
   fb.className = `feedback ${correct ? "ok" : "ko"}`;
   // QCM et vrai/faux : la bonne réponse est déjà surlignée en vert, inutile de la répéter.
   const verdict = !isTyped(q) ? ""
