@@ -2593,3 +2593,12 @@ body.focus .day-night:hover { background: rgba(255, 255, 255, .2); }
 body.focus.day .day-night { background: rgba(0, 0, 0, .07); border-color: rgba(0, 0, 0, .1); }
 body.focus.day .day-night .dn-knob { background: #FFF; box-shadow: 0 1px 3px rgba(0, 0, 0, .25); }
 body.focus.day .day-night:hover { background: rgba(0, 0, 0, .1); }
+
+/* Zoom au trackpad, sans à-coups ni flou de mouvement :
+   - pendant le geste, la carte suit les doigts tout de suite (pas d'animation qui court après) ;
+   - zoomée, elle est tournée à plat en 2D : le Mac la redessine nette au lieu d'agrandir une image floue ;
+   - le flou du reste de la séance apparaît d'un coup (l'animer était très lourd et faisait saccader). */
+.flashcard.tcg.zooming, body.focus .flashcard.tcg.zooming { transition: none !important; }
+.flashcard.tcg.zoomed { transform: translate(var(--dx), calc(var(--dy) + var(--zy, 0px))) rotate(var(--dr)) scale(var(--zoom)); }
+.flashcard.tcg.zoomed .tcg-glare { opacity: 0 !important; }
+#view-cards > :not(#card-stage):not(.zoom-veil), #card-stage > :not(.tcg-table), .tcg-pile { transition: none !important; }

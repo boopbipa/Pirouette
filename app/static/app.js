@@ -3293,6 +3293,8 @@ $("#flashcard").addEventListener("wheel", (e) => {
   e.preventDefault();
   $("#flashcard").classList.add("zooming");
   zoomCard((Number($("#flashcard").style.getPropertyValue("--zoom")) || 1) * Math.exp(-e.deltaY / 100));
+  clearTimeout(zoomCard.idle);  // le geste fini, la carte reprend ses petites animations
+  zoomCard.idle = setTimeout(() => $("#flashcard").classList.remove("zooming"), 160);
 }, { passive: false });
 $("#focus-close").addEventListener("click", () => quitByKey());
 $("#zoom-veil").addEventListener("click", () => unzoomCard());
@@ -5030,6 +5032,9 @@ const WELCOME = [
 ];
 // Les nouveautés de chaque version (le carton « Quoi de neuf » ne s'affiche que si la version en a)
 const WHATS_NEW = {
+  "0.69.7": [
+    ["⤢", "Zoom plus fluide", "La carte suit tes doigts sans effet de flou quand tu zoomes vite"],
+  ],
   "0.69.6": [
     ["☾", "Jour / nuit en haut à droite", "L'interrupteur se voit bien, même sur le noir"],
   ],
