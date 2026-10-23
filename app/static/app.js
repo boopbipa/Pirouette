@@ -2035,9 +2035,9 @@ function m1Bar(box, { min, max, value, onChange = () => {}, unit = ["question", 
     box.querySelector(".m1-fill").style.width = `calc(${(share * 100).toFixed(2)}% * .72 + 28%)`;
     box.querySelector(".m1-text").textContent = n === max ? `Toutes (${n})` : plural(n, ...unit);
     box.classList.toggle("full", share > .7);
-    // Un « tic » discret, comme les crans d'un bouton (Arc, Zen) : seulement aux paliers (de 5 en 5, de 10 en 10 sur
-    // une longue barre) et aux deux bouts, pas à chaque nombre (sinon le trackpad bourdonne)
-    const last = Number(box.dataset.last), step = max - min > 60 ? 10 : 5;
+    // Un « tic » discret, comme les crans d'un bouton (Arc, Zen) : seulement aux paliers (tous les 2 ou 3 nombres, de
+    // 5 en 5 sur une longue barre) et aux deux bouts, pas à chaque nombre (sinon le trackpad bourdonne)
+    const last = Number(box.dataset.last), step = max - min > 60 ? 5 : 2.5;
     if (box.dataset.ready && n !== last && (n === min || n === max || Math.floor(n / step) !== Math.floor(last / step))) haptic();
     box.dataset.last = n;
     onChange(n);
@@ -2070,10 +2070,10 @@ function m1Bar(box, { min, max, value, onChange = () => {}, unit = ["question", 
   box.dataset.ready = "1";
   return () => Number(box.dataset.value);
 }
-// Un « tic » très léger du trackpad sur Mac (voir desktop.py), au plus un toutes les 90 ms
+// Un « tic » très léger du trackpad sur Mac (voir desktop.py), au plus un toutes les 45 ms
 function haptic() {
   const now = Date.now();
-  if (now - (haptic.last || 0) < 90) return;  // en glissant très vite : pas de bourdonnement
+  if (now - (haptic.last || 0) < 45) return;  // en glissant très vite : pas de bourdonnement
   haptic.last = now;
   window.pywebview?.api?.haptic?.().catch?.(() => {});
 }
@@ -4998,6 +4998,9 @@ const WELCOME = [
 ];
 // Les nouveautés de chaque version (le carton « Quoi de neuf » ne s'affiche que si la version en a)
 const WHATS_NEW = {
+  "0.73.4": [
+    ["〰", "Des crans plus serrés", "La barre « Combien de cartes ? » vibre deux fois plus souvent en glissant, toujours discrètement"],
+  ],
   "0.73.3": [
     ["⚙︎", "Réglages", "Le titre reste avec le menu quand tu fais défiler ; la couleur de l'app, roue à gauche et réglages à droite"],
     ["〰", "Un retour plus discret", "La barre « Combien de cartes ? » ne fait plus vibrer le trackpad qu'à chaque palier, comme un cran"],
