@@ -2673,3 +2673,10 @@ body.card-zoomed .tcg-pile, body.card-zoomed .focus-close, body.card-zoomed .day
 /* « Quoi de neuf » et les cartons de bienvenue : l'icône actuelle de l'app */
 .w-logo.app-logo { background: none; padding: 0; overflow: hidden; box-shadow: 0 10px 24px -12px rgba(120, 50, 20, .55); }
 .w-logo.app-logo svg { width: 100%; height: 100%; }
+
+/* Le bandeau du jour est un grand bouton : la main au survol, et « Commencer » s'allume */
+#scope-main .today-hero { cursor: pointer; }
+#scope-main .today-hero #hero-start { transition: box-shadow .2s, transform .2s; }
+#scope-main .today-hero:hover #hero-start:not(:disabled) { box-shadow: 0 0 0 6px color-mix(in srgb, var(--accent) 20%, transparent); }
+#scope-main .today-hero:has(#hero-start:disabled) { cursor: default; }
+#scope-main .today-hero:active { transform: scale(.995); }

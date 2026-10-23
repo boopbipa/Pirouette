@@ -4095,8 +4095,6 @@ async function renderScopeMain() {
       + (mixQuestions() ? today.questions * 0.5 : 0)))} min` : "Tout est à jour pour aujourd'hui");
   $("#hero-start").disabled = planned ? false : $("#start-today").disabled;
   $("#hero-start").textContent = planned && plan.status.done_today ? "Refaire une séance" : "Commencer →";
-  $("#hero-all").title = `Toutes les cartes et toutes les questions ${state.reviewFile ? `du cours « ${fileLabel(state.reviewFile)} »`
-    : scope.single ? "de la matière" : "de ce choix"}, mélangées`;
   if (state.reviewFile) {
     // Un seul cours de la matière : sa révision du jour (cartes à revoir et questions à reposer de ce cours)
     const peek = await api(`/api/session?${new URLSearchParams({ mode: "today", ...reviewScope(), file: state.reviewFile.id,
@@ -4408,13 +4406,10 @@ $("#hero-start").addEventListener("click", (e) => {
   if (state.scopePlan?.plan) $("#plan-start").click();
   else $("#start-today").click();
 });
-$("#today-hero").addEventListener("click", () => setScopeMode("jour"));
-// Tout réviser : toutes les cartes et toutes les questions (du cours choisi, de la matière ou du semestre), mélangées
-$("#hero-all").addEventListener("click", (e) => {
-  e.stopPropagation();
-  const f = state.reviewFile;
-  startSession({ mode: "all", ...reviewScope(), questions: "1", ...(f ? { file: f.id } : {}) },
-    { title: f ? `Tout le cours · ${fileLabel(f)}` : `Tout réviser · ${state.reviewScope.name}`, back: state.reviewScope.hash });
+// Tout le bandeau est le bouton : un clic n'importe où lance la révision du jour
+$("#today-hero").addEventListener("click", (e) => {
+  if (e.target.closest("button, a") || $("#hero-start").disabled) return;
+  $("#hero-start").click();
 });
 // Choix du cours (matière à plusieurs fichiers) : tout le Réviser suit (révision du jour, flashcards, quiz)
 $("#review-files").addEventListener("click", (e) => {
@@ -4438,7 +4433,7 @@ function renderReviewFiles() {
     + files.map((f) => `<button type="button" class="${state.reviewFile === f ? "active" : ""}" data-review-file="${f.id}">${escapeHtml(fileLabel(f))}</button>`).join("");
 }
 $("#today-hero").addEventListener("keydown", (e) => {
-  if ((e.key === "Enter" || e.key === " ") && e.target.id === "today-hero") { e.preventDefault(); setScopeMode("jour"); }
+  if ((e.key === "Enter" || e.key === " ") && e.target.id === "today-hero" && !$("#hero-start").disabled) { e.preventDefault(); $("#hero-start").click(); }
 });
 
 const MASTERY_NAMES = { acquis: "Acquis", en_cours: "En cours", fragile: "Fragile", a_voir: "À voir" };
@@ -5095,6 +5090,9 @@ const WELCOME = [
 ];
 // Les nouveautés de chaque version (le carton « Quoi de neuf » ne s'affiche que si la version en a)
 const WHATS_NEW = {
+  "0.70.3": [
+    ["→", "Un clic suffit", "Tout le bandeau « Révision du jour » lance la révision, n'importe où"],
+  ],
   "0.70.2": [
     ["✦", "Tes cartes, partout pareilles", "Dans « Mes cours », les flashcards ont le même visuel que pendant les révisions"],
   ],
