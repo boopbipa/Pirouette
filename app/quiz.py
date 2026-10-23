@@ -73,7 +73,9 @@ Règles :
 - Vise les notions importantes (définitions, mécanismes, formules, dates, causes/conséquences), pas les détails anecdotiques ni la mise en page.
 - Ignore l'organisation du cours : modalités d'évaluation (notes, pourcentages, coefficients, partiels, dossiers à
   rendre), calendrier, horaires, salles, contacts, plan du cours, bibliographie. Seul le contenu à apprendre compte.
-- Questions claires, autonomes, sans ambiguïté, et sans répétition entre elles.
+- Questions claires, autonomes, sans ambiguïté, et sans répétition entre elles. Chacune se comprend seule, sans le
+  cours sous les yeux : jamais « cette méthode », « ce dernier », « le 2e aspect » sans dire de quoi il s'agit (donne le
+  contexte : « Dans la définition de la psychanalyse par Freud (1923)… »), et les propositions non plus.
 - La réponse répond exactement à la question posée : « Quelle théorie… ? » attend une théorie, « Qui… ? » une
   personne, « Qu'est-ce que… ? » une définition. Relis chaque question avec sa réponse avant de la donner.
 - Sauf pour "texte_a_trous", l'énoncé est une vraie question, courte (une ou deux phrases) et terminée par « ? ».

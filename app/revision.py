@@ -35,6 +35,12 @@ Règles :
   définition ou une description, le recto le dit (« Qu'est-ce que l'aphasie de Broca ? ») ; sinon, réécris le recto.
 - Couvre les notions importantes de tout le cours : définitions, mécanismes, causes/conséquences, formules, dates.
 - Chaque carte porte sur une notion différente : jamais deux cartes sur la même notion, même formulées autrement.
+- Chaque carte se comprend seule, sans le cours ni les autres cartes sous les yeux : jamais « cette investigation »,
+  « ce dernier », « le 2e aspect », « cette méthode » sans dire de quoi il s'agit. Mets dans le recto le contexte
+  nécessaire (« Dans la définition de la psychanalyse par Freud (1923), quel est le 2e aspect ? »), et au verso
+  remplace un renvoi (« cette investigation ») par ce qu'il désigne (« l'investigation des processus inconscients »).
+  Une phrase du cours coupée ou mal tournée hors de son contexte se reformule clairement, avec les mots du cours,
+  sans rien ajouter qui n'y soit pas.
 - Pas de questions auxquelles on peut répondre par oui/non.
 - Ignore l'organisation du cours : modalités d'évaluation (notes, pourcentages, coefficients, partiels, dossiers à
   rendre), calendrier, horaires, salles, contacts, plan du cours, bibliographie. Seul le contenu à apprendre compte.

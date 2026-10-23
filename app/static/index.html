@@ -300,7 +300,6 @@
               <button type="button" role="radio" data-card-mode="type">J'écris la réponse</button>
             </div>
           </div>
-          <label class="option-row"><input type="checkbox" id="mix-questions" checked> Mélanger avec des questions de mes quiz</label>
         </div>
       </div>
 
@@ -931,6 +930,7 @@
                   <button class="ghost small" type="button" id="cards-export">Exporter</button>
                   <button class="ghost small" type="button" id="cards-flip-all">Voir les réponses</button>
                   <button class="ghost small" id="card-write">Écrire une carte</button>
+                  <button class="ghost small" type="button" id="cards-clarify" title="Claude relit tes cartes et tes questions, et reformule celles qui ne se comprennent pas seules">Relire avec Claude</button>
                   <button class="primary small" data-create="cartes">+ Ajouter des cartes</button>
                 </span>
               </div>
@@ -1182,6 +1182,7 @@
             <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.9"/><circle cx="12" cy="12" r="1.9"/><circle cx="19" cy="12" r="1.9"/></svg></button>
           <div class="card-more-menu" id="card-more-menu" hidden>
             <button type="button" id="card-edit-current">Modifier cette carte</button>
+            <button type="button" id="card-clarify-current">Clarifier avec Claude</button>
             <button type="button" class="danger" id="card-delete-current">Supprimer cette carte</button>
           </div>
         </div>

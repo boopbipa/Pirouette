@@ -3098,9 +3098,8 @@ document.addEventListener("click", (e) => {
   const s = state.session;
   if (s && !$("#view-cards").hidden && s.items[s.index]?.kind === "card" && !s.revealed) showCard();
 });
-function mixQuestions() {
-  try { return localStorage.getItem("pirouette.mixQuestions") !== "0"; } catch { return true; }
-}
+// La révision du jour mêle toujours cartes et questions de quiz (l'option pour les séparer a été retirée)
+const mixQuestions = () => true;
 
 // Lance une séance. `params` : mode (today / weak / cards), course, folder, filter.
 async function startSession(params, { title, back }) {
@@ -3762,6 +3761,28 @@ $("#card-more-btn").addEventListener("click", (e) => {
 });
 document.addEventListener("click", (e) => { if (!e.target.closest("#card-keys")) closeCardMore(); });
 $("#card-more-menu").addEventListener("click", closeCardMore);
+// Claude relit (outil pirouette_relire) et reformule ce qui ne se comprend pas hors du cours (pirouette_corriger)
+const CLARIFY_HOW = "Corrige avec pirouette_corriger celles qui ne se comprennent pas seules (« cette investigation », "
+  + "« le 2e aspect »… : donne le contexte dans le recto, remplace les renvois par ce qu'ils désignent), qui sont mal "
+  + "formulées ou fausses ; garde les autres telles quelles. Réponds ensuite par un résumé court.";
+function clarifyRequest(course, refs = []) {
+  return refs.length
+    ? `Pirouette : dans mon cours « ${course.name} » (identifiant ${course.id}), cette flashcard n'est pas claire hors de son contexte. `
+      + `Relis-la (pirouette_relire avec le repère ${refs.join(", ")}) et reformule-la avec pirouette_corriger : donne le contexte dans le recto, `
+      + "remplace les renvois par ce qu'ils désignent, avec les mots du cours. Réponds ensuite par un résumé court."
+    : `Pirouette : relis toutes les flashcards et les questions de quiz de mon cours « ${course.name} » (identifiant ${course.id}) `
+      + `avec pirouette_relire (questions=true). ${CLARIFY_HOW}`;
+}
+$("#card-clarify-current").addEventListener("click", async () => {
+  const item = state.session?.items[state.session.index];
+  if (item?.kind !== "card") return;
+  await copyText(clarifyRequest({ id: item.course_id, name: item.course_name }, [`c:${item.card.id}`]));
+  notify("Demande copiée : colle-la dans l'app Claude. La carte sera reformulée dans ton paquet.");
+});
+$("#cards-clarify").addEventListener("click", async () => {
+  await copyText(clarifyRequest(state.course));
+  setStatus("#cards-status", "Demande copiée : colle-la dans l'app Claude. Il reformule les cartes et questions peu claires, ton suivi est gardé.", true);
+});
 $("#card-edit-current").addEventListener("click", () => {
   const s = state.session;
   const item = s.items[s.index];
@@ -3982,7 +4003,6 @@ async function openReviewScope(kind, id = "", sub = "") {
   $("#scope-planning").hidden = tab !== "suivi";
   $("#scope-suivi").hidden = tab !== "suivi";
   setCardMode(cardMode());
-  $("#mix-questions").checked = mixQuestions();
   setCrumbs([COURSES_CRUMB, ...(tab ? [{ label: name, href: base }, { label: SCOPE_TABS[tab] }] : [{ label: name }])]);
   show("review-scope");
   if (tab === "suivi") await Promise.all([renderProgress(), renderRetro()]);
@@ -4122,7 +4142,7 @@ function renderDecks() {
     </div>
     <div class="grid-toggle"><button class="grid-btn" type="button" id="grid-btn" aria-expanded="false" title="Voir toutes les cartes">${GRID_ICON}</button>
       <span class="muted small-text">Voir toutes les cartes</span></div>
-    <div class="card-grid-wrap" id="card-grid" hidden></div>`;
+    <div class="card-grid-wrap" id="deck-grid" hidden></div>`;
   const min = Math.min(5, n.total);
   state.deckCount = m1Bar($("#deck-bar"), { min, max: n.total, value: Math.min(n.total, Math.max(min, state.deckValue || n.due || 10)),
     unit: ["carte", "cartes"], onChange: (v) => { state.deckValue = v; } });
@@ -4159,7 +4179,7 @@ const GRID_TESTS = { all: () => true, due: cardDue, weak: cardWeak, known: (c) =
 const cardState = (c) => !c.reviews ? "new" : cardWeak(c) ? "weak" : cardDue(c) ? "due" : "known";
 const CARD_STATES = { due: "À revoir", weak: "Je bloque", known: "Sue", new: "Nouvelle" };
 async function toggleCardGrid() {
-  const box = $("#card-grid"), btn = $("#grid-btn");
+  const box = $("#deck-grid"), btn = $("#grid-btn");
   const open = box.hidden;
   box.hidden = !open;
   btn.setAttribute("aria-expanded", String(open));
@@ -4184,7 +4204,7 @@ function drawCardGrid(full = true) {
       <span class="gface gback"><span class="gtxt">${escapeHtml(plainMd(i.card.back))}</span></span></button>`).join("")
     || `<p class="muted small-text">Aucune carte ici.</p>`;
   if (!full && $("#grid-cards")) { $("#grid-cards").innerHTML = cards; $("#grid-go").textContent = `Réviser ces ${plural(shown.length, "carte", "cartes")}`; return; }
-  $("#card-grid").innerHTML = `<div class="grid-head">
+  $("#deck-grid").innerHTML = `<div class="grid-head">
       <div class="filters mini">${[["all", `Toutes · ${g.items.length}`], ["due", `À revoir · ${count("due")}`], ["weak", `Je bloque · ${count("weak")}`], ["known", `Sues · ${count("known")}`]]
         .map(([f, label]) => `<button type="button" class="${g.filter === f ? "active" : ""}" data-grid-filter="${f}">${label}</button>`).join("")}</div>
       <input type="text" id="grid-search" placeholder="Rechercher…" value="${escapeHtml(g.q)}" autocomplete="off">
@@ -4636,10 +4656,6 @@ async function renderProgress() {
     : `<tr><td colspan="7" class="muted">Aucun cours.</td></tr>`;
 }
 
-$("#mix-questions").addEventListener("change", (e) => {
-  try { localStorage.setItem("pirouette.mixQuestions", e.target.checked ? "1" : "0"); } catch {}
-  renderScopeMain();
-});
 $("#start-today").addEventListener("click", () => startSession({ mode: "today", ...reviewScope() },
   { title: "Révision du jour", back: state.reviewScope.hash }));
 $("#start-partiel").addEventListener("click", () => {
@@ -5001,6 +5017,11 @@ const WELCOME = [
 ];
 // Les nouveautés de chaque version (le carton « Quoi de neuf » ne s'affiche que si la version en a)
 const WHATS_NEW = {
+  "0.69.0": [
+    ["✎", "Claude relit tes cartes", "« Relire avec Claude » (Mes cours › Flashcards) ou « ⋯ › Clarifier avec Claude » : il reformule ce qui ne se comprend pas sorti du cours"],
+    ["✦", "Des cartes qui se comprennent seules", "Les nouvelles cartes et questions donnent leur contexte (plus de « cette investigation » sans dire laquelle)"],
+    ["−", "Plus épuré", "Moins d'étiquettes au-dessus des questions, et la révision du jour mêle toujours cartes et quiz"],
+  ],
   "0.68.1": [
     ["◉", "Ta réponse bien visible", "La réponse choisie se remplit de couleur et le reste, même quand la souris s'en va"],
   ],

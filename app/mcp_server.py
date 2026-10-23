@@ -40,7 +40,8 @@ depuis Pirouette), saute l'étape 1 et ne lis que ces chapitres : c'est plus rap
 venir du texte du cours, avec une citation exacte (« source »). Le texte signale les schémas et images par
 « [Figure …] » : ne les regarde (pirouette_figure) que si le texte ne suffit pas ; une question qui a besoin de la
 figure la cite dans « figure » (Pirouette l'affichera). Quand un cours a une nouvelle version : pirouette_mise_a_jour
-dit ce qui a changé, pirouette_corriger modifie ou supprime les questions et cartes dépassées. Écris en français sauf demande contraire, tutoie
+dit ce qui a changé, pirouette_corriger modifie ou supprime les questions et cartes dépassées. Pour relire des cartes
+ou des questions peu claires (sorties de leur contexte, mal formulées) : pirouette_relire, puis pirouette_corriger. Écris en français sauf demande contraire, tutoie
 l'étudiant, et termine par un résumé court."""
 
 QUESTION_RULES = SYSTEM_PROMPT.split("Règles :", 1)[1].rsplit("- Réponds uniquement", 1)[0].strip()
@@ -128,6 +129,9 @@ TOOLS = [
                        "la réponse, courte, avec les mots du cours ; source : la phrase du cours recopiée mot pour mot. "
                        "Le verso doit répondre exactement au recto : relis chaque carte (un recto « Quelle théorie… ? » "
                        "attend une théorie ; si le verso est une définition, le recto est « Qu'est-ce que… ? »). "
+                       "Chaque carte se comprend seule, sans le cours sous les yeux : pas de « cette investigation », "
+                       "« le 2e aspect », « ce dernier » sans dire de quoi il s'agit ; donne le contexte dans le recto et "
+                       "remplace les renvois du verso par ce qu'ils désignent. "
                        "Les cartes qui ne viennent pas du cours ou qui existent déjà sont refusées (avec la raison).",
         "inputSchema": {"type": "object", "properties": {
             "cours": {"type": "string", "description": "Identifiant du cours."},
@@ -150,10 +154,10 @@ TOOLS = [
     },
     {
         "name": "pirouette_corriger",
-        "description": "Met à jour des questions et des flashcards après une nouvelle version du cours, par leur repère "
-                       "(donné par pirouette_mise_a_jour) : « modifier » (nouveau contenu, avec une « source » recopiée "
+        "description": "Modifie des questions et des flashcards par leur repère (donné par pirouette_mise_a_jour après "
+                       "une nouvelle version du cours, ou par pirouette_relire) : « modifier » (nouveau contenu, avec une « source » recopiée "
                        "mot pour mot de la nouvelle version), « supprimer » (la notion n'est plus au cours) ou « garder » "
-                       "(toujours juste). Le suivi des révisions de l'étudiant est gardé. Quand toute la mise à jour est "
+                       "(toujours juste, seulement après pirouette_mise_a_jour). Le suivi des révisions de l'étudiant est gardé. Quand toute la mise à jour est "
                        "faite (questions et cartes nouvelles comprises), rappelle-le avec fini=true.",
         "inputSchema": {"type": "object", "properties": {
             "cours": {"type": "string", "description": "Identifiant du cours."},
@@ -175,6 +179,18 @@ TOOLS = [
             }},
             "fini": {"type": "boolean", "description": "true : la mise à jour est terminée (Pirouette range l'encart "
                                                        "« Ton cours a changé »)."},
+        }, "required": ["cours"], "additionalProperties": False},
+    },
+    {
+        "name": "pirouette_relire",
+        "description": "Les flashcards (et, si demandé, les questions de quiz) d'un cours, avec leur repère, pour les "
+                       "relire comme un étudiant qui révise sans le cours sous les yeux, et corriger avec "
+                       "pirouette_corriger celles qui ne se comprennent pas seules, sont fausses ou mal formulées.",
+        "inputSchema": {"type": "object", "properties": {
+            "cours": {"type": "string", "description": "Identifiant du cours."},
+            "reperes": {"type": "array", "items": {"type": "string"},
+                        "description": "Seulement ces cartes ou questions (« c:… », « q:… ») ; sinon tout le cours."},
+            "questions": {"type": "boolean", "description": "true : les questions de quiz aussi (sinon les cartes seules)."},
         }, "required": ["cours"], "additionalProperties": False},
     },
     {
@@ -535,15 +551,15 @@ class Pirouette:
                     source = str(raw.get("source", "")).strip()
                     if not front or not back:
                         refused.append(f"{ref} : recto et verso sont obligatoires")
-                    elif not grounding.quote_found(source):
-                        refused.append(f"{ref} : la « source » n'est pas une phrase de la nouvelle version (mot pour mot)")
-                    else:
+                    elif (source or card.get("source")) and not grounding.quote_found(source):
+                        refused.append(f"{ref} : la « source » n'est pas une phrase du cours (mot pour mot)")
+                    else:  # une carte écrite à la main (sans phrase du cours) peut se reformuler sans « source »
                         self.store.set_card_content(course["id"], card_id, front, back, source)
                         done.append(f"carte modifiée : {front[:80]}")
                 else:
                     refused.append(f"{ref} : action inconnue")
             else:
-                refused.append(f"« {ref} » : repère inconnu (« q:… » ou « c:… », donnés par pirouette_mise_a_jour)")
+                refused.append(f"« {ref} » : repère inconnu (« q:… » ou « c:… », donnés par pirouette_mise_a_jour ou pirouette_relire)")
         for quiz_id, index in sorted(deletions, key=lambda d: -d[1]):
             if not self.store.remove_question(quiz_id, index)["questions"]:
                 self.store.delete_quiz(quiz_id)
@@ -563,6 +579,47 @@ class Pirouette:
                          "(pirouette_mise_a_jour les redonne).")
         if not done and refused and not fini:
             raise ToolError("\n".join(lines))
+        return "\n".join(lines)
+
+    # ---- Relire des cartes ou des questions peu claires ----
+    def pirouette_relire(self, cours: str, reperes: list | None = None, questions: bool = False) -> str:
+        course = self._course(cours)
+        wanted = {str(r).strip() for r in reperes or [] if str(r).strip()}
+        cards = [c for c in (self.store.get_doc(course["id"], "cards") or {}).get("cards", [])
+                 if not wanted or f"c:{c['id']}" in wanted]
+        lines = [f"Cours « {course['name']} » (identifiant {course['id']}).", "",
+                 "Relis chaque élément comme l'étudiant qui révise, sans le cours sous les yeux. Corrige avec "
+                 "pirouette_corriger (action « modifier », même repère) seulement ceux qui posent problème :",
+                 "- il ne se comprend pas seul (« cette investigation », « le 2e aspect », « ce dernier »… sans dire de "
+                 "quoi il s'agit) : donne le contexte dans le recto ou l'énoncé, et remplace les renvois par ce qu'ils désignent ;",
+                 "- une phrase coupée, mal tournée, ambiguë ou fausse : reformule-la clairement, avec les mots du cours ;",
+                 "- le verso ne répond pas exactement au recto (ou la réponse à la question).",
+                 "Garde la même notion. Renvoie la même « source » (mot pour mot du cours ; vide pour une carte écrite à la "
+                 "main) ; si le contexte te manque, lis le chapitre (pirouette_lire). Ne renvoie pas les éléments déjà "
+                 "clairs, et n'utilise ni « supprimer » ni « garder » sans l'accord de l'étudiant. Termine par un résumé "
+                 "court de ce que tu as changé.", ""]
+        if cards:
+            lines.append(f"## Flashcards ({len(cards)})")
+            for c in cards:
+                chapter = (c.get("scope") or [""])[0]
+                lines.append(f"- c:{c['id']}" + (f" — {chapter}" if chapter else "")
+                             + f"\n  recto : {c['front']}\n  verso : {c['back']}"
+                             + (f"\n  source : {c['source']}" if c.get("source") else "\n  (écrite à la main)"))
+        found = []
+        if questions or any(r.startswith("q:") for r in wanted):
+            for summary in self.store.list_quizzes(course["id"]):
+                quiz = self.store.get_quiz(summary["id"])
+                for q in quiz["questions"]:
+                    ref = self._question_ref(quiz["id"], q["question"])
+                    if wanted and ref not in wanted:
+                        continue
+                    choices = "".join(f"\n    {'✓' if ch == q['answer'] else '•'} {ch}" for ch in q.get("choices") or [])
+                    found.append(f"- {ref} — quiz « {quiz['title']} » ({q['type']})\n  question : {q['question']}{choices}"
+                                 f"\n  réponse : {q['answer']}\n  source : {q.get('source', '')}")
+            if found:
+                lines += ["", f"## Questions de quiz ({len(found)})", *found]
+        if not cards and not found:
+            raise ToolError("Rien à relire : pas de carte ni de question avec ces repères.")
         return "\n".join(lines)
 
     def _figure(self, course: dict, ref: str) -> tuple[dict, str]:

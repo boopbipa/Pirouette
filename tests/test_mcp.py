@@ -46,7 +46,7 @@ def test_handshake_and_tool_list(tmp_path):
     assert replies[0]["result"]["protocolVersion"] == "2025-06-18"
     assert replies[0]["result"]["serverInfo"]["name"] == "pirouette"
     names = [t["name"] for t in replies[1]["result"]["tools"]]
-    assert names == ["pirouette_cours", "pirouette_lire", "pirouette_decouper", "pirouette_creer_quiz", "pirouette_ajouter_cartes", "pirouette_mise_a_jour", "pirouette_corriger", "pirouette_figure", "pirouette_difficultes"]
+    assert names == ["pirouette_cours", "pirouette_lire", "pirouette_decouper", "pirouette_creer_quiz", "pirouette_ajouter_cartes", "pirouette_mise_a_jour", "pirouette_corriger", "pirouette_relire", "pirouette_figure", "pirouette_difficultes"]
     assert replies[3]["error"]["code"] == -32601
 
 
@@ -94,6 +94,29 @@ def test_add_cards_and_difficulties(tmp_path):
     assert store.get_doc(cid, "cards")["cards"][0]["front"] == "Rôle de la myéline ?"
     text, error = _call(store, "pirouette_difficultes", cours=cid)
     assert not error and "Rien de difficile" in text
+
+
+def test_review_and_clarify_cards(tmp_path):
+    store, cid = _store(tmp_path)
+    source = "La gaine de myéline accélère la conduction de l'influx nerveux le long de l'axone."
+    _call(store, "pirouette_ajouter_cartes", cours=cid, cartes=[{"recto": "Son rôle ?", "verso": "Accélérer la conduction",
+                                                                   "source": source}])
+    hand = store.add_card(cid, "Ce dernier ?", "Le neurone")
+    card = store.get_doc(cid, "cards")["cards"][0]
+    store.review_card(cid, card["id"], rating="good")
+    text, error = _call(store, "pirouette_relire", cours=cid)
+    assert not error and f"c:{card['id']}" in text and "Son rôle ?" in text and "(écrite à la main)" in text
+    text, error = _call(store, "pirouette_relire", cours=cid, reperes=[f"c:{hand['id']}"])
+    assert not error and "Son rôle ?" not in text and "Ce dernier ?" in text
+    text, error = _call(store, "pirouette_corriger", cours=cid, elements=[
+        {"repere": f"c:{card['id']}", "action": "modifier", "recto": "Quel est le rôle de la gaine de myéline ?",
+         "verso": "Accélérer la conduction de l'influx nerveux", "source": source},
+        {"repere": f"c:{hand['id']}", "action": "modifier", "recto": "Quelle est la cellule de base du système nerveux ?",
+         "verso": "Le neurone", "source": ""}])
+    assert not error and text.startswith("2 changements")
+    cards = {c["id"]: c for c in store.get_doc(cid, "cards")["cards"]}
+    assert cards[card["id"]]["front"].startswith("Quel est le rôle") and cards[card["id"]]["reviews"] == 1  # suivi gardé
+    assert cards[hand["id"]]["front"].startswith("Quelle est la cellule")
 
 
 def test_claude_desktop_config_keeps_other_tools(tmp_path):
@@ -242,7 +265,7 @@ def test_claude_updates_a_course_after_a_new_version(tmp_path):
     assert store.list_quizzes(cid) == []  # quiz vidé : supprimé
     invented, error = _call(store, "pirouette_corriger", cours=cid, elements=[
         {"repere": f"c:{card_id}", "action": "modifier", "recto": "x", "verso": "y", "source": "Phrase inventée de toutes pièces."}])
-    assert error and "nouvelle version" in invented
+    assert error and "pas une phrase du cours" in invented
     text, error = _call(store, "pirouette_corriger", cours=cid, fini=True)
     assert not error and "terminée" in text
     assert store.previous_text(cid, fid) is None and store.outdated_items(cid) == {"questions": [], "cards": []}
