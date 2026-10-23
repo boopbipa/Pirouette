@@ -5030,6 +5030,9 @@ const WELCOME = [
 ];
 // Les nouveautés de chaque version (le carton « Quoi de neuf » ne s'affiche que si la version en a)
 const WHATS_NEW = {
+  "0.69.5": [
+    ["−", "Onglet Cartes allégé", "Retourner ou écrire la réponse : ça se choisit pendant la révision, en haut à droite"],
+  ],
   "0.69.4": [
     ["≋", "La jauge suit ton doigt", "Un petit clic du trackpad à chaque nombre (de 5 en 5 avec Maj)"],
   ],

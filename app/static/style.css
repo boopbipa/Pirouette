@@ -2580,3 +2580,6 @@ body.card-zoomed .tcg-pile { filter: blur(8px); }
   0 16px 32px -18px color-mix(in srgb, var(--c, var(--accent)) 65%, transparent); }
 #scope-main .today-hero:hover .card-glare { opacity: 1; }
 @media (prefers-reduced-motion: reduce) { #scope-main .today-hero:hover { transform: none; } }
+
+/* « Je retourne / J'écris » : seulement pendant la séance (en haut à droite), plus sur la page de la matière */
+#scope-main .revise-options { display: none !important; }
