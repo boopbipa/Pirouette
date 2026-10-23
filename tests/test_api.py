@@ -449,3 +449,21 @@ def test_local_model_falls_back_to_an_installed_one(monkeypatch):
     assert op.choose_model(None, ["gemma4:31b-cloud", "mistral:latest"]) == "mistral:latest"  # d'abord ceux du Mac
     assert op.choose_model("mistral", ["mistral:latest", "qwen3:8b"]) == "mistral:latest"
     assert op.choose_model("absent:1b", ["llama3:8b", "qwen3:8b"]) == "qwen3:8b"      # le conseillé s'il est là
+
+
+def test_readiness_scores_each_course_file(client):
+    """Suivi : un pourcentage par cours (fichier) de la matière, et pour toute la matière."""
+    course = client.post("/api/courses", json={"name": "Neuro"}).json()
+    upload(client, course["id"], "neurone.txt", "Le neurone transmet l'influx.")
+    upload(client, course["id"], "myeline.txt", "La myéline accélère la conduction.")
+    store = main.store
+    deck = {"cards": [
+        {"id": "a", "front": "Neurone ?", "back": "Cellule", "status": "known", "reviews": 3, "interval": 30, "origin": ["neurone.txt"]},
+        {"id": "b", "front": "Influx ?", "back": "Signal", "status": "new", "reviews": 0, "origin": ["neurone.txt"]},
+        {"id": "c", "front": "Myéline ?", "back": "Gaine", "status": "new", "reviews": 0, "origin": ["myeline.txt"]}]}
+    store.save_doc(course["id"], "cards", deck)
+    data = client.get(f"/api/readiness?course={course['id']}").json()
+    by_name = {g["name"]: g for g in data["groups"]}
+    assert by_name["neurone"]["pct"] == 50 and by_name["neurone"]["todo"] == 1
+    assert by_name["myeline"]["pct"] == 0
+    assert data["pct"] == 33 and data["items"] == 3

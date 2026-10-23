@@ -121,7 +121,6 @@
       <form class="card" id="online-pseudo" hidden>
         <div id="online-google-box">
           <h2>Se connecter</h2>
-          <p class="muted small-text">Avec Google, tu retrouves ton compte (amis, scores) sur tous tes ordinateurs.</p>
           <button class="google-btn" type="button" data-google-login>
             <svg viewBox="0 0 48 48" aria-hidden="true"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.7 29.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.4-.4-3.5z"/><path fill="#FF3D00" d="m6.3 14.7 6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.2 0-9.6-3.3-11.3-8l-6.5 5C9.5 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C37 39.2 44 34 44 24c0-1.3-.1-2.4-.4-3.5z"/></svg>
             Se connecter avec Google</button>
@@ -254,7 +253,7 @@
         <div class="card revise-card" id="today-card" data-mode="jour" hidden>
           <h2>Révision du jour</h2>
           <p class="revise-count" id="today-summary"></p>
-          <p class="muted small-text" id="today-note">Les cartes reviennent au bon moment, avec quelques questions de tes quiz.</p>
+          <p class="muted small-text" id="today-note"></p>
           <button class="primary" id="start-today">Commencer</button>
         </div>
 
@@ -270,46 +269,26 @@
             <div class="m1" id="quiz-mix-bar"></div>
             <button class="primary" type="button" id="quiz-mix-start">Au hasard →</button>
           </div>
-          <p class="quiz-mix-more"><span class="muted" id="quiz-mix-text"></span>
-            <button class="link-button" type="button" id="quiz-mix-custom">Choisir des chapitres, ajouter des flashcards…</button></p>
           <ul class="quiz-list" id="scope-quizzes"></ul>
         </div>
 
         <div class="card revise-card partiel-row" data-mode="quiz">
           <h2>Partiel blanc <small class="muted">· quiz et cartes mélangés, noté sur 20</small></h2>
           <p class="revise-count" id="partiel-summary">Un partiel blanc</p>
-          <p class="muted small-text">Quiz et flashcards mélangés, noté sur 20.</p>
           <div class="partiel-pick" id="partiel-pick" hidden>
             <select id="partiel-course" aria-label="Cours du partiel"></select>
           </div>
           <button class="ghost" id="start-partiel">Préparer un partiel</button>
         </div>
 
-        <!-- Là où tu bloques : replié tout en bas, à déplier si besoin -->
-        <details class="card hard-card fold-card" id="hard-card" data-mode="jour" hidden>
-          <summary><span>Là où tu bloques <span class="muted" id="hard-count"></span></span></summary>
-          <ol class="hard-list" id="hard-list"></ol>
-          <button class="ghost small" type="button" id="start-weak">Revoir ces cartes</button>
-        </details>
-
-        <div class="revise-options" data-mode="cartes">
-          <div class="option-row">
-            <span class="muted">Les cartes :</span>
-            <div class="filters mini" role="radiogroup" aria-label="Façon de réviser les cartes">
-              <button type="button" role="radio" data-card-mode="flip">Je retourne la carte</button>
-              <button type="button" role="radio" data-card-mode="type">J'écris la réponse</button>
-            </div>
-          </div>
-        </div>
       </div>
 
       <div id="scope-suivi" hidden>
         <!-- Maîtrise par chapitre (et de quoi réviser chacun : son quiz, ses cartes, ou les deux mélangés) -->
-        <div class="card mastery-card" id="mastery-card" hidden>
-          <h2>Maîtrise par chapitre</h2>
-          <div id="mastery-list"></div>
-          <p class="mastery-legend muted small-text"><span class="lvl acquis"></span>Acquis <span class="lvl en_cours"></span>En cours
-            <span class="lvl fragile"></span>Fragile <span class="lvl a_voir"></span>À voir</p>
+        <div class="card prep-card" id="mastery-card" hidden>
+          <div class="prep-head"><span class="mastery-ring prep-ring" id="prep-ring"><span></span></span>
+            <div><h2>Prêt pour les partiels ?</h2><p class="muted" id="prep-sub"></p></div></div>
+          <ul class="prep-rows" id="mastery-list"></ul>
         </div>
       <div class="card dashboard" id="dashboard">
         <div class="dash-body">
@@ -392,7 +371,6 @@
             <input type="number" id="partiel-cards" min="0" max="200" value="10">
             <div class="chips" data-count-for="partiel-cards"><button type="button">5</button><button type="button">10</button><button type="button">20</button></div>
           </div>
-          <small class="muted">Pour les flashcards, tu écris ta réponse ; à la fin, tu choisis de corriger toi-même ou avec l'IA.</small>
         </div>
         <div class="grid">
           <div class="field">
@@ -408,8 +386,6 @@
             <input type="number" id="partiel-minutes" min="1" max="600" value="30">
           </div>
         </div>
-        <p class="muted small-text exam-rules">Conditions d'examen : les réponses ne sont corrigées qu'à la fin. Tu peux passer une question,
-          marquer « Je doute » et revenir sur n'importe quelle question avant de rendre ta copie.</p>
         <p class="error" id="partiel-error" hidden></p>
         <button class="primary" id="partiel-go">Commencer le partiel</button>
       </div>
@@ -520,7 +496,7 @@
           <button class="ghost small" type="button" id="reminder-test">Essayer maintenant</button>
         </div>
         <div class="field inline-field">
-          <label for="daily-size">Taille de la révision du jour <small class="muted">(cartes + questions ; le reste attend demain)</small></label>
+          <label for="daily-size">Taille de la révision du jour</label>
           <input type="number" id="daily-size" min="10" max="200" value="30">
         </div>
         <div class="field inline-field">
@@ -536,7 +512,6 @@
 
       <div class="card" id="theme-card">
         <h2>Clair ou sombre</h2>
-        <p class="muted small-text">« Automatique » suit ton ordinateur (clair le jour, sombre le soir si tu l'as réglé ainsi).</p>
         <div class="filters theme-choice" role="radiogroup" aria-label="Clair ou sombre">
           <button type="button" role="radio" data-theme-choice="auto">◐ Automatique</button>
           <button type="button" role="radio" data-theme-choice="light">☀︎ Clair</button>
@@ -546,7 +521,6 @@
 
       <div class="card" id="appearance-card">
         <h2>Couleur de l'app</h2>
-        <p class="muted small-text">Choisis la couleur des repères (icônes, chiffres, barres de progression…). L'aperçu montre le résultat avant d'enregistrer.</p>
         <div class="appearance">
           <div class="picker">
             <div class="wheel-wrap">
@@ -791,13 +765,9 @@
 
       <details class="card fold-card" id="keys-card">
         <summary><span>Clavier <span class="muted">· les touches des quiz, révisions et partiels</span></span></summary>
-        <p class="muted small-text">Fais tes quiz, tes révisions et tes partiels blancs sans la souris. Clique sur une touche pour la changer,
-          puis appuie sur la nouvelle (Échap pour annuler). Les touches sont aussi rappelées à l'écran.
-          Pas de pavé numérique ? Les chiffres de la rangée du haut marchent sans Maj : &amp; pour 1, é pour 2, " pour 3…</p>
         <label class="toggle-row first">
           <input type="checkbox" id="keys-instant">
-          <span><strong>Valider dès que je choisis une réponse</strong>
-            <small class="muted">Sinon : la touche de la réponse, puis Entrée.</small></span>
+          <span><strong>Valider dès que je choisis une réponse</strong></span>
         </label>
         <div class="keys-list" id="keys-list"></div>
         <div class="actions"><button class="ghost small" type="button" id="keys-reset">Rétablir les touches par défaut</button></div>
@@ -845,7 +815,7 @@
       <div class="ready-card" id="ready-card" hidden>
         <div class="ready-ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z"/><path d="M19 15l.7 2 2 .7-2 .7-.7 2-.7-2-2-.7 2-.7z"/></svg></div>
         <h2 id="ready-title"></h2>
-        <p class="muted" id="ready-text">Claude le découpe en chapitres, puis crée quiz et flashcards.</p>
+        <p class="muted" id="ready-text">Claude crée quiz et flashcards.</p>
         <button class="primary ready-go" type="button" id="ready-go">Créer avec Claude</button>
         <div class="ready-steps" id="ready-steps"><span data-step="1"><i>1</i>Copier</span><span data-step="2"><i>2</i>Coller dans Claude</span><span data-step="3"><i>3</i>C'est prêt</span></div>
         <button class="link-button" type="button" id="ready-options">Options</button>
@@ -876,15 +846,12 @@
             <span class="source-toggle muted small-text">Modifier</span>
           </summary>
           <div class="fold-body">
-            <div class="fold-tools">
-              <p class="muted small-text tree-hint">Le cours a avancé ? « Nouvelle version ».</p>
-            </div>
             <p id="upload-status" class="status" hidden></p>
             <ul id="file-list" class="file-list source-list"></ul>
             <label id="dropzone" class="dropzone dropzone-slim" for="file-input">
               <input type="file" id="file-input" multiple accept=".pdf,.docx,.pptx,.pages,.key,.txt,.md,.markdown" hidden>
               <input type="file" id="replace-input" accept=".pdf,.docx,.pptx,.pages,.key,.txt,.md,.markdown" hidden>
-              <span class="muted">Glisse un fichier ici (PDF, Word, PowerPoint, Pages, Keynote, texte). Un fichier du même nom le <strong>remplace</strong>.</span>
+              <span class="muted">Glisse un fichier ici, ou clique</span>
             </label>
           </div>
           <p id="chapters-status" class="status" hidden></p>
@@ -907,10 +874,10 @@
               <button class="ghost small fold-action" type="button" id="quiz-revise" hidden>Réviser →</button></summary>
             <div class="fold-body">
               <div class="fold-tools">
-                <p class="muted small-text">Clique sur un quiz pour voir ses questions ; ✎ le renomme, la corbeille le supprime. Pour t'entraîner : Réviser.</p>
                 <span class="head-actions">
-                  <button class="ghost small" type="button" data-import>Importer</button>
                   <button class="primary small" data-create="quiz">+ Nouveau quiz</button>
+                  <div class="kebab"><button class="icon kebab-btn" type="button" aria-haspopup="menu" aria-expanded="false" title="Options" aria-label="Options"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.9"/><circle cx="12" cy="12" r="1.9"/><circle cx="19" cy="12" r="1.9"/></svg></button>
+                    <div class="kebab-menu" role="menu" hidden><button type="button" role="menuitem" data-import>Importer des quiz</button></div></div>
                 </span>
               </div>
               <p class="status" id="quiz-status" hidden></p>
@@ -924,14 +891,16 @@
               <button class="ghost small fold-action" type="button" id="cards-revise" hidden>Réviser →</button></summary>
             <div class="fold-body">
               <div class="fold-tools">
-                <p class="muted small-text" id="cards-help">Clique sur une carte pour la retourner.</p>
                 <span class="head-actions">
-                  <button class="ghost small" type="button" data-import>Importer</button>
-                  <button class="ghost small" type="button" id="cards-export">Exporter</button>
-                  <button class="ghost small" type="button" id="cards-flip-all">Voir les réponses</button>
-                  <button class="ghost small" id="card-write">Écrire une carte</button>
-                  <button class="ghost small" type="button" id="cards-clarify" title="Claude relit tes cartes et tes questions, et reformule celles qui ne se comprennent pas seules">Relire avec Claude</button>
                   <button class="primary small" data-create="cartes">+ Ajouter des cartes</button>
+                  <div class="kebab"><button class="icon kebab-btn" type="button" aria-haspopup="menu" aria-expanded="false" title="Options" aria-label="Options"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.9"/><circle cx="12" cy="12" r="1.9"/><circle cx="19" cy="12" r="1.9"/></svg></button>
+                    <div class="kebab-menu" role="menu" hidden>
+                      <button type="button" role="menuitem" id="card-write">Écrire une carte</button>
+                      <button type="button" role="menuitem" id="cards-flip-all">Voir les réponses</button>
+                      <button type="button" role="menuitem" id="cards-clarify">Relire avec Claude</button>
+                      <button type="button" role="menuitem" data-import>Importer des cartes</button>
+                      <button type="button" role="menuitem" id="cards-export">Exporter les cartes</button>
+                    </div></div>
                 </span>
               </div>
               <p id="cards-status" class="status ok" hidden></p>
@@ -968,18 +937,11 @@
 
       <div class="card" id="create-quiz-options">
         <h2>Le quiz</h2>
-        <div class="quiz-mode" id="quiz-mode-row" hidden>
-          <div class="filters" role="radiogroup" aria-label="Combien de quiz">
-            <button type="button" role="radio" data-quiz-mode="chapters">Un quiz par chapitre</button>
-            <button type="button" role="radio" data-quiz-mode="single">Un seul quiz</button>
-          </div>
-          <small class="muted" id="quiz-mode-hint"></small>
-        </div>
         <div class="grid">
           <div class="field">
             <label for="quiz-size-mode">Taille</label>
             <select id="quiz-size-mode">
-              <option value="cover" selected>Tout le chapitre (10 à 40 questions)</option>
+              <option value="cover" selected>Tout le cours (10 à 40 questions)</option>
               <option value="count">Nombre précis</option>
             </select>
           </div>
@@ -1003,7 +965,6 @@
             <option value="beaucoup">Beaucoup : au moins 70 %</option>
             <option value="que">Uniquement des questions de cours</option>
           </select>
-          <small class="muted">Astuce : avec « Réponse courte » coché, certaines définitions sont à réécrire toi-même.</small>
         </div>
         <fieldset class="field types">
           <legend>Types de questions</legend>
@@ -1019,12 +980,11 @@
         <div class="field">
           <label for="focus">Un thème précis</label>
           <input type="text" id="focus" maxlength="200" placeholder="ex. les systèmes nerveux et leurs fonctions">
-          <small class="muted" id="focus-hint">Pirouette ne garde que les passages du cours qui en parlent, et l'IA ne pose de questions que là-dessus.</small>
         </div>
         <div class="field" id="manual-field">
           <label for="manual">Tes questions</label>
           <textarea id="manual" rows="3" placeholder="Une question par ligne, ex. : Quelles sont les deux parties du système nerveux central ?"></textarea>
-          <small class="muted" id="manual-hint">L'IA cherche la réponse dans ton cours et écrit les propositions. Une question sans réponse dans le cours est écartée.</small>
+          <small class="muted" id="manual-hint"></small>
         </div>
       </div>
 
@@ -1034,7 +994,7 @@
           <div class="field">
             <label for="cards-size-mode">Combien</label>
             <select id="cards-size-mode">
-              <option value="cover" selected>Tout le chapitre (autant que nécessaire)</option>
+              <option value="cover" selected>Tout le cours (autant que nécessaire)</option>
               <option value="count">Nombre précis</option>
             </select>
           </div>
@@ -1043,8 +1003,6 @@
             <input type="number" id="cards-count" min="1" max="100" value="20">
           </div>
         </div>
-        <p class="muted small-text">« Tout le chapitre » : une carte par définition et par notion importante (de 10 à 50 selon la longueur).
-          Elles s'ajoutent à celles que tu as déjà, sans doublon : seules les notions pas encore en carte sont ajoutées.</p>
       </div>
 
       <div class="card">
@@ -1074,25 +1032,12 @@
           </label>
         </div>
         <div class="app-request" id="app-request" hidden>
-          <p class="small-text">Colle-la dans l'app Claude.</p>
           <p class="app-request-text" id="app-request-text"></p>
           <div class="actions">
             <button class="primary small" type="button" id="app-request-copy">Copier la demande</button>
             <button class="ghost small" type="button" id="app-request-next" hidden>Copier la suite : les flashcards</button>
           </div>
           <p class="status" id="app-request-status" hidden></p>
-          <details class="claude-tips-box">
-            <summary>Bien utiliser ton forfait Claude</summary>
-            <p class="small-text muted">Chaque création consomme une bonne part du forfait : Claude relit tout le contexte à
-              chaque étape. En gratuit, compte quelques quiz par tranche de 5 heures.</p>
-            <ul class="claude-tips">
-            <li><b>Un chapitre à la fois</b> plutôt que tout le cours : Claude lit moins de texte.</li>
-            <li><b>Colle la demande préparée par Pirouette</b> : elle évite à Claude de chercher tes cours.</li>
-            <li><b>Enchaîne dans la même conversation</b> (quiz puis flashcards du même chapitre) : le cours n'est lu qu'une fois.</li>
-            <li><b>Nouvelle conversation pour un autre cours</b> : une conversation qui s'allonge coûte plus cher à chaque message.</li>
-            <li>Forfait épuisé ? Il se recharge au bout de quelques heures. Ton compteur : app Claude › Réglages › Utilisation.</li>
-          </ul>
-          </details>
         </div>
         <div class="grid">
           <div class="field" id="local-model-field" hidden>
@@ -1315,7 +1260,6 @@
   <!-- Définitions repérées dans un fichier -->
   <dialog id="defs-dialog" class="report-dialog">
     <h2 id="defs-title">Définitions repérées</h2>
-    <p class="muted small-text">Pas les bonnes ? Règle le repérage dans Réglages → Tes définitions.</p>
     <ol id="defs-dialog-list" class="defs-list"></ol>
     <div class="actions"><button class="ghost" type="button" id="defs-close">Fermer</button></div>
   </dialog>
@@ -1336,34 +1280,6 @@
   </dialog>
 
   <!-- Semaine des partiels -->
-  <dialog id="custom-dialog" class="report-dialog custom-dialog">
-    <form id="custom-form">
-      <h2>Faire un quiz</h2>
-      <p class="muted small-text" id="custom-scope"></p>
-      <div class="custom-block" id="custom-chapters-block">
-        <div class="custom-head"><strong>Chapitres</strong>
-          <button class="link-button" type="button" id="custom-all">Tout cocher</button></div>
-        <div class="custom-chapters" id="custom-chapters"></div>
-      </div>
-      <div class="custom-block">
-        <div class="custom-head"><strong>Questions</strong><small class="muted" id="custom-q-left"></small></div>
-        <div class="filters mini custom-seg" id="custom-q" role="radiogroup" aria-label="Nombre de questions"></div>
-      </div>
-      <div class="custom-block">
-        <label class="toggle-row first">
-          <input type="checkbox" id="custom-cards-on">
-          <span><strong>Ajouter des flashcards</strong>
-            <small class="muted" id="custom-c-left">Glissées entre les questions, d'abord celles à revoir</small></span>
-        </label>
-        <div class="filters mini custom-seg" id="custom-c" role="radiogroup" aria-label="Nombre de flashcards" hidden></div>
-      </div>
-      <p class="status" id="custom-status" hidden></p>
-      <div class="actions">
-        <button class="primary" type="submit" id="custom-go">Commencer</button>
-        <button class="ghost" type="button" id="custom-cancel">Annuler</button>
-      </div>
-    </form>
-  </dialog>
 
   <dialog id="exam-dialog" class="report-dialog">
     <form id="exam-form">
@@ -1388,7 +1304,6 @@
   <dialog id="pick-dialog" class="report-dialog pick-dialog">
     <form id="pick-form" method="dialog">
       <h2>Que veux-tu réviser ?</h2>
-      <p class="muted small-text">Coche des cours entiers ou seulement certains fichiers.</p>
       <div class="pick-list" id="pick-list"></div>
       <div class="pick-save">
         <label class="option-row"><input type="checkbox" id="pick-save"> Enregistrer cette sélection</label>
@@ -1666,16 +1581,10 @@
   </dialog>
 
   <div class="plus-menu more-menu chapter-menu" id="chapter-menu" role="menu" hidden></div>
-  <dialog id="choose-quiz-dialog" class="report-dialog">
-    <h2>Quel quiz ?</h2>
-    <div class="choose-quiz-list" id="choose-quiz-list"></div>
-    <div class="actions"><button class="ghost" type="button" id="choose-quiz-cancel">Annuler</button></div>
-  </dialog>
 
   <dialog id="feedback-dialog" class="report-dialog">
     <form id="feedback-form">
       <h2>Ton retour sur Pirouette</h2>
-      <p class="muted small-text">Une idée, un bug, quelque chose de pas clair ? Pirouette prépare le mail, il ne reste qu'à l'envoyer.</p>
       <div class="field">
         <label for="feedback-kind">C'est…</label>
         <select id="feedback-kind">
@@ -1704,7 +1613,6 @@
   <dialog id="report-dialog" class="report-dialog">
     <form id="report-form">
       <h2>Signaler cette question</h2>
-      <p class="muted small-text">La question, les réponses proposées et la bonne réponse du quiz sont jointes automatiquement.</p>
       <div class="report-box">
         <p class="report-q" id="report-question"></p>
         <ul class="report-choices" id="report-choices"></ul>

@@ -137,8 +137,7 @@ input:focus { border-color: var(--accent); background: var(--surface); }
 .choice.wrong { border-color: var(--wrong); background: var(--wrong-soft); }
 .choice:disabled { opacity: 1; color: var(--text); }
 .typed { display: grid; gap: 10px; }
-.feedback { margin-top: 18px; padding: 16px; border-radius: 18px; background: var(--surface); box-shadow: var(--shadow); border-left: 4px solid var(--muted); }
-.feedback.ok { border-color: var(--right); } .feedback.ko { border-color: var(--wrong); }
+.feedback { margin-top: 18px; padding: 16px; border-radius: 18px; background: var(--surface); box-shadow: var(--shadow); }
 .feedback p { margin: 0 0 8px; }
 .feedback .expl { color: var(--muted); font-size: 15px; }
 .feedback .next { width: 100%; margin-top: 6px; }
@@ -255,3 +254,39 @@ body.with-tabbar .toast { bottom: calc(env(safe-area-inset-bottom) + 82px); }
 .file-mix { display: flex; align-items: center; gap: 10px; margin: 0 0 10px; }
 .file-mix .m1 { flex: 1; }
 .file-mix .ghost { flex: none; padding: 11px 14px; }
+
+/* Juste ou faux : une pastille en tête, un fond teinté et un contour de la couleur */
+.feedback.ok { --fc: var(--right); } .feedback.ko { --fc: var(--wrong); }
+.feedback.ok, .feedback.ko { background: color-mix(in srgb, var(--fc) 13%, var(--surface));
+  box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--fc) 55%, transparent), 0 14px 28px -20px color-mix(in srgb, var(--fc) 55%, transparent); }
+.feedback.ok::before, .feedback.ko::before { display: inline-block; margin-bottom: 10px; padding: 4px 12px; border-radius: 999px;
+  font-weight: 700; font-size: 14px; color: #FFF; background: var(--fc); }
+.feedback.ok::before { content: "✓ Juste"; } .feedback.ko::before { content: "✗ Faux"; }
+
+/* Réponse écrite validée : un contour vert ou rouge, qui s'efface */
+.ring-ok { --rc: var(--right); } .ring-ko { --rc: var(--wrong); }
+.ring-ok, .ring-ko { animation: field-ring 2.2s ease forwards; }
+@keyframes field-ring { 15%, 65% { box-shadow: 0 0 0 2.5px var(--rc), 0 0 18px color-mix(in srgb, var(--rc) 40%, transparent); }
+  100% { box-shadow: 0 0 0 0 transparent; } }
+
+/* Cartes : Retourner ou Écrire, et la note conseillée après avoir écrit */
+.seg.card-mode { grid-template-columns: 1fr 1fr; width: 220px; margin: 0 auto 10px; }
+.card-typed { margin-top: 14px; }
+.rate.suggested { box-shadow: 0 0 0 2.5px currentColor; }
+
+/* Toutes les cartes, en grille */
+.grid-toggle { display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; margin-top: 14px; padding: 12px;
+  border: 1.5px dashed var(--border); border-radius: 16px; background: transparent; color: var(--muted); font-size: 15px; cursor: pointer; }
+.grid-toggle svg { width: 18px; height: 18px; }
+.grid-toggle[aria-expanded="true"] { border-style: solid; color: var(--text); }
+.seg.grid-filters { margin-top: 14px; }
+.grid-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.gcard { position: relative; height: 140px; padding: 0; border: 0; background: none; perspective: 800px; cursor: pointer; font: inherit; color: inherit; text-align: left; }
+.gface { position: absolute; inset: 0; padding: 12px; border-radius: 16px; background: var(--surface); box-shadow: var(--shadow);
+  backface-visibility: hidden; -webkit-backface-visibility: hidden; transition: transform .4s ease; overflow: hidden; font-size: 14px; line-height: 1.35; }
+.gface.gback { transform: rotateY(180deg); background: var(--sunken); }
+.gcard.flipped .gfront { transform: rotateY(-180deg); }
+.gcard.flipped .gback { transform: rotateY(0); }
+/* En mode Écrire, la carte est un peu plus petite : la réponse et les notes tiennent à l'écran */
+.stage:has(+ .card-typed) { min-height: 0; }
+.stage:has(+ .card-typed) .flash { max-height: 42dvh; }

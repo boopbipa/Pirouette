@@ -124,6 +124,7 @@ function toast(text) {
   toast.timer = setTimeout(() => { box.hidden = true; }, 3200);
 }
 const ICON = {
+  grid: '<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.9"><rect x="4" y="4" width="7" height="7" rx="1.5"/><rect x="13" y="4" width="7" height="7" rx="1.5"/><rect x="4" y="13" width="7" height="7" rx="1.5"/><rect x="13" y="13" width="7" height="7" rx="1.5"/></svg>',
   back: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
   close: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>',
   chevron: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
@@ -576,7 +577,7 @@ function renderSubject(id, tab = "") {
         <p>${due.length ? `${plural(due.length, "carte", "cartes")} · environ ${Math.max(1, Math.round(due.length * 0.2))} min` : "Reviens demain, ou fais un quiz"}</p>
         ${due.length ? `<button class="primary" type="button" id="due">Commencer →</button>` : pool ? `<a class="ghost" href="${href("quiz")}">Faire un quiz</a>` : ""}
       </section>
-      ${weak.length ? `<nav class="list">${row('id="weak"', "Là où tu bloques", plural(weak.length, "carte", "cartes"))}</nav>` : ""}`;
+`;
   } else if (tab === "quiz") {
     const quizRows = (list) => `<nav class="list">${list.map((q) => row(`data-quiz="${esc(q.id)}"`, esc(q.title || "Quiz"),
       plural(q.questions.length, "question", "questions"))).join("")}</nav>`;
@@ -591,7 +592,8 @@ function renderSubject(id, tab = "") {
   } else {
     body = !all.length ? `<p class="muted center">Pas encore de flashcards dans cette matière.</p>` : `
       ${all.length >= 2 ? `<div class="m1" id="deck"></div>` : ""}<button class="primary random-quiz" type="button" id="cards-go"></button>
-      <p class="muted small center">D'abord les cartes à revoir aujourd'hui${due.length ? ` (${due.length})` : ""}, puis celles où tu bloques, puis les autres.</p>`;
+      <button class="grid-toggle" type="button" id="grid-toggle" aria-expanded="false">${ICON.grid}<span>Voir toutes les cartes</span></button>
+      <div id="card-grid" hidden></div>`;
   }
   app.innerHTML = `<header class="top sub"><a class="icon-btn" href="#/matieres" aria-label="Retour">${ICON.back}</a></header>
     <h1 class="subject" style="--c:${colorOf(course)}"><span class="dot"></span>${esc(course.name)}</h1>
@@ -599,7 +601,6 @@ function renderSubject(id, tab = "") {
       `<a role="tab" href="${href(t)}" class="${t === tab ? "on" : ""}" aria-selected="${t === tab}">${label}</a>`).join("")}</nav>
     ${body}`;
   $("#due")?.addEventListener("click", () => startCards(due, course.name));
-  $("#weak")?.addEventListener("click", () => startCards(shuffle(weak), `${course.name} · là où je bloque`, { free: true }));
   $("#all")?.addEventListener("click", () => startCards(shuffle(all), course.name, { free: true }));
   app.querySelectorAll("[data-quiz]").forEach((b) => b.addEventListener("click", () => startQuiz(current().quiz[b.dataset.quiz])));
   if ($("#cards-go")) {
@@ -614,6 +615,28 @@ function renderSubject(id, tab = "") {
         onChange: (v) => { n = S.deckValue = v; label(v); } });
     } else label(n);
     $("#cards-go").addEventListener("click", () => startCards(order.slice(0, n), course.name, { free: true }));
+    // Toutes les cartes, en grille : un filtre (toutes, à revoir, sues), et on touche une carte pour la retourner
+    const now = today();
+    const filters = { all: () => true, due: (c) => isNew(c) || isDue(c, now), known: (c) => c.status === "known" };
+    let filter = "all";
+    const drawGrid = () => {
+      const shown = all.filter((x) => filters[filter](x.card));
+      $("#card-grid").innerHTML = `<div class="seg grid-filters">${[["all", "Toutes"], ["due", "À revoir"], ["known", "Sues"]].map(([f, label]) =>
+          `<a href="#" data-grid-filter="${f}" class="${f === filter ? "on" : ""}">${label} · ${all.filter((x) => filters[f](x.card)).length}</a>`).join("")}</div>
+        <div class="grid-cards">${shown.map((x) => `<button class="gcard" type="button"><span class="gface gfront">${rich(x.card.front)}</span>
+          <span class="gface gback">${rich(x.card.back)}</span></button>`).join("") || `<p class="muted center">Aucune carte ici.</p>`}</div>`;
+    };
+    $("#grid-toggle").addEventListener("click", () => {
+      const open = $("#card-grid").hidden;
+      $("#card-grid").hidden = !open;
+      $("#grid-toggle").setAttribute("aria-expanded", String(open));
+      if (open) drawGrid();
+    });
+    $("#card-grid").addEventListener("click", (e) => {
+      const f = e.target.closest("[data-grid-filter]");
+      if (f) { e.preventDefault(); filter = f.dataset.gridFilter; return drawGrid(); }
+      e.target.closest(".gcard")?.classList.toggle("flipped");
+    });
   }
   if ($("#mix")) {
     const min = Math.min(5, pool);
@@ -727,12 +750,19 @@ document.addEventListener("click", (e) => {
   document.documentElement.dataset.theme = theme;
   button.setAttribute("aria-checked", String(theme === "dark"));
 });
+// Les cartes : on les retourne, ou on écrit sa réponse avant (choix gardé sur ce téléphone)
+const cardMode = () => { try { return localStorage.getItem("pirouette.cardMode") || "flip"; } catch { return "flip"; } };
 function drawCard({ course, card }) {
+  const writing = cardMode() === "type";
   app.innerHTML = `${sessionHead()}
+    <div class="seg card-mode" role="radiogroup" aria-label="Façon de réviser les cartes">${[["flip", "Retourner"], ["type", "Écrire"]].map(([m, label]) =>
+      `<a role="radio" href="#" data-card-mode="${m}" class="${cardMode() === m ? "on" : ""}" aria-checked="${cardMode() === m}">${label}</a>`).join("")}</div>
     <div class="stage"><div class="flash" id="flash" style="--c:${colorOf(course)}" role="button" tabindex="0" aria-label="Retourner la carte">
-      <div class="face front"><span class="tag"><i></i>${esc(course.name)}</span><div class="txt">${rich(card.front)}</div><small class="hint">Touche pour voir la réponse</small></div>
+      <div class="face front"><span class="tag"><i></i>${esc(course.name)}</span><div class="txt">${rich(card.front)}</div></div>
       <div class="face back"><span class="tag"><i></i>${esc(course.name)}</span><div class="txt">${rich(card.back)}</div></div>
     </div></div>
+    ${writing ? `<form id="card-typed" class="typed card-typed"><input id="card-answer" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Ta réponse">
+      <button class="primary" type="submit">Vérifier</button></form>` : ""}
     <div class="rates" id="rates" hidden>
       <button class="rate again" type="button" data-rate="again">Je ne savais pas</button>
       <button class="rate good" type="button" data-rate="good">Je savais</button>
@@ -742,12 +772,32 @@ function drawCard({ course, card }) {
   // Une touche retourne la carte ; une fois la réponse vue, on peut la retourner autant qu'on veut, et noter
   let revealed = false, moved = 0;
   const back = "rotateY(180deg)";
+  app.querySelectorAll("[data-card-mode]").forEach((a) => a.addEventListener("click", (e) => {
+    e.preventDefault();
+    try { localStorage.setItem("pirouette.cardMode", a.dataset.cardMode); } catch {}
+    drawCard({ course, card });
+  }));
+  // Écrire : on tape sa réponse, puis la carte se retourne ; un contour vert ou rouge dit si c'était ça
+  $("#card-typed")?.addEventListener("submit", (e) => {
+    e.preventDefault();
+    const input = $("#card-answer");
+    const given = input.value.trim();
+    if (!given) return;
+    const right = typedIsRight(given, card.back);
+    input.disabled = true;
+    e.target.querySelector("button").hidden = true;
+    ringAnswer(input, right);
+    flash.classList.add("flipped");
+    revealed = true;
+    $("#rates").hidden = false;
+    app.querySelector(`[data-rate="${right ? "good" : "again"}"]`).classList.add("suggested");
+  });
+  if (writing) setTimeout(() => $("#card-answer")?.focus(), 50);
   flash.addEventListener("click", () => {
-    if (moved > 10) return;
+    if (moved > 10 || (writing && !revealed)) return;  // en mode Écrire, on répond d'abord
     flash.classList.toggle("flipped");
     revealed = true;
     $("#rates").hidden = false;
-    flash.querySelector(".hint").textContent = "Touche pour retourner la carte";
   });
   app.querySelectorAll("[data-rate]").forEach((b) => b.addEventListener("click", () => rate(b.dataset.rate)));
   // Glisser : à droite « je savais », à gauche « je ne savais pas » (une fois la réponse vue)
@@ -811,10 +861,12 @@ function drawQuestion(q) {
       if (!given) return;
       $("#answer").disabled = true;
       e.target.querySelectorAll("button").forEach((b) => (b.hidden = true));
-      if (typedIsRight(given, q.answer)) return answered(q, true);
+      const right = typedIsRight(given, q.answer);
+      ringAnswer($("#answer"), right);
+      if (right) return answered(q, true);
       // Pas tout à fait la même réponse : on montre la réponse attendue, et chacun se corrige
-      showFeedback(q, null, `<div class="self"><button class="primary" type="button" id="self-ok">J'avais bon</button>
-        <button class="ghost" type="button" id="self-ko">J'avais faux</button></div>`);
+      showFeedback(q, null, `<div class="self"><button class="ghost" type="button" id="self-ko">J'avais faux</button>
+        <button class="primary" type="button" id="self-ok">J'avais bon</button></div>`);
       $("#self-ok").addEventListener("click", () => answered(q, true, { shown: true }));
       $("#self-ko").addEventListener("click", () => answered(q, false, { shown: true }));
     });
@@ -822,22 +874,33 @@ function drawQuestion(q) {
     setTimeout(() => $("#answer")?.focus(), 50);
   } else {
     app.querySelectorAll(".choice").forEach((b) => b.addEventListener("click", () => {
+      // La bonne proposition est recopiée telle quelle dans « answer » : on compare le texte exact
+      // (en ignorant les petits mots, « A » et « D » finissaient par se ressembler)
+      const exact = (choice) => String(choice).trim() === String(q.answer).trim();
+      const same = q.choices.some(exact) ? exact : (choice) => normalize(choice) === normalize(q.answer);  // anciens quiz
       const given = q.choices[Number(b.dataset.i)];
-      const correct = normalize(given) === normalize(q.answer);
+      const correct = same(given);
       app.querySelectorAll(".choice").forEach((x) => {
         x.disabled = true;
-        if (normalize(q.choices[Number(x.dataset.i)]) === normalize(q.answer)) x.classList.add("right");
+        if (same(q.choices[Number(x.dataset.i)])) x.classList.add("right");
       });
       if (!correct) b.classList.add("wrong");
       answered(q, correct);
     }));
   }
 }
+// Réponse écrite validée : un contour vert (juste) ou rouge (faux) l'entoure un instant, puis s'efface
+function ringAnswer(input, right) {
+  input.classList.remove("ring-ok", "ring-ko");
+  void input.offsetWidth;
+  input.classList.add(right ? "ring-ok" : "ring-ko");
+}
+// Le retour : une pastille « ✓ Juste » / « ✗ Faux » en tête, la bonne réponse si besoin, l'explication
 function showFeedback(q, correct, extra = "") {
   const fb = $("#feedback");
   fb.className = `feedback ${correct === null ? "neutral" : correct ? "ok" : "ko"}`;
   fb.innerHTML = `${correct === null ? `<p><b>Réponse attendue :</b> ${rich(q.answer)}</p>`
-      : correct ? "<p><b>Bonne réponse !</b></p>" : `<p><b>Pas tout à fait.</b>${typed(q) || q.type === "vrai_faux" ? ` La réponse : ${rich(q.answer)}` : ""}</p>`}
+      : correct ? "" : typed(q) || q.type === "vrai_faux" ? `<p>La réponse : ${rich(q.answer)}</p>` : ""}
     ${q.explanation ? `<p class="expl">${rich(q.explanation)}</p>` : ""}${extra}`;
   fb.hidden = false;
   fb.scrollIntoView({ behavior: "smooth", block: "nearest" });

@@ -44,6 +44,7 @@ from .quiz import (CHARS_PER_CARD, CHARS_PER_QUESTION, COURSE_SHARES, QUESTION_T
                    assemble_quiz, cards_coverage_size, chunk_text, coverage_size, normalize_question)
 from .revision import STOPWORDS, is_duplicate, normalize_cards  # noqa: E402
 from .storage import NotFound, Store, file_of  # noqa: E402
+from .storage import file_label as store_file_label  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent
 # Claude est mis de côté pour l'instant : seule l'IA locale est proposée. PIROUETTE_CLAUDE=1 le réactive.
@@ -1992,6 +1993,68 @@ def _chapter_mastery(cards: list[dict], quiz_scores: list[float]) -> dict:
         level = "en_cours"
     return {"cards": len(cards), "seen": len(seen), "solid": len(solid), "weak": len(weak), "quiz": quiz,
             "score": score, "level": level}
+
+
+# ---------- Suivi : « Prêt pour les partiels ? » ----------
+def _card_readiness(card: dict) -> float:
+    """Une carte : acquise 1, en cours 0,6, difficile 0,25, jamais vue 0."""
+    if card.get("status") == "known" or (card.get("interval") or 0) >= 21:
+        return 1.0
+    if not card.get("reviews"):
+        return 0.0
+    return 0.25 if srs.is_weak(card) else 0.6
+
+
+def _question_readiness(stat: dict | None) -> float:
+    """Une question de quiz : réussie la dernière fois 1 (0,7 si elle a été plus souvent ratée), ratée 0,2, jamais posée 0."""
+    if not stat:
+        return 0.0
+    if stat.get("last") is False:
+        return 0.2
+    return 1.0 if stat.get("right", 0) >= stat.get("wrong", 0) else 0.7
+
+
+@app.get("/api/readiness")
+async def readiness(course: str = "", folder: str = "") -> dict:
+    """Où j'en suis avant les partiels : un pourcentage pour la matière (ou le semestre), et un par cours (fichier)
+    d'une matière, ou par matière d'un semestre. Chaque carte et chaque question compte pour une notion."""
+    ids = _scope(course, folder)
+    courses = {c["id"]: c for c in store.list_courses() if c["id"] in ids}
+    groups: dict[str, dict] = {}
+
+    def group(c: dict, item: dict) -> dict:
+        if course and len(c.get("files") or []) > 1:
+            fid = _file_of(c, item)
+            entry = next(f for f in c["files"] if f["id"] == fid)
+            key, name = fid, store_file_label(entry)
+        else:
+            key, name = c["id"], c["name"]
+        return groups.setdefault(key, {"id": key, "name": name, "score": 0.0, "items": 0, "cards": 0, "questions": 0, "todo": 0})
+
+    for c, cards in store._decks(ids):
+        for card in cards:
+            g = group(c, card)
+            r = _card_readiness(card)
+            g["score"] += r; g["items"] += 1; g["cards"] += 1; g["todo"] += r < 1
+    for summary in store.list_quizzes():
+        c = courses.get(summary.get("course_id"))
+        if not c:
+            continue
+        quiz = store.get_quiz(summary["id"])
+        stats = quiz.get("stats") or {}
+        for i in range(len(quiz["questions"])):
+            g = group(c, quiz)
+            r = _question_readiness(stats.get(str(i)))
+            g["score"] += r; g["items"] += 1; g["questions"] += 1; g["todo"] += r < 1
+    rows = sorted(groups.values(), key=lambda g: g["name"].lower())
+    for g in rows:
+        g["pct"] = round(100 * g.pop("score") / g["items"]) if g["items"] else 0
+    total = sum(g["items"] for g in rows)
+    pct = round(sum(g["pct"] * g["items"] for g in rows) / total) if total else 0
+    exams = [store.exam_info(c) for c in courses.values()]
+    exams = [e for e in exams if e and e["days"] >= 0]
+    exam = min(exams, key=lambda e: e["days"]) if exams else None
+    return {"pct": pct, "items": total, "groups": rows, "exam": exam}
 
 
 @app.get("/api/mastery")
