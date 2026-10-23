@@ -384,12 +384,7 @@ $("#today-bar").addEventListener("click", (e) => {
 $("#today-bar").addEventListener("keydown", (e) => {
   if ((e.key === "Enter" || e.key === " ") && e.target.id === "today-bar" && !$("#today-go").hidden) { e.preventDefault(); $("#today-go").click(); }
 });
-$("#today-bar").addEventListener("pointermove", (e) => {
-  if (e.pointerType === "touch") return;
-  const bar = e.currentTarget, box = bar.getBoundingClientRect();
-  bar.style.setProperty("--gx", `${((e.clientX - box.left) / box.width) * 100}%`);
-  bar.style.setProperty("--gy", `${((e.clientY - box.top) / box.height) * 100}%`);
-});
+
 
 // Une couleur par matière, adoucie : le serveur donne à chaque nouvelle matière la couleur la moins prise
 // (autant de couleurs que storage.SUBJECT_COLORS). Sans numéro connu, on la tire de l'identifiant.
@@ -519,12 +514,6 @@ $("#course-tabs").addEventListener("pointermove", (e) => {
   const box = row.getBoundingClientRect();
   row.style.setProperty("--gx", `${((e.clientX - box.left) / box.width) * 100}%`);
   row.style.setProperty("--gy", `${((e.clientY - box.top) / box.height) * 100}%`);
-});
-$("#today-hero").addEventListener("pointermove", (e) => {
-  if (e.pointerType === "touch") return;
-  const hero = e.currentTarget, box = hero.getBoundingClientRect();
-  hero.style.setProperty("--gx", `${((e.clientX - box.left) / box.width) * 100}%`);
-  hero.style.setProperty("--gy", `${((e.clientY - box.top) / box.height) * 100}%`);
 });
 $("#view-courses").addEventListener("pointermove", (e) => {
   const card = e.target.closest(".course-card");
@@ -4157,7 +4146,7 @@ async function renderScopeMain() {
     : (today.cards || today.questions ? `${$("#today-summary").innerHTML} · environ ${Math.max(1, Math.round(today.cards * 0.2
       + (mixQuestions() ? today.questions * 0.5 : 0)))} min` : "Tout est à jour pour aujourd'hui");
   $("#hero-start").disabled = planned ? false : $("#start-today").disabled;
-  $("#hero-start").textContent = planned && plan.status.done_today ? "Refaire une séance" : "Commencer →";
+  $("#hero-start").textContent = planned && plan.status.done_today ? "Refaire une séance" : "Commencer";
   if (state.reviewFile) {
     // Un seul cours de la matière : sa révision du jour (cartes à revoir et questions à reposer de ce cours)
     const peek = await api(`/api/session?${new URLSearchParams({ mode: "today", ...reviewScope(), file: state.reviewFile.id,
@@ -4167,7 +4156,7 @@ async function renderScopeMain() {
       ? ` · <b>${peek.questions}</b> question${peek.questions > 1 ? "s" : ""} de quiz` : ""} à revoir dans « ${escapeHtml(fileLabel(state.reviewFile))} »`
       : `Tout est à jour dans « ${escapeHtml(fileLabel(state.reviewFile))} »`;
     $("#hero-start").disabled = !n;
-    $("#hero-start").textContent = "Commencer →";
+    $("#hero-start").textContent = "Commencer";
   }
   $("#today-note").innerHTML = scope.parent
     ? `Le plan de révision se règle sur le semestre : <a href="#/reviser/dossier/${scope.parent.id}">${escapeHtml(scope.parent.name)} →</a>`
@@ -5076,6 +5065,9 @@ const WELCOME = [
 ];
 // Les nouveautés de chaque version (le carton « Quoi de neuf » ne s'affiche que si la version en a)
 const WHATS_NEW = {
+  "0.74.6": [
+    ["→", "Des bandeaux qui invitent à commencer", "Passe la souris sur la révision du jour : la couleur de « Commencer » s'étend sur tout le bandeau"],
+  ],
   "0.74.5": [
     ["★", "Un seul pourcentage d'avancée", "La pastille ★ et « Prêt pour les partiels ? » donnent le même chiffre : tes cartes et tes quiz réunis"],
   ],

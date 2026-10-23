@@ -2330,14 +2330,8 @@ body.focus .choice:has(input:checked):not(.right):not(.wrong), body.focus.day .c
 .zoom-veil { backdrop-filter: none !important; -webkit-backdrop-filter: none !important; }
 
 
-/* Aujourd'hui : le bandeau du jour, à la couleur de la matière ; au survol, comme les cases de l'accueil : il grandit
-   à peine, un fin halo l'entoure et un reflet suit la souris */
-#scope-main .today-hero { position: relative; overflow: hidden; isolation: isolate; transition: transform .2s, box-shadow .2s;
-  background: var(--surface); }  /* uni : la couleur n'apparaît qu'au survol, avec le reflet */
-#scope-main .today-hero:hover { transform: scale(1.006); box-shadow: 0 0 0 1px color-mix(in srgb, var(--c, var(--accent)) 35%, transparent),
-  0 16px 32px -18px color-mix(in srgb, var(--c, var(--accent)) 65%, transparent); }
-#scope-main .today-hero:hover .card-glare { opacity: 1; }
-@media (prefers-reduced-motion: reduce) { #scope-main .today-hero:hover { transform: none; } }
+/* Aujourd'hui : le bandeau du jour, à la couleur de la matière (voir « .go-banner » pour le survol) */
+#scope-main .today-hero { background: var(--surface); }
 
 /* L'interrupteur jour / nuit : en haut à droite (en face de la croix), et bien visible sur le noir */
 body.focus .day-night { position: fixed; top: 21px; right: 20px; z-index: 30; margin: 0;
@@ -2592,14 +2586,33 @@ input, textarea, [contenteditable] { -webkit-user-select: text; user-select: tex
 .acq-pill:hover .acq-word { max-width: 60px; opacity: 1; }
 .subject-title .acq-pill { margin-left: 2px; font-size: 13px; padding: 4px 11px; align-self: center; }
 .mastery-ring.done span { font-size: 15px; color: var(--c, var(--accent)); }
-/* Bandeau du jour de Mes matières : cliquable partout, il grandit à peine avec un halo et un reflet (comme dans une matière) */
-.today-bar { position: relative; overflow: hidden; isolation: isolate; cursor: pointer; transition: transform .2s, box-shadow .2s; }
-.today-bar:hover { transform: scale(1.006); box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 35%, transparent),
-  0 16px 32px -18px color-mix(in srgb, var(--accent) 65%, transparent); }
-.today-bar:hover .card-glare { opacity: 1; }
-@media (prefers-reduced-motion: reduce) { .today-bar:hover { transform: none; } }
 /* Les ronds des matières : un peu plus grands, pour que « 47% » respire */
 .course-card .mastery-ring { width: 46px; height: 46px; }
 .course-card .mastery-ring::before { inset: 4px; }
 .course-card .mastery-ring span { font-size: 11.5px; letter-spacing: -.03em; }
 .course-card .mastery-ring.done span { font-size: 16px; }
+
+/* Les bandeaux qui lancent la révision du jour (Mes matières, et « Révision du jour » d'une matière) : tout le bandeau
+   est le bouton. Au survol, la couleur de « Commencer » (celle de l'app, comme le bouton) part du bouton et se répand sur le bandeau, le bouton s'éclaire
+   et une flèche apparaît. */
+.go-banner { position: relative; overflow: hidden; isolation: isolate; cursor: pointer; transition: box-shadow .3s ease; }
+.go-banner::before { content: ""; position: absolute; inset: 0; z-index: -1; pointer-events: none;
+  background: linear-gradient(100deg, transparent 0%, color-mix(in srgb, var(--accent) 16%, transparent) 40%,
+    color-mix(in srgb, var(--accent) 50%, transparent) 100%);
+  clip-path: inset(0 0 0 100%); transition: clip-path .5s cubic-bezier(.2, .8, .2, 1); }
+.go-banner:hover::before, .go-banner:focus-visible::before { clip-path: inset(0 0 0 0); }
+.go-banner:hover, .go-banner:focus-visible { box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 45%, transparent),
+  0 18px 34px -18px color-mix(in srgb, var(--accent) 80%, transparent); }
+/* Le bandeau d'une matière est en colonne (bouton en bas) : la couleur monte depuis le bouton */
+#scope-main .go-banner::before { background: linear-gradient(0deg, color-mix(in srgb, var(--accent) 45%, transparent) 0%,
+    color-mix(in srgb, var(--accent) 14%, transparent) 55%, transparent 100%); clip-path: inset(100% 0 0 0); }
+#scope-main .go-banner:hover::before, #scope-main .go-banner:focus-visible::before { clip-path: inset(0 0 0 0); }
+.go-btn { transition: filter .25s, box-shadow .25s; }
+.go-btn::after { content: "→"; display: inline-block; max-width: 0; margin-left: 0; opacity: 0; overflow: hidden; vertical-align: top;
+  transition: max-width .3s ease, margin-left .3s ease, opacity .25s ease, transform .3s ease; transform: translateX(-6px); }
+.go-banner:hover .go-btn, .go-banner:focus-visible .go-btn { filter: brightness(1.12);
+  box-shadow: 0 0 22px color-mix(in srgb, var(--accent) 55%, transparent); }
+.go-banner:hover .go-btn::after, .go-banner:focus-visible .go-btn::after { max-width: 1.2em; margin-left: .35em; opacity: 1; transform: none; }
+.go-banner:has(.go-btn:disabled), .go-banner:has(.go-btn[hidden]) { cursor: default; }
+.go-banner:has(.go-btn:disabled)::before, .go-banner:has(.go-btn[hidden])::before { display: none; }
+@media (prefers-reduced-motion: reduce) { .go-banner::before { transition: none; } }
