@@ -92,13 +92,13 @@
       <div id="folder-list"></div>
       <button class="add-folder-row" type="button" id="new-folder" hidden>+ Nouveau semestre</button>
       <!-- Un petit « + » en bas : au survol (ou au clic), ajouter un cours ou un semestre -->
-      <div class="add-fab" id="add-fab">
+      <div class="add-fab-row"><div class="add-fab" id="add-fab">
         <button class="add-fab-plus" type="button" id="add-fab-btn" aria-label="Ajouter" aria-expanded="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button>
         <span class="add-fab-menu">
           <button class="ghost small" type="button" data-add="course">Un cours</button>
           <button class="ghost small" type="button" data-add="folder">Un semestre</button>
         </span>
-      </div>
+      </div></div>
       <div id="archived" hidden>
         <div class="section-title"><h2>Archivés</h2></div>
         <div id="archived-list"></div>
@@ -262,7 +262,7 @@
         <!-- Flashcards seules : un paquet (du jour, où je bloque, tout), pour tout le cours ou un chapitre -->
         <div class="card cards-mode" data-mode="cartes">
           <h2>Flashcards</h2>
-          <div class="chips chapter-chips" id="cards-chapters" role="radiogroup" aria-label="Chapitre"></div>
+          <div class="chips chapter-chips" id="cards-chapters" role="radiogroup" aria-label="Chapitre" hidden></div>
           <div class="decks" id="card-decks"></div>
         </div>
 

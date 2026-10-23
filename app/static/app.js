@@ -658,7 +658,7 @@ const PREFS = [
     icon: '<rect x="3" y="7" width="18" height="11" rx="2"/><path d="M7 11h.01M11 11h.01M15 11h.01M8 15h8"/>' },
   { id: "donnees", label: "Sauvegarde", desc: "Tes sauvegardes, et récupérer tes anciens cours.", cards: ["data-card"],
     icon: '<path d="M12 4v10M8 10l4 4 4-4M5 19h14"/>' },
-  { id: "apropos", label: "À propos", desc: "La version de Pirouette et ses nouveautés.", cards: ["version-card"],
+  { id: "apropos", label: "Mises à jour", desc: "La version de Pirouette et ses nouveautés.", cards: ["version-card"],
     icon: '<circle cx="12" cy="12" r="8"/><path d="M12 11v5M12 8h.01"/>' },
 ];
 const PROFILE_PREF = { id: "profil", label: "Ton prénom", desc: "Pour te dire bonjour en ouvrant Pirouette.", cards: ["settings-name-form"] };
@@ -4083,7 +4083,8 @@ function renderDecks() {
   if (state.deckChapter !== null && !chapters[state.deckChapter]) state.deckChapter = null;
   const ch = state.deckChapter === null ? null : chapters[state.deckChapter];
   const n = ch || data.all;
-  $("#cards-chapters").innerHTML = chapterChips(chapters, state.deckChapter, "data-deck-chapter");
+  $("#cards-chapters").innerHTML = "";  // les chapitres ne sont plus proposés ici (pour l'instant)
+  state.deckChapter = null;
   const deck = (kind, title, text, count, badge) => `<button type="button" class="deck ${kind}" data-deck="${kind}" ${count ? "" : "disabled"}>
     ${badge ? `<em>${badge}</em>` : ""}<span class="deck-pile" aria-hidden="true"><i></i><i></i><i>${CARD_BACK}</i></span>
     <b>${title}</b><small>${text}</small></button>`;
@@ -4888,34 +4889,45 @@ $("#keys-reset").addEventListener("click", () => {
 
 // ---------- Cartons de bienvenue (premier lancement) et « Quoi de neuf » (après une mise à jour) ----------
 const LOGO_SVG = `<svg aria-hidden="true"><use href="#logo"/></svg>`;
+const WELCOME_VERSION = "2";  // à augmenter quand l'interface change beaucoup : la présentation se remontre une fois
 const WELCOME = [
   { art: `<span class="w-spark" style="left:30%;top:24%">✦</span><span class="w-spark" style="right:30%;bottom:22%">✦</span>
           <div class="w-logo">${LOGO_SVG}</div>`,
     title: "Bienvenue dans Pirouette",
-    text: "Tes cours deviennent des <b>quiz</b> et des <b>flashcards</b>, et Pirouette organise tes révisions jusqu'aux partiels. Tout reste sur ton Mac." },
-  { art: `<div class="w-file"><b>PDF</b><i></i><i></i><i style="width:70%"></i><i></i><i style="width:55%"></i></div><span class="w-arrow">→</span>
-          <div class="w-chaps"><div>Chapitre 1 <span>· La cellule</span></div><div>Chapitre 2 <span>· L'ADN</span></div><div>Chapitre 3 <span>· …</span></div></div>`,
-    title: "Dépose ton cours",
-    text: "PDF, Word, PowerPoint, Pages ou Keynote : Pirouette le lit et le <b>découpe en chapitres</b>. Ton cours avance ? Dépose la <b>nouvelle version</b> : seules les nouveautés auront de nouvelles questions." },
+    text: "Tes cours deviennent des <b>quiz</b> et des <b>flashcards</b>, et Pirouette organise tes révisions jusqu'aux partiels." },
+  { art: `<div class="w-col"><div class="w-plus">+</div><div class="w-pills"><span>Un cours</span><span>Un semestre</span></div></div>`,
+    title: "Ajoute tes cours",
+    text: "Dans <b>Matières</b>, le petit <b>+</b> en bas : un cours (PDF, Word, PowerPoint, Pages, Keynote) ou un semestre pour les ranger. Pirouette le <b>découpe en chapitres</b>." },
   { art: `<div class="w-col"><div class="w-bubble"><div class="w-who"><i></i>À coller dans l'app Claude</div>
           Pirouette : crée un quiz qui couvre tout le chapitre « L'ADN » du cours « Biologie »…<span class="w-copy">Copier la demande</span></div>
           <span class="w-check">✓ Chaque question vérifiée dans ton cours</span></div>`,
     title: "Des quiz faits par Claude",
-    text: "Branche l'app Claude (Réglages), puis sur un chapitre : <b>Créer</b> → <b>Copier la demande</b> → colle-la dans Claude. Il lit le chapitre et range le quiz dans Pirouette.",
-    tips: ["Un chapitre à la fois, une conversation par cours", "Quiz puis flashcards dans la même conversation"] },
+    text: "Branche l'app Claude (Réglages), puis dans <b>Mes cours</b> : <b>Créer</b> → <b>Copier la demande</b> → colle-la dans Claude. Il lit le chapitre et range le quiz dans Pirouette." },
+  { art: `<div class="w-col"><div class="w-tabs"><span class="on">Aujourd'hui</span><span>Quiz</span><span>Cartes</span><span>Suivi</span></div>
+          <div class="w-today"><i></i><b>Révision du jour</b><span>Commencer</span></div></div>`,
+    title: "Une matière, quatre onglets",
+    text: "<b>Aujourd'hui</b> : ta révision du jour. <b>Quiz</b> et <b>Cartes</b> : tu choisis combien en faire, en glissant dans la barre orange. <b>Suivi</b> : ta progression et ton rétroplanning. Pour organiser tes cours : <b>✎ Mes cours</b>, à droite du titre." },
   { art: `<div class="w-cards"><div class="w-mini silver"><div>◇ NOUVELLE<em>L'ADN ?</em><span>001</span></div></div>
           <div class="w-mini gold"><div>◆◆ EN COURS<em>La mitochondrie ?</em><span>002</span></div></div>
           <div class="w-mini holo"><div>★ ACQUISE<em>Le neurone ?</em><span>003</span></div></div></div>`,
     title: "Un peu chaque jour",
-    text: "Tes flashcards reviennent <b>au bon moment</b>, avec des questions de tes quiz. Chaque carte gagne en rareté quand tu la sais : argent, or, puis <b>holographique</b>. Tout se fait aussi au clavier." },
+    text: "Tes flashcards reviennent <b>au bon moment</b>, avec des questions de tes quiz. Chaque carte gagne en rareté quand tu la sais : argent, or, puis <b>holographique</b>." },
+  { art: `<div class="w-col"><div class="w-phone"><i></i><b>Ta séance du jour</b><span>Commencer</span></div>
+          <span class="w-check">✓ Même hors connexion</span></div>`,
+    title: "Aussi sur ton téléphone",
+    text: "<b>Réglages › Téléphone et tablette</b> : scanne le code avec ton iPhone, ton iPad ou ton Android, et révise partout. Tes réponses reviennent sur ton ordinateur." },
   { art: `<div class="w-col"><div class="w-cal">${"l1 . l2 l1 . l3 . l2 l1 . l3 l2 . l1 . l2 l3 l1 l2 exam exam".split(" ").map((c) => `<i class="${c === "." ? "" : c}"></i>`).join("")}</div>
           <span class="w-flag">Partiels dans <b>26 jours</b></span></div>`,
     title: "Prêt le jour J",
-    text: "Indique ta <b>semaine de partiels</b> : Pirouette prépare un <b>rétroplanning</b> chapitre par chapitre, et tu t'entraînes avec des <b>partiels blancs</b> notés sur 20.",
+    text: "Indique ta <b>semaine de partiels</b> : les révisions s'organisent pour que tout soit revu à temps, et tu t'entraînes avec des <b>partiels blancs</b> notés sur 20.",
     last: "Importer un cours" },
 ];
 // Les nouveautés de chaque version (le carton « Quoi de neuf » ne s'affiche que si la version en a)
 const WHATS_NEW = {
+  "0.67.0": [
+    ["✦", "Une présentation à jour", "Elle se remontre une fois : le « + », les onglets d'une matière, le téléphone"],
+    ["+", "Le « + » plus précis", "Il s'ouvre seulement quand la souris est dessus, et devient orange"],
+  ],
   "0.66.5": [
     ["〰", "Un tic plus discret", "La barre orange ne fait plus « tic » à chaque nombre, seulement aux repères (5, 10, 15…)"],
   ],
@@ -5175,7 +5187,7 @@ $("#welcome-dialog").addEventListener("cancel", () => closeWelcome(false));  // 
 function showWelcome(settings, { replay = false } = {}) {
   api("/api/courses").then((courses) => {
     openWelcome(WELCOME, { onDone: (finished) => {
-      if (!replay) api("/api/settings", jsonBody("PUT", { welcome_seen: "1" })).catch(() => {});
+      if (!replay) api("/api/settings", jsonBody("PUT", { welcome_seen: WELCOME_VERSION })).catch(() => {});
       // Dernier carton, sans cours encore : on crée le premier
       if (finished && !courses.length) { go("#/cours"); setTimeout(() => $("#new-course-btn")?.click(), 300); }
     } });
@@ -5259,7 +5271,8 @@ $("#prepare-local-off").addEventListener("click", (e) => {
 
 // Au lancement : les cartons une seule fois, puis le « Quoi de neuf » de chaque version qui en a
 api("/api/settings").then((settings) => {
-  if (!settings.welcome_seen) return showWelcome(settings);
+  // La présentation, la première fois, et une fois de plus quand l'interface a beaucoup changé (WELCOME_VERSION)
+  if (settings.welcome_seen !== WELCOME_VERSION) return showWelcome(settings);
   if (settings.news_seen !== settings.version && WHATS_NEW[settings.version]) return showWhatsNew(settings.version);
 }).catch(() => {});
 $("#welcome-replay").addEventListener("click", () => showWelcome(null, { replay: true }));

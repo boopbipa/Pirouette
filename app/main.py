@@ -233,8 +233,8 @@ async def save_settings(body: SettingsIn) -> dict:
         store.save_settings(theme=None if body.theme == "auto" else body.theme)
     if body.welcome_seen is not None:
         # « 1 » : les cartons de bienvenue ont été vus ; une version (« 0.39.0 ») : ses nouveautés ont été vues
-        if body.welcome_seen == "1":
-            store.save_settings(welcome_seen="1", news_seen=updater.__version__)
+        if body.welcome_seen.isdigit() and len(body.welcome_seen) <= 3:  # « 1 », « 2 »… : quelle présentation a été vue
+            store.save_settings(welcome_seen=body.welcome_seen, news_seen=updater.__version__)
         else:
             store.save_settings(news_seen=body.welcome_seen[:20])
     if body.live_intro is not None:
