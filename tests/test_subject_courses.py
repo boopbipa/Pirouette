@@ -82,3 +82,17 @@ def test_random_questions_from_all_quizzes(tmp_path, monkeypatch):
     assert one["questions"] == 1
     glossary_only = client.get(f"/api/session?mode=quiz&course={cid}&file={glossary}").json()
     assert glossary_only["questions"] == 10 and all(i["question"]["question"].startswith("G") for i in glossary_only["items"])
+
+
+def test_today_of_one_course_is_not_crowded_out_by_the_others(tmp_path, monkeypatch):
+    # Le premier cours de la matière a beaucoup de cartes nouvelles : la révision du jour d'un autre cours (fichier)
+    # doit quand même proposer les siennes (le quota de nouvelles cartes se répartit après le choix du cours)
+    client, cid, cm1, glossary = _subject(tmp_path, monkeypatch)
+    many = [{"id": f"m{i}", "front": f"Moi {i} ?", "back": "r", "status": "new", "scope": ["Chapitre 1 — Le moi"]} for i in range(60)]
+    late = [{"id": f"g{i}", "front": f"Latent {i} ?", "back": "r", "status": "new", "scope": ["20. Contenu latent"],
+             "origin": ["Glossaire.txt — 20. Contenu latent"]} for i in range(5)]
+    main.store.save_doc(cid, "cards", {"cards": many + late})
+    today = client.get(f"/api/session?mode=today&course={cid}&file={glossary}&questions=0").json()
+    assert today["cards"] == 5 and {i["card"]["id"] for i in today["items"]} == {f"g{i}" for i in range(5)}
+    decks = client.get(f"/api/cards/decks?course={cid}&file={glossary}").json()
+    assert decks["all"]["due"] == 5

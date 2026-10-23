@@ -100,6 +100,11 @@ const jobsState = { list: [], timer: null, open: false, keepOpen: false, seen: n
 // La page défile dans #page-scroll (la barre du haut reste fixe, même quand la page rebondit en fin de défilement)
 const pageScroll = () => document.getElementById("page-scroll");
 function show(view) {
+  // Réviser ↔ Mes cours d'une matière : le titre et les onglets restent à leur place, seul le dessous apparaît
+  // (sinon toute la page refait son entrée, comme si on changeait d'endroit)
+  const before = document.querySelector(".view:not([hidden])")?.id;
+  const pair = ["view-review-scope", "view-course"];
+  document.body.classList.toggle("same-subject", pair.includes(before) && pair.includes(`view-${view}`));
   document.querySelectorAll(".view").forEach((v) => (v.hidden = v.id !== `view-${view}`));
   document.body.classList.toggle("on-home", view === "home");  // l'accueil a déjà son grand logo au centre
   // Séances, quiz et partiels : mode concentration (fond noir, rien que la carte ou la question)
@@ -4991,6 +4996,11 @@ const WELCOME = [
 ];
 // Les nouveautés de chaque version (le carton « Quoi de neuf » ne s'affiche que si la version en a)
 const WHATS_NEW = {
+  "0.73.2": [
+    ["✓", "Révision du jour d'un seul cours", "Choisir un cours de la matière (« Le rêve »…) propose bien ses cartes du jour"],
+    ["✎", "Mise à jour avec Claude", "L'encart « Ton cours a changé » disparaît dès que Claude a mis le cours à jour"],
+    ["↔", "Plus fluide", "Passer de Réviser à Mes cours ne recharge plus toute la page : le titre et les onglets restent en place"],
+  ],
   "0.73.1": [
     ["▢", "Tes cartes à part", "Dans Cartes : d'un côté « Réviser tes cartes », de l'autre ta collection, pour les voir et les modifier"],
   ],

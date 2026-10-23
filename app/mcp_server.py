@@ -226,6 +226,12 @@ class Pirouette:
     def __init__(self, store):
         self.store = store
 
+    def _news_done(self, course: dict) -> None:
+        """Claude a écrit dans un cours qui a une nouvelle version en attente : c'est la mise à jour (même sans
+        fini=true), l'encart « Ton cours a changé » disparaît."""
+        if any(self.store.previous_text(course["id"], f["id"]) is not None for f in course["files"]):
+            self.store.forget_previous(course["id"])
+
     def _course(self, course_id: str) -> dict:
         try:
             return self.store.get_course(str(course_id))
@@ -400,6 +406,7 @@ class Pirouette:
             quiz_id = self.store.save_quiz(new_quiz)["id"]
             done = f"Quiz « {new_quiz['title']} » enregistré dans Pirouette : {len(kept)} question{'s' if len(kept) > 1 else ''}."
         done += f" Identifiant du quiz : {quiz_id}. L'étudiant le trouve dans Réviser › {course['name']}."
+        self._news_done(course)
         return done + (f"\n\nQuestions refusées ({len(refused)}) — corrige-les (sans le demander à l'étudiant) et renvoie-les "
                        f"avec quiz=\"{quiz_id}\" : elles s'ajouteront à ce quiz.\n{report}" if refused else "")
 
@@ -430,6 +437,7 @@ class Pirouette:
             lines.append(f"{duplicates} carte{'s' if duplicates > 1 else ''} ignorée{'s' if duplicates > 1 else ''} : vide ou déjà présente.")
         if not new:
             raise ToolError("\n".join(lines))
+        self._news_done(course)
         return "\n".join(lines)
 
     # ---- Nouvelle version d'un cours ----

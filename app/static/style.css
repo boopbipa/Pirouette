@@ -2479,7 +2479,7 @@ body.card-zoomed .tcg-pile, body.card-zoomed .focus-close, body.card-zoomed .day
 .scope-nav .scope-tabs { margin: 0; }
 .manage-pill a { display: inline-flex; align-items: center; gap: 7px; }
 .manage-pill svg { width: 14px; height: 14px; }
-.course-nav { margin: 6px 0 18px; }
+.course-nav { margin: 13px 0 18px; }
 /* Un menu « ⋯ » ouvert passe au-dessus des éléments qui suivent (le quiz suivant cachait « Exporter », « Supprimer ») */
 .quiz-item:has(.kebab-menu:not([hidden])), .binder-slot:has(.kebab-menu:not([hidden])), .file-item:has(.kebab-menu:not([hidden])),
 .head-actions:has(.kebab-menu:not([hidden])), .course-tab:has(.kebab-menu:not([hidden])) { position: relative; z-index: 40; }
@@ -2555,3 +2555,10 @@ body.focus.day .ratings.locked .rating-flip { background: rgba(0, 0, 0, .05); co
 .card-library > h2 { font-size: 20px; margin: 0 0 4px; }
 .card-library > h2 small { font-size: 15px; font-weight: 500; }
 .card-library .card-grid-wrap { margin-top: 14px; }
+/* Aujourd'hui / Quiz / Cartes / Suivi / Mes cours : l'onglet actif en gras « dessiné », sans changer sa largeur,
+   pour que la barre reste exactement à la même place d'un onglet à l'autre */
+.scope-nav .scope-tabs a.active { font-weight: inherit; text-shadow: 0 0 .65px currentColor, 0 0 .65px currentColor; }
+body.same-subject #view-course:not([hidden]), body.same-subject #view-review-scope:not([hidden]) { animation: none; }
+body.same-subject #view-course:not([hidden]) > :not(#course-overview),
+body.same-subject #view-course:not([hidden]) > #course-overview > :not(.course-head):not(.scope-nav),
+body.same-subject #view-review-scope:not([hidden]) > :not(.scope-head):not(.scope-nav) { animation: view-in .18s ease-out; }

@@ -210,13 +210,16 @@ class Store:
                     items.append({"quiz": quiz, "index": index, "stat": stat})
         return sorted(items, key=lambda i: (i["stat"] or {}).get("date") or "")
 
-    def today_cards(self, course_ids: list[str] | None = None, today: date | None = None) -> list[dict]:
+    def today_cards(self, course_ids: list[str] | None = None, today: date | None = None, only=None) -> list[dict]:
         """Cartes du jour : celles dont la date de rappel est arrivée (les plus en retard d'abord), puis des
-        nouvelles cartes, au plus `srs.NEW_PER_DAY` par jour. Chaque élément : {course, card}."""
+        nouvelles cartes, au plus `srs.NEW_PER_DAY` par jour. Chaque élément : {course, card}.
+        `only(course, card)` : un seul cours (fichier) d'une matière, choisi avant de répartir les nouvelles cartes."""
         today = today or date.today()
         due, new = [], []
         needed = 0  # nouvelles cartes à voir chaque jour pour tout avoir vu avant les partiels
         for course, cards in self._decks(course_ids):
+            if only:
+                cards = [card for card in cards if only(course, card)]
             exam = self.exam_info(course, today)
             fresh = []
             for card in cards:

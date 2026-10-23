@@ -1464,6 +1464,12 @@ async def session(mode: str = "today", course: str = "", folder: str = "", filte
             items = random.sample(result["items"], min(size, len(result["items"])))
             return result | {"items": items, "cards": 0, "questions": len(items)}
         return result
+    if file and course and mode != "quiz":
+        # Un seul cours (fichier) de la matière : on le choisit AVANT de limiter la séance (taille du jour, nouvelles
+        # cartes), sinon les autres cours de la matière prennent toute la place et celui-ci paraît « à jour »
+        ids, keep = _pick(f"{course}:{file}")
+        return _session(mode, "", "", filter, questions, minutes, chapter, ids=ids, keep=keep,
+                        only=lambda owner, card: _file_of(owner, card) == file)
     result = _session(mode, course, folder, filter, questions, minutes, chapter)
     if mode == "quiz":
         # Quelques questions au hasard dans tous les quiz (du cours choisi, de la matière…), le tirage après le filtre
@@ -1475,15 +1481,7 @@ async def session(mode: str = "today", course: str = "", folder: str = "", filte
             items = [i for i in items if _file_of(owner, quizzes.get(i["quiz_id"], {})) == file]
         items = random.sample(items, min(size, len(items)))
         return result | {"items": items, "cards": 0, "questions": len(items)}
-    if not file or not course:
-        return result
-    # Un seul cours (fichier) de la matière : ses cartes et les questions de ses quiz
-    owner = store.get_course(course)
-    quizzes = {q["id"]: q for q in store.list_quizzes() if q.get("course_id") == course}
-    keep = [i for i in result["items"]
-            if _file_of(owner, i["card"] if i["kind"] == "card" else quizzes.get(i["quiz_id"], {})) == file]
-    return result | {"items": keep, "cards": sum(i["kind"] == "card" for i in keep),
-                     "questions": sum(i["kind"] == "question" for i in keep)}
+    return result
 
 
 def _parse_pick(pick: str) -> dict[str, set[str] | None]:
@@ -1647,7 +1645,7 @@ async def review_sets() -> list[dict]:
             ids, keep = _pick(item["pick"])
         except HTTPException:
             continue  # tous ses cours ont été supprimés
-        due = sum(1 for e in store.today_cards(ids) if keep(_card_item(e)))
+        due = len(store.today_cards(ids, only=lambda c, card: keep(_card_item({"course": c, "card": card}))))
         out.append(item | {"due": due})
     return out
 
@@ -1671,7 +1669,7 @@ async def delete_review_set(set_id: str) -> list[dict]:
 
 
 def _session(mode: str, course: str, folder: str, filter: str, questions: bool, minutes: int, chapter: str,
-             ids: list[str] | None = None, keep=None) -> dict:
+             ids: list[str] | None = None, keep=None, only=None) -> dict:
     """Une séance de révision : `today` (cartes du jour + questions de quiz à reposer), `weak` (points faibles),
     `plan` (séance du plan : les cartes les plus difficiles choisies en priorité, à la taille choisie), `chapter` (les cartes
     d'un chapitre, pour le rétroplanning) ou `cards` (les cartes d'un cours)."""
@@ -1708,7 +1706,7 @@ def _session(mode: str, course: str, folder: str, filter: str, questions: bool, 
     # Mode Flashcards de Réviser : un paquet (du jour, points faibles, tout) peut se limiter à un chapitre
     in_chapter = (lambda e: _same_title(chapter, e["card"].get("scope") or [])) if chapter else (lambda e: True)
     if mode == "today":
-        cards = [i for i in (_card_item(e) for e in store.today_cards(ids) if in_chapter(e)) if keep(i)]
+        cards = [i for i in (_card_item(e) for e in store.today_cards(ids, only=only) if in_chapter(e)) if keep(i)]
         weak = [i for i in (_question_item(e) for e in store.weak_questions(ids)) if keep(i)][:SESSION_QUESTIONS]
         later = [i for i in (_question_item(e) for e in store.review_questions(ids)) if keep(i)]
         asked = (weak + later[:SESSION_QUESTIONS - len(weak)]) if questions else []
@@ -1758,7 +1756,8 @@ async def card_decks(course: str = "", folder: str = "", file: str = "") -> dict
     """Les paquets du mode Flashcards de Réviser : pour tout le périmètre et pour chaque chapitre, le nombre de
     cartes à revoir aujourd'hui, de cartes où l'on bloque et de cartes en tout."""
     ids = _scope(course, folder)
-    due = {e["card"]["id"] for e in store.today_cards(ids)}
+    only = (lambda c, card: _file_of(c, card) == file) if file else None  # noqa: E731
+    due = {e["card"]["id"] for e in store.today_cards(ids, only=only)}
     weak = {e["card"]["id"] for e in store.weak_cards(ids)}
     count = lambda cards: {"due": sum(c["id"] in due for c in cards), "weak": sum(c["id"] in weak for c in cards),  # noqa: E731
                            "total": len(cards)}

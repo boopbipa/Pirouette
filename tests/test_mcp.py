@@ -269,3 +269,16 @@ def test_claude_updates_a_course_after_a_new_version(tmp_path):
     text, error = _call(store, "pirouette_corriger", cours=cid, fini=True)
     assert not error and "terminée" in text
     assert store.previous_text(cid, fid) is None and store.outdated_items(cid) == {"questions": [], "cards": []}
+
+
+def test_news_card_goes_away_once_claude_adds_to_the_course(tmp_path):
+    # Claude a fait la mise à jour (cartes ajoutées) sans terminer par fini=true : l'encart ne doit pas rester
+    store, cid = _store(tmp_path)
+    added = "Les nœuds de Ranvier sont les interruptions de la gaine de myéline entre deux segments."
+    version = TEXT + "\n" + added
+    store.add_file(cid, "neuro.txt", version.encode(), version, [{"title": "Chapitre 1 : Le neurone", "line": 0}], 2)
+    fid = store.get_course(cid)["files"][0]["id"]
+    assert store.previous_text(cid, fid) is not None
+    _, error = _call(store, "pirouette_ajouter_cartes", cours=cid, cartes=[
+        {"recto": "Nœuds de Ranvier ?", "verso": "Les interruptions de la gaine de myéline", "source": added}])
+    assert not error and store.previous_text(cid, fid) is None
