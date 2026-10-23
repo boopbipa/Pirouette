@@ -2015,22 +2015,30 @@ function m1Bar(box, { min, max, value, onChange = () => {}, unit = ["question", 
     box.dataset.last = n;
     onChange(n);
   };
-  const fromX = (x) => {
+  // Maj enfoncée : de 5 en 5 (sans dépasser les deux bouts)
+  const fromX = (x, five = false) => {
     const r = box.getBoundingClientRect();
     const share = Math.max(0, Math.min(1, ((x - r.left) / r.width - .28) / .72));
-    set(min + share * (max - min));
+    let n = min + share * (max - min);
+    if (five) n = share >= 1 ? max : Math.max(min, Math.round(n / 5) * 5);
+    set(n);
   };
   box.onpointerdown = (e) => {
     box.setPointerCapture(e.pointerId);
     box.classList.add("dragging");
-    fromX(e.clientX);
-    box.onpointermove = (ev) => fromX(ev.clientX);
+    fromX(e.clientX, e.shiftKey);
+    box.onpointermove = (ev) => fromX(ev.clientX, ev.shiftKey);
     box.onpointerup = () => { box.classList.remove("dragging"); box.onpointermove = null; };
   };
   box.onkeydown = (e) => {
     const step = { ArrowRight: 1, ArrowUp: 1, ArrowLeft: -1, ArrowDown: -1 }[e.key];
-    if (step) { e.preventDefault(); set(Number(box.dataset.value) + step); }
+    if (!step) return;
+    e.preventDefault();
+    const now = Number(box.dataset.value);
+    // Maj + flèche : au multiple de 5 suivant (ou précédent)
+    set(e.shiftKey ? (step > 0 ? Math.floor(now / 5) * 5 + 5 : Math.ceil(now / 5) * 5 - 5) : now + step);
   };
+
   set(value);
   box.dataset.ready = "1";
   return () => Number(box.dataset.value);
@@ -3154,7 +3162,7 @@ function showCard() {
   $("#card-back").textContent = card.back;
   $("#card-back-question").textContent = card.front;
   $("#card-source").innerHTML = card.source ? `« ${escapeHtml(plainMd(card.source))} »` : "";
-  $("#card-front-hint").textContent = typing ? "Écris ta réponse ci-dessous" : "Clique ou appuie sur Espace pour retourner";
+  $("#card-front-hint").textContent = typing ? "Écris ta réponse ci-dessous" : "";
   $("#typed-area").hidden = !typing;
   $("#typed-answer").value = "";
   $("#typed-answer").disabled = false;
@@ -3233,12 +3241,15 @@ $(".tcg-table").addEventListener("pointermove", (e) => {
   const y = (e.clientY - table.top - el.offsetTop) / el.offsetHeight;
   if (x < 0 || x > 1 || y < 0 || y > 1) return flattenCard();
   el.classList.add("tilting");
-  el.style.setProperty("--ry", `${(x - 0.5) * 16}deg`);
-  el.style.setProperty("--rx", `${(0.5 - y) * 14}deg`);
+  // Près des bords, l'inclinaison s'efface en douceur : en entrant par un bord (ou en sortant), la carte ne saute plus
+  // d'un coup de plat à penchée, que la souris vienne du centre ou de l'extérieur.
+  const edge = Math.min(1, Math.min(x, 1 - x, y, 1 - y) / 0.14);
+  el.style.setProperty("--ry", `${(x - 0.5) * 16 * edge}deg`);
+  el.style.setProperty("--rx", `${(0.5 - y) * 14 * edge}deg`);
   el.style.setProperty("--mx", `${x * 100}%`);
   el.style.setProperty("--my", `${y * 100}%`);
-  el.style.setProperty("--sx", `${(0.5 - x) * 30}px`);
-  el.style.setProperty("--sy", `${(0.5 - y) * 22}px`);
+  el.style.setProperty("--sx", `${(0.5 - x) * 30 * edge}px`);
+  el.style.setProperty("--sy", `${(0.5 - y) * 22 * edge}px`);
 });
 // Zoom : pincer sur le trackpad, la souris sur la carte (Safari : événements « gesture », sinon molette + ctrl).
 // Plafonné pour que la carte tienne dans la fenêtre (et ne soit jamais floue ou trop grosse pour se lire).
@@ -3741,6 +3752,16 @@ $("#flashcard").addEventListener("click", () => {
   if (swipe.justDragged) return;
   if (!window.getSelection().toString()) flipCard();
 });
+// « ⋯ » sous la carte : modifier ou supprimer la carte
+const closeCardMore = () => { $("#card-more-menu").hidden = true; $("#card-more-btn").setAttribute("aria-expanded", "false"); };
+$("#card-more-btn").addEventListener("click", (e) => {
+  e.stopPropagation();
+  const open = $("#card-more-menu").hidden;
+  $("#card-more-menu").hidden = !open;
+  $("#card-more-btn").setAttribute("aria-expanded", String(open));
+});
+document.addEventListener("click", (e) => { if (!e.target.closest("#card-keys")) closeCardMore(); });
+$("#card-more-menu").addEventListener("click", closeCardMore);
 $("#card-edit-current").addEventListener("click", () => {
   const s = state.session;
   const item = s.items[s.index];
@@ -4076,42 +4097,100 @@ function chapterChips(list, chosen, attr) {
     ...list.map((c, i) => `<button type="button" class="${chosen === i ? "active" : ""}" ${attr}="${i}">${
       several ? `${escapeHtml(c.course)} · ` : ""}${escapeHtml(shortChapter(c.title))}</button>`)].join("");
 }
+// Onglet Cartes : ton paquet, et la barre pour choisir combien de cartes (d'abord celles à revoir, puis celles où tu
+// bloques, puis les autres). Dessous, un bouton rond déplie la grille de toutes les cartes.
+const GRID_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" aria-hidden="true"><rect x="4" y="4" width="7" height="7" rx="1.5"/><rect x="13" y="4" width="7" height="7" rx="1.5"/><rect x="4" y="13" width="7" height="7" rx="1.5"/><rect x="13" y="13" width="7" height="7" rx="1.5"/></svg>';
 function renderDecks() {
   const data = state.cardDecks;
   if (!data) return;
-  const chapters = data.chapters;
-  if (state.deckChapter !== null && !chapters[state.deckChapter]) state.deckChapter = null;
-  const ch = state.deckChapter === null ? null : chapters[state.deckChapter];
-  const n = ch || data.all;
-  $("#cards-chapters").innerHTML = "";  // les chapitres ne sont plus proposés ici (pour l'instant)
   state.deckChapter = null;
-  const deck = (kind, title, text, count, badge) => `<button type="button" class="deck ${kind}" data-deck="${kind}" ${count ? "" : "disabled"}>
-    ${badge ? `<em>${badge}</em>` : ""}<span class="deck-pile" aria-hidden="true"><i></i><i></i><i>${CARD_BACK}</i></span>
-    <b>${title}</b><small>${text}</small></button>`;
-  $("#card-decks").innerHTML = !data.all.total
-    ? `<p class="muted">Pas encore de flashcards : crée-les depuis « Mes cours ».</p>`
-    : deck("due", "À revoir aujourd'hui", n.due ? "Les cartes que la répétition espacée te ramène" : "Rien à revoir : tout est à jour", n.due, n.due || "")
-      + deck("weak", "Là où je bloque", n.weak ? `Les ${plural(n.weak, "carte", "cartes")} que tu rates le plus` : "Aucune carte difficile pour l'instant", n.weak, "")
-      + deck("all", "Tout le paquet", `${plural(n.total, "carte", "cartes")}, mélangées${ch ? ` · ${escapeHtml(shortChapter(ch.title))}` : ""}`, n.total, "");
-  $("#mode-cartes-note").textContent = data.all.total
-    ? `${plural(data.all.total, "carte", "cartes")}${data.all.due ? ` · ${data.all.due} à revoir` : ""}` : "aucune carte";
+  $("#cards-chapters").innerHTML = "";
+  const n = data.all;
+  $("#mode-cartes-note").textContent = n.total ? `${plural(n.total, "carte", "cartes")}${n.due ? ` · ${n.due} à revoir` : ""}` : "aucune carte";
+  if (!n.total) {
+    $("#card-decks").innerHTML = `<p class="muted">Pas encore de flashcards : crée-les depuis « Mes cours ».</p>`;
+    return;
+  }
+  $("#card-decks").innerHTML = `<div class="c1">
+      <div class="c1-pile" aria-hidden="true"><i></i><i></i><i><b>${n.due || n.total}</b><small>${n.due ? "à revoir" : "cartes"}</small></i></div>
+      <div class="c1-main">
+        <p class="c1-lbl">Combien de cartes ?</p>
+        <div class="c1-row"><div class="m1" id="deck-bar"></div><button class="primary" type="button" id="deck-go">Réviser →</button></div>
+        <p class="muted small-text c1-note">${n.due ? `D'abord les ${plural(n.due, "carte", "cartes")} à revoir aujourd'hui, ` : "Tout est à jour : "}${n.weak ? `puis les ${n.weak} où tu bloques, ` : ""}puis les autres.</p>
+        ${n.weak ? `<button class="ghost small c1-chip" type="button" id="deck-weak">Seulement là où je bloque <em>${n.weak}</em></button>` : ""}
+      </div>
+    </div>
+    <div class="grid-toggle"><button class="grid-btn" type="button" id="grid-btn" aria-expanded="false" title="Voir toutes les cartes">${GRID_ICON}</button>
+      <span class="muted small-text">Voir toutes les cartes</span></div>
+    <div class="card-grid-wrap" id="card-grid" hidden></div>`;
+  const min = Math.min(5, n.total);
+  state.deckCount = m1Bar($("#deck-bar"), { min, max: n.total, value: Math.min(n.total, Math.max(min, state.deckValue || n.due || 10)),
+    unit: ["carte", "cartes"], onChange: (v) => { state.deckValue = v; } });
 }
-$("#cards-chapters").addEventListener("click", (e) => {
-  const chip = e.target.closest("[data-deck-chapter]");
-  if (!chip) return;
-  state.deckChapter = chip.dataset.deckChapter === "" ? null : Number(chip.dataset.deckChapter);
-  renderDecks();
+const deckWhere = () => ({ ...reviewScope(), ...(state.reviewFile ? { file: state.reviewFile.id } : {}) });
+async function deckItems(mode) {
+  return (await api(`/api/session?${new URLSearchParams({ ...deckWhere(), mode, filter: "all", questions: "0" })}`)).items;
+}
+$("#card-decks").addEventListener("click", async (e) => {
+  if (e.target.closest("#deck-go")) {
+    // À revoir (dans l'ordre de la répétition espacée), puis où je bloque, puis les autres au hasard
+    const [today, weak, all] = await Promise.all([deckItems("today"), deckItems("weak"), deckItems("cards")]);
+    const seen = new Set(), order = [];
+    for (const item of [...today, ...weak, ...shuffle(all)]) if (!seen.has(item.card.id)) { seen.add(item.card.id); order.push(item); }
+    const items = order.slice(0, state.deckCount ? state.deckCount() : 10);
+    if (items.length) runSession(items, { title: "Flashcards", back: state.reviewScope.hash });
+  }
+  if (e.target.closest("#deck-weak")) startSession({ ...deckWhere(), mode: "weak", filter: "all", questions: "0" }, { title: "Là où je bloque", back: state.reviewScope.hash });
+  if (e.target.closest("#grid-btn")) toggleCardGrid();
+  const filter = e.target.closest("[data-grid-filter]");
+  if (filter) { state.grid.filter = filter.dataset.gridFilter; drawCardGrid(); }
+  const card = e.target.closest(".gcard");
+  if (card) card.classList.toggle("flipped");
+  if (e.target.closest("#grid-go")) runSession(gridShown(), { title: "Flashcards", back: state.reviewScope.hash });
 });
-$("#card-decks").addEventListener("click", (e) => {
-  const deck = e.target.closest("[data-deck]");
-  if (!deck || deck.disabled) return;
-  const ch = state.deckChapter === null ? null : state.cardDecks.chapters[state.deckChapter];
-  const mode = { due: "today", weak: "weak", all: "cards" }[deck.dataset.deck];
-  const where = { ...(ch ? { course: ch.course_id, chapter: ch.title } : reviewScope()), ...(state.reviewFile ? { file: state.reviewFile.id } : {}) };
-  const title = { due: "Flashcards du jour", weak: "Là où je bloque", all: "Tout le paquet" }[deck.dataset.deck];
-  startSession({ ...where, mode, filter: "all", questions: "0" },
-    { title: ch ? `${title} · ${shortChapter(ch.title)}` : title, back: state.reviewScope.hash });
+$("#card-decks").addEventListener("input", (e) => {
+  if (e.target.id === "grid-search") { state.grid.q = e.target.value; drawCardGrid(false); }
 });
+
+// La grille : toutes les cartes, avec leur état ; un clic retourne une carte
+const cardDue = (c) => !c.reviews || (c.due ? c.due <= new Date().toISOString().slice(0, 10) : c.status !== "known");
+const cardWeak = (c) => Boolean(c.reviews) && (c.last_rating === "again" || c.status === "review" || (c.lapses || 0) >= 2 || (c.ease ?? 2.5) <= 2.1);
+const GRID_TESTS = { all: () => true, due: cardDue, weak: cardWeak, known: (c) => Boolean(c.reviews) && !cardDue(c) && !cardWeak(c) };
+const cardState = (c) => !c.reviews ? "new" : cardWeak(c) ? "weak" : cardDue(c) ? "due" : "known";
+const CARD_STATES = { due: "À revoir", weak: "Je bloque", known: "Sue", new: "Nouvelle" };
+async function toggleCardGrid() {
+  const box = $("#card-grid"), btn = $("#grid-btn");
+  const open = box.hidden;
+  box.hidden = !open;
+  btn.setAttribute("aria-expanded", String(open));
+  btn.classList.toggle("open", open);
+  if (!open) return;
+  const items = await deckItems("cards");  // toujours dans le même ordre : par cours, puis comme dans le paquet
+  items.sort((a, b) => a.course_name.localeCompare(b.course_name) || a.card.id.localeCompare(b.card.id));
+  state.grid = { items, filter: "all", q: "" };
+  drawCardGrid();
+}
+function gridShown() {
+  const g = state.grid, q = normalize(g.q || "");
+  return g.items.filter((i) => GRID_TESTS[g.filter](i.card) && (!q || normalize(`${i.card.front} ${i.card.back}`).includes(q)));
+}
+function drawCardGrid(full = true) {
+  const g = state.grid, shown = gridShown();
+  const count = (f) => g.items.filter((i) => GRID_TESTS[f](i.card)).length;
+  const several = new Set(g.items.map((i) => i.course_id)).size > 1;
+  const cards = shown.map((i) => `<button type="button" class="gcard" style="--c:${subjectColor(i.course_id)}">
+      <span class="gface gfront">${several ? `<span class="gtag"><i></i>${escapeHtml(i.course_name)}</span>` : ""}<span class="gtxt">${escapeHtml(plainMd(i.card.front))}</span>
+        <span class="gstate ${cardState(i.card)}">${CARD_STATES[cardState(i.card)]}</span></span>
+      <span class="gface gback"><span class="gtxt">${escapeHtml(plainMd(i.card.back))}</span></span></button>`).join("")
+    || `<p class="muted small-text">Aucune carte ici.</p>`;
+  if (!full && $("#grid-cards")) { $("#grid-cards").innerHTML = cards; $("#grid-go").textContent = `Réviser ces ${plural(shown.length, "carte", "cartes")}`; return; }
+  $("#card-grid").innerHTML = `<div class="grid-head">
+      <div class="filters mini">${[["all", `Toutes · ${g.items.length}`], ["due", `À revoir · ${count("due")}`], ["weak", `Je bloque · ${count("weak")}`], ["known", `Sues · ${count("known")}`]]
+        .map(([f, label]) => `<button type="button" class="${g.filter === f ? "active" : ""}" data-grid-filter="${f}">${label}</button>`).join("")}</div>
+      <input type="text" id="grid-search" placeholder="Rechercher…" value="${escapeHtml(g.q)}" autocomplete="off">
+      <button class="primary small" type="button" id="grid-go">Réviser ces ${plural(shown.length, "carte", "cartes")}</button>
+    </div><div class="grid-cards" id="grid-cards">${cards}</div>`;
+}
 state.deckChapter = null;
 
 // Mode Quiz : tous les quiz du cours ou du semestre
@@ -4759,6 +4838,7 @@ function applyShortcuts(settings) {
   const saved = Object.entries(settings.shortcuts || {}).filter(([id]) => id in DEFAULT_KEYS);
   state.keys = { ...DEFAULT_KEYS, ...Object.fromEntries(saved) };
   state.keysInstant = Boolean(settings.keys_instant);
+  setFocusLight(Boolean(settings.focus_light));
   renderKeyHints();
 }
 api("/api/settings").then(applyShortcuts).catch(() => {});
@@ -4778,9 +4858,6 @@ const isKey = (e, id) => pressedKey(e) === state.keys[id];
 // Les touches rappelées sur l'écran : sous les boutons et devant les réponses
 function renderKeyHints() {
   $("#validate-key").textContent = keyName(state.keys.validate);
-  $("#card-keys-text").textContent = cardMode() === "type"
-    ? `${keyName(state.keys.validate)} pour vérifier, puis glisse la carte (ou ${keyName(state.keys.again)} / ${keyName(state.keys.good)})`
-    : `${keyName(state.keys.flip)} pour retourner la carte, puis glisse-la (ou ${keyName(state.keys.again)} / ${keyName(state.keys.good)})`;
   document.querySelectorAll("#ratings [data-rating]").forEach((b) => {
     let hint = b.querySelector("kbd");
     if (!hint) b.append(hint = Object.assign(document.createElement("kbd"), { className: "key-hint" }));
@@ -4924,6 +5001,12 @@ const WELCOME = [
 ];
 // Les nouveautés de chaque version (le carton « Quoi de neuf » ne s'affiche que si la version en a)
 const WHATS_NEW = {
+  "0.68.0": [
+    ["▦", "Tes flashcards en un coup d'œil", "Choisis combien de cartes réviser, et déplie la grille de tout ton paquet"],
+    ["☾", "Mode jour ou nuit", "Un petit interrupteur en haut des quiz et des séances"],
+    ["⋯", "Des cartes plus épurées", "Plus de texte d'aide ; « ⋯ » pour modifier ou supprimer une carte"],
+    ["⇧", "De 5 en 5", "Garde Maj enfoncée en glissant la jauge"],
+  ],
   "0.67.1": [
     ["☺", "Amis plus clairs", "Une poubelle pour retirer un ami, et l'ajout par code toujours visible"],
   ],
@@ -7817,6 +7900,30 @@ function renderThemeChoice(theme) {
     b.setAttribute("aria-checked", String(b.dataset.themeChoice === theme));
   });
 }
+// Pendant une séance ou un quiz : un petit interrupteur soleil / lune, pour passer en mode jour ou en mode nuit
+// (la séance seulement : le reste de l'app garde son apparence)
+const SUN_MOON = '<span class="dn-knob"><svg class="dn-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>'
+  + '<svg class="dn-moon" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/></svg></span>';
+function setFocusLight(light) {
+  document.body.classList.toggle("day", light);
+  document.querySelectorAll(".day-night").forEach((b) => {
+    b.setAttribute("aria-checked", String(!light));
+    b.title = light ? "Passer en mode nuit" : "Passer en mode jour";
+  });
+}
+document.querySelectorAll("#view-cards .quiz-head, #view-quiz .quiz-head").forEach((head) => {
+  const pills = head.querySelector(".quiz-head-pills") || head.querySelector(".pill");
+  const button = Object.assign(document.createElement("button"), { type: "button", className: "day-night", innerHTML: SUN_MOON });
+  button.setAttribute("role", "switch");
+  button.setAttribute("aria-label", "Mode nuit");
+  pills.before(button);
+  button.addEventListener("click", async () => {
+    const light = !document.body.classList.contains("day");
+    setFocusLight(light);
+    await api("/api/settings", jsonBody("PUT", { focus_light: light })).catch(() => {});
+  });
+});
+setFocusLight(false);
 document.querySelector(".theme-choice").addEventListener("click", async (e) => {
   const theme = e.target.closest("[data-theme-choice]")?.dataset.themeChoice;
   if (!theme) return;

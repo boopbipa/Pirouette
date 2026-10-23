@@ -142,6 +142,7 @@ class SettingsIn(BaseModel):
     shortcuts: dict[str, str] | None = None  # touches du clavier choisies (action → touche) ; {} = par défaut
     keys_instant: bool | None = None    # au clavier, valider dès qu'on choisit une réponse
     theme: str | None = None            # « auto » (comme l'ordinateur), « light » (clair) ou « dark » (sombre)
+    focus_light: bool | None = None     # séances et quiz en mode jour (fond clair) plutôt qu'en mode nuit
     welcome_seen: str | None = None     # cartons de bienvenue vus (« 1 ») / dernière version dont on a vu les nouveautés
     backup_mode: str | None = None      # sauvegarde automatique : "open" (à l'ouverture), "week", "off"
     live_intro: bool | None = None      # l'explication du quiz en direct a été vue (montrée une seule fois)
@@ -172,6 +173,7 @@ def _settings_view() -> dict:
         "shortcuts": store.get_settings().get("shortcuts") or {},
         "keys_instant": bool(store.get_settings().get("keys_instant", False)),
         "theme": store.get_settings().get("theme", "auto"),
+        "focus_light": bool(store.get_settings().get("focus_light", False)),
         "live_intro": bool(store.get_settings().get("live_intro")),
         "last_folder": store.get_settings().get("last_folder", ""),  # semestre où l'on a rangé un cours en dernier
         "welcome_seen": store.get_settings().get("welcome_seen") or "",
@@ -231,6 +233,8 @@ async def save_settings(body: SettingsIn) -> dict:
         if body.theme not in ("auto", "light", "dark"):
             raise HTTPException(400, "Thème inconnu.")
         store.save_settings(theme=None if body.theme == "auto" else body.theme)
+    if body.focus_light is not None:
+        store.save_settings(focus_light=body.focus_light)
     if body.welcome_seen is not None:
         # « 1 » : les cartons de bienvenue ont été vus ; une version (« 0.39.0 ») : ses nouveautés ont été vues
         if body.welcome_seen.isdigit() and len(body.welcome_seen) <= 3:  # « 1 », « 2 »… : quelle présentation a été vue

@@ -1149,7 +1149,7 @@
                 <span class="tcg-body">
                   <span class="tcg-head"><span class="tcg-set" data-card-set></span><span class="tcg-rarity" data-card-rarity></span></span>
                   <span class="tcg-art"><span id="card-front"></span></span>
-                  <span class="tcg-text"><small id="card-front-hint">Clique ou appuie sur Espace pour retourner</small></span>
+                  <span class="tcg-text"><small id="card-front-hint"></small></span>
                   <span class="tcg-foot"><span data-card-number></span><svg class="tcg-cat" aria-hidden="true"><use href="#logo"/></svg><span class="tcg-course" data-card-course></span></span>
                 </span>
                 <span class="tcg-glare"></span>
@@ -1177,9 +1177,14 @@
           <button type="button" class="rating again" data-rating="again"><span class="rating-ic" aria-hidden="true">✕</span><b>Je ne savais pas</b></button>
           <button type="button" class="rating good" data-rating="good"><span class="rating-ic" aria-hidden="true">✓</span><b>Je savais</b></button>
         </div>
-        <p class="muted small-text center" id="card-keys"><span id="card-keys-text"></span> ·
-          <button class="link-button inline" type="button" id="card-edit-current">Modifier cette carte</button> ·
-          <button class="link-button inline danger" type="button" id="card-delete-current">Supprimer cette carte</button></p>
+        <div class="card-more" id="card-keys">
+          <button class="icon card-more-btn" type="button" id="card-more-btn" aria-haspopup="true" aria-expanded="false" title="Cette carte" aria-label="Options de la carte">
+            <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.9"/><circle cx="12" cy="12" r="1.9"/><circle cx="19" cy="12" r="1.9"/></svg></button>
+          <div class="card-more-menu" id="card-more-menu" hidden>
+            <button type="button" id="card-edit-current">Modifier cette carte</button>
+            <button type="button" class="danger" id="card-delete-current">Supprimer cette carte</button>
+          </div>
+        </div>
       </div>
       <div id="question-stage" hidden>
         <div class="card question-card">
