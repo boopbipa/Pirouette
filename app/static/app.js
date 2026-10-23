@@ -4130,7 +4130,6 @@ async function renderScopeMain() {
 
 // Onglet Cartes : ton paquet, et la barre pour choisir combien de cartes (d'abord celles à revoir, puis celles où tu
 // bloques, puis les autres). Dessous, un bouton rond déplie la grille de toutes les cartes.
-const PEEK_ARROW = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>';
 function renderDecks() {
   const data = state.cardDecks;
   if (!data) return;
@@ -4138,6 +4137,7 @@ function renderDecks() {
   $("#cards-chapters").innerHTML = "";
   const n = data.all;
   $("#mode-cartes-note").textContent = n.total ? `${plural(n.total, "carte", "cartes")}${n.due ? ` · ${n.due} à revoir` : ""}` : "aucune carte";
+  $("#card-library").hidden = true;
   if (!n.total) {
     const single = state.reviewScope?.single;
     $("#card-decks").innerHTML = `<p class="muted">Pas encore de flashcards${single ? "." : " : crée-les depuis une matière."}</p>`
@@ -4152,9 +4152,13 @@ function renderDecks() {
         <div class="c1-row"><div class="m1" id="deck-bar"></div><button class="primary" type="button" id="deck-go">Réviser →</button></div>
         <p class="muted small-text c1-note">${n.due ? `D'abord les ${plural(n.due, "carte", "cartes")} à revoir aujourd'hui, ` : "Tout est à jour : "}${n.weak ? `puis les ${n.weak} où tu bloques, ` : ""}puis les autres.</p>
       </div>
-    </div>
-    <div class="card-grid-wrap peek" id="deck-grid"></div>
-    <button class="peek-arrow" type="button" id="peek-arrow" title="Voir toutes les cartes" aria-label="Voir toutes les cartes">${PEEK_ARROW}</button>`;
+    </div>`;
+  // Tes cartes : un bloc à part, sous la révision ; le haut des cartes dépasse jusqu'à ce qu'on fasse défiler
+  $("#card-library").hidden = false;
+  $("#card-library-count").textContent = `· ${n.total}`;
+  $("#deck-grid").classList.add("peek");
+  $("#deck-grid").style.maxHeight = "";
+  $("#peek-arrow").hidden = false;
   state.grid = { items: [], filter: "all", q: "" };
   reloadCardGrid();
   const min = Math.min(5, n.total);
@@ -4165,7 +4169,8 @@ const deckWhere = () => ({ ...reviewScope(), ...(state.reviewFile ? { file: stat
 async function deckItems(mode) {
   return (await api(`/api/session?${new URLSearchParams({ ...deckWhere(), mode, filter: "all", questions: "0" })}`)).items;
 }
-$("#card-decks").addEventListener("click", async (e) => {
+["#card-decks", "#card-library"].forEach((box) => $(box).addEventListener("click", onDecksClick));
+async function onDecksClick(e) {
   if (e.target.closest("#deck-go")) {
     // À revoir (dans l'ordre de la répétition espacée), puis où je bloque, puis les autres au hasard
     const [today, weak, all] = await Promise.all([deckItems("today"), deckItems("weak"), deckItems("cards")]);
@@ -4202,13 +4207,13 @@ $("#card-decks").addEventListener("click", async (e) => {
     return;
   }
   if (e.target.closest("#grid-write")) {
-    return openCardDialog(null, { courseId: state.reviewScope.params.course, onSaved: () => ($("#deck-grid") ? reloadCardGrid() : route()) });
+    return openCardDialog(null, { courseId: state.reviewScope.params.course, onSaved: () => ($("#card-library").hidden ? route() : reloadCardGrid()) });
   }
   const card = e.target.closest(".gcard");
   if (card) card.classList.toggle("flipped");
   if (e.target.closest("#grid-go")) runSession(gridShown(), { title: "Flashcards", back: state.reviewScope.hash });
-});
-$("#card-decks").addEventListener("input", (e) => {
+}
+$("#card-library").addEventListener("input", (e) => {
   if (e.target.id === "grid-search") { state.grid.q = e.target.value; drawCardGrid(false); }
 });
 
@@ -4222,7 +4227,7 @@ function revealCardGrid() {
   if (!box?.classList.contains("peek")) return;
   box.style.maxHeight = "150px";
   box.classList.remove("peek");
-  $("#peek-arrow").remove();
+  $("#peek-arrow").hidden = true;
   requestAnimationFrame(() => { box.style.maxHeight = `${box.scrollHeight}px`; });
   box.addEventListener("transitionend", () => { box.style.maxHeight = ""; }, { once: true });
 }
@@ -4986,6 +4991,9 @@ const WELCOME = [
 ];
 // Les nouveautés de chaque version (le carton « Quoi de neuf » ne s'affiche que si la version en a)
 const WHATS_NEW = {
+  "0.73.1": [
+    ["▢", "Tes cartes à part", "Dans Cartes : d'un côté « Réviser tes cartes », de l'autre ta collection, pour les voir et les modifier"],
+  ],
   "0.73.0": [
     ["▢", "Toutes tes cartes dans Cartes", "Elles dépassent sous la barre : fais défiler pour les voir. Le crayon pour modifier, « + Écrire une carte » pour en ajouter"],
     ["≡", "Mes cours en accordéon", "Un clic sur un cours le déplie juste en dessous, un second le replie"],

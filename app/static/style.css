@@ -2550,3 +2550,8 @@ body.focus.day .ratings.locked .rating-flip { background: rgba(0, 0, 0, .05); co
 .cards-link small { color: var(--muted); }
 .cards-link span:last-child { margin-left: auto; color: var(--accent-ink); font-weight: 600; font-size: 14px; }
 .grid-head #grid-go { margin-left: auto; }
+/* Tes cartes : à part de l'outil de révision, posées sur le fond de la page comme une collection */
+.card-library { margin: 34px 0 0; }
+.card-library > h2 { font-size: 20px; margin: 0 0 4px; }
+.card-library > h2 small { font-size: 15px; font-weight: 500; }
+.card-library .card-grid-wrap { margin-top: 14px; }

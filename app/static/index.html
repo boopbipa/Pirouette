@@ -262,10 +262,17 @@
 
         <!-- Flashcards seules : un paquet (du jour, où je bloque, tout), pour tout le cours ou un chapitre -->
         <div class="card cards-mode" data-mode="cartes">
-          <h2>Flashcards</h2>
+          <h2>Réviser tes cartes</h2>
           <div class="chips chapter-chips" id="cards-chapters" role="radiogroup" aria-label="Chapitre" hidden></div>
           <div class="decks" id="card-decks"></div>
         </div>
+
+        <!-- Tes cartes, à part de la révision : les voir, les modifier, en ajouter (le haut dépasse dans un fondu) -->
+        <section class="card-library" id="card-library" data-mode="cartes" hidden>
+          <h2>Tes cartes <small class="muted" id="card-library-count"></small></h2>
+          <div class="card-grid-wrap peek" id="deck-grid"></div>
+          <button class="peek-arrow" type="button" id="peek-arrow" title="Voir toutes les cartes" aria-label="Voir toutes les cartes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>
+        </section>
 
         <div class="scope-section" id="scope-quizzes-box" data-mode="quiz">
           <div class="quiz-mix" id="quiz-mix" hidden>
