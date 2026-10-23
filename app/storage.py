@@ -25,6 +25,33 @@ from pathlib import Path
 from . import srs
 
 
+
+def file_of(course: dict, item: dict) -> str | None:
+    """Le cours (fichier) d'où vient un quiz ou une carte, dans une matière à plusieurs fichiers : d'après le fichier
+    noté à la création (« fichier — chapitre »), sinon d'après ses chapitres (un titre présent dans plusieurs fichiers,
+    comme « Début du document », revient au premier fichier qui l'a)."""
+    files = course.get("files") or []
+    if not files:
+        return None
+    for source in item.get("sources") or item.get("origin") or []:
+        name = str(source).split(" — ")[0]
+        match = next((f["id"] for f in files if f["name"] == name), None)
+        if match:
+            return match
+    norm = lambda t: " ".join(re.findall(r"\w+", str(t).lower()))  # noqa: E731
+    wanted = {norm(t) for t in item.get("scope") or []}
+    for f in files:
+        titles = {norm(c["title"]) for c in f.get("chapters") or []} or {norm(f["name"])}
+        if titles & wanted:
+            return f["id"]
+    return files[0]["id"]
+
+
+def file_label(entry: dict) -> str:
+    """Le nom affiché d'un fichier (cours) : celui choisi (« Renommer »), sinon le nom sans extension ni « _ »."""
+    name = re.sub(r"\.[^.]+$", "", entry["name"])
+    return entry.get("title") or " ".join(name.replace("_", " ").split()) or entry["name"]
+
 class NotFound(KeyError):
     pass
 

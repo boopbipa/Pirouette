@@ -17,7 +17,7 @@ from datetime import date, timedelta
 import segno
 
 from .online import Online, OnlineError
-from .storage import NotFound, _now
+from .storage import NotFound, _now, file_label, file_of
 
 WEB_URL = "https://boopbipa.github.io/Pirouette/"
 BATCH_BYTES = 500_000          # documents envoyés par paquets d'environ 500 Ko
@@ -34,10 +34,16 @@ def build_docs(store) -> dict[tuple[str, str], dict]:
     """Tout ce qui part en ligne, document par document : (« meta », « all »), (« deck », cours), (« quiz », quiz)."""
     docs: dict[tuple[str, str], dict] = {}
     courses = []
+    quizzes = [json.loads(path.read_text(encoding="utf-8")) for path in store.quizzes_dir.glob("*.json")]
     for course in store.list_courses():
         exam = store.exam_info(course)
+        files = course.get("files") or []
         courses.append({"id": course["id"], "name": course["name"], "folder_id": course.get("folder_id"),
-                        "color": course.get("color"), "exam": exam["date"] if exam else None})
+                        "color": course.get("color"), "exam": exam["date"] if exam else None,
+                        # Ses cours (fichiers), et le cours de chaque quiz : le téléphone range les quiz par cours
+                        "files": [{"id": f["id"], "name": file_label(f)} for f in files],
+                        "quiz_files": {q["id"]: file_of(course, q) for q in quizzes
+                                       if q.get("course_id") == course["id"] and len(files) > 1}})
         cards = (store.get_doc(course["id"], "cards") or {}).get("cards", [])
         if cards:
             docs[("deck", course["id"])] = {"course_id": course["id"],
@@ -50,8 +56,7 @@ def build_docs(store) -> dict[tuple[str, str], dict]:
         "new_per_day": store.new_per_day(),
         "activity": {day: v for day, v in store.activity().items() if day >= since},
     }
-    for path in store.quizzes_dir.glob("*.json"):
-        quiz = json.loads(path.read_text(encoding="utf-8"))
+    for quiz in quizzes:
         if quiz.get("questions"):
             docs[("quiz", quiz["id"])] = quiz
     return docs

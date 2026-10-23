@@ -4267,9 +4267,45 @@ function renderScopeQuizzes() {
   }
   $("#quiz-mix-text").textContent = `Au hasard dans ${state.reviewFile ? `« ${fileLabel(state.reviewFile)} »` : "toute la matière"}, `
     + `d'abord les questions ratées ou jamais vues. `;
-  $("#scope-quizzes").innerHTML = all.length ? all.map((q) => quizItem(q, null, null, { play: true })).join("")
-    : `<li class="empty muted">Pas encore de quiz : crée-les depuis « Mes cours ».</li>`;
+  const files = state.reviewFile ? [] : state.reviewFiles || [];
+  if (!all.length) {
+    $("#scope-quizzes").innerHTML = `<li class="empty muted">Pas encore de quiz : crée-les depuis « Mes cours ».</li>`;
+    return;
+  }
+  if (files.length < 2) {
+    $("#scope-quizzes").innerHTML = all.map((q) => quizItem(q, null, null, { play: true })).join("");
+    return;
+  }
+  // Une matière à plusieurs cours (fichiers) : les quiz rangés par cours, chacun avec sa jauge « au hasard »
+  const groups = files.map((f) => ({ f, quizzes: all.filter((q) => ownerFile(q.scope, q.sources, files)?.id === f.id) }))
+    .filter((g) => g.quizzes.length);
+  state.fileMix = {};
+  $("#scope-quizzes").innerHTML = groups.map(({ f, quizzes }) => {
+    const n = quizzes.reduce((sum, q) => sum + q.count, 0);
+    return `<li class="quiz-file"><div class="quiz-file-head"><strong>${escapeHtml(fileLabel(f))}</strong>
+        <small class="muted">${plural(quizzes.length, "quiz", "quiz")} · ${plural(n, "question", "questions")}</small></div>
+      ${n >= 2 ? `<div class="quiz-mix file-mix"><div class="m1" data-file-bar="${f.id}" data-total="${n}"></div>
+        <button class="ghost" type="button" data-file-mix="${f.id}">Au hasard →</button></div>` : ""}</li>`
+      + quizzes.map((q) => quizItem(q, null, null, { play: true })).join("");
+  }).join("");
+  document.querySelectorAll("[data-file-bar]").forEach((bar) => {
+    const total = Number(bar.dataset.total), min = Math.min(QUIZ_MIN, total), id = bar.dataset.fileBar;
+    state.fileMix[id] = m1Bar(bar, { min, max: total, value: Math.min(total, Math.max(min, state.mixValue || size)), onChange: () => {} });
+  });
 }
+// « Au hasard » dans un seul cours (fichier) de la matière
+$("#scope-quizzes").addEventListener("click", async (e) => {
+  const button = e.target.closest("[data-file-mix]");
+  if (!button) return;
+  const f = (state.reviewFiles || []).find((x) => x.id === button.dataset.fileMix);
+  try {
+    const data = await api("/api/custom-quiz", jsonBody("POST", { ...reviewScope(), file: f.id,
+      questions: state.fileMix[f.id] ? state.fileMix[f.id]() : 10, cards: 0 }));
+    runSession(data.items, { title: `Quiz au hasard · ${fileLabel(f)}`, back: state.reviewScope.hash });
+  } catch (err) {
+    notify(err.message);
+  }
+});
 
 // Quelques questions au hasard dans tous les quiz du choix (un cours ou toute la matière)
 $("#quiz-mix-start").addEventListener("click", async () => {
@@ -5058,6 +5094,10 @@ const WELCOME = [
 ];
 // Les nouveautés de chaque version (le carton « Quoi de neuf » ne s'affiche que si la version en a)
 const WHATS_NEW = {
+  "0.70.0": [
+    ["▤", "Quiz rangés par cours", "Dans une matière à plusieurs cours, chaque cours a ses quiz et sa jauge « au hasard »"],
+    ["☾", "Jour / nuit sur le téléphone", "L'interrupteur soleil / lune en haut des quiz et des cartes, aussi sur ton téléphone"],
+  ],
   "0.69.11": [
     ["⤢", "Plein écran", "Sur un Mac à encoche, le haut de la page n'est plus caché sous la barre"],
   ],

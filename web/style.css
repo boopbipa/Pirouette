@@ -8,14 +8,23 @@
   --display: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", system-ui, sans-serif;
   color-scheme: light dark;
 }
+/* Sombre : comme le téléphone, sauf pendant une séance où l'on a choisi jour ou nuit (l'interrupteur en haut) */
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme="light"]) {
     --bg: #161412; --surface: #221F1C; --sunken: #12100F; --text: #F5F3EF; --muted: #A19B94; --border: #34302C;
     --accent: #C9663A; --accent-soft: #3E2317; --on-accent: #FFF6EE;
     --right-soft: #1F2A1E; --wrong-soft: #34211C;
     --shadow: 0 0 0 .5px rgba(255, 255, 255, .06), 0 12px 28px -18px rgba(0, 0, 0, .8);
   }
 }
+:root[data-theme="dark"] {
+    --bg: #161412; --surface: #221F1C; --sunken: #12100F; --text: #F5F3EF; --muted: #A19B94; --border: #34302C;
+    --accent: #C9663A; --accent-soft: #3E2317; --on-accent: #FFF6EE;
+    --right-soft: #1F2A1E; --wrong-soft: #34211C;
+    --shadow: 0 0 0 .5px rgba(255, 255, 255, .06), 0 12px 28px -18px rgba(0, 0, 0, .8);
+  color-scheme: dark;
+}
+:root[data-theme="light"] { color-scheme: light; }
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 html, body { margin: 0; background: var(--bg); color: var(--text); font-family: var(--sans); font-size: 16px; line-height: 1.4;
   -webkit-text-size-adjust: 100%; }
@@ -114,7 +123,8 @@ input:focus { border-color: var(--accent); background: var(--surface); }
 .rate { border: 0; border-radius: 18px; padding: 16px 10px; font-weight: 600; font-size: 16px; cursor: pointer; }
 .rate.again { background: var(--wrong-soft); color: var(--wrong); }
 .rate.good { background: var(--right-soft); color: #4E7A49; }
-@media (prefers-color-scheme: dark) { .rate.good { color: var(--right); } }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .rate.good { color: var(--right); } }
+:root[data-theme="dark"] .rate.good { color: var(--right); }
 .rate:active { transform: scale(.97); }
 
 .question .q { font-size: 21px; font-weight: 600; letter-spacing: -.01em; line-height: 1.35; margin: 10px 0 20px; }
@@ -226,3 +236,22 @@ body.with-tabbar main { padding-bottom: calc(env(safe-area-inset-bottom) + 96px)
 .tabbar a span { display: block; line-height: 1; white-space: nowrap; }
 .tabbar a.on { color: var(--accent); font-weight: 600; }
 body.with-tabbar .toast { bottom: calc(env(safe-area-inset-bottom) + 82px); }
+
+/* L'interrupteur jour / nuit des séances (soleil / lune), à droite du compteur */
+.day-night { position: relative; flex: none; width: 50px; height: 28px; padding: 0; border-radius: 999px; cursor: pointer;
+  border: 1px solid var(--border); background: var(--sunken); }
+.dn-knob { position: absolute; top: 2px; left: 2px; width: 22px; height: 22px; border-radius: 50%; background: var(--surface);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, .25); display: grid; place-items: center; color: #D08A1E; transition: transform .25s ease; }
+.dn-knob svg { grid-area: 1 / 1; width: 14px; height: 14px; transition: opacity .2s; }
+.dn-moon { opacity: 0; }
+.day-night[aria-checked="true"] { background: rgba(255, 255, 255, .14); border-color: rgba(255, 255, 255, .22); }
+.day-night[aria-checked="true"] .dn-knob { transform: translateX(22px); background: #5A5A5E; color: #E9E4FF; }
+.day-night[aria-checked="true"] .dn-sun { opacity: 0; }
+.day-night[aria-checked="true"] .dn-moon { opacity: 1; }
+
+/* Onglet Quiz d'une matière à plusieurs cours : un titre par cours, sa jauge et « Au hasard » */
+.file-title { display: flex; align-items: baseline; gap: 8px; text-transform: none; letter-spacing: -.01em; font-size: 17px; color: var(--text); margin-top: 28px; }
+.file-title small { font-size: 13px; font-weight: 400; color: var(--muted); }
+.file-mix { display: flex; align-items: center; gap: 10px; margin: 0 0 10px; }
+.file-mix .m1 { flex: 1; }
+.file-mix .ghost { flex: none; padding: 11px 14px; }

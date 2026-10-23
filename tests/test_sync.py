@@ -1,4 +1,5 @@
 import asyncio
+import json
 import uuid
 
 import httpx
@@ -42,7 +43,10 @@ def test_push_sends_only_what_changed_and_never_the_course_files(tmp_path, fake)
     assert kinds == [("deck", course["id"]), ("meta", "all"), ("quiz", "a1b2c3d4e5f6")]
     assert first["pushed"] == 3
     meta = next(r["data"] for r in fake.tables["sync_docs"] if r["kind"] == "meta")
-    assert meta["courses"][0]["name"] == "Neurosciences" and "files" not in meta["courses"][0]
+    assert meta["courses"][0]["name"] == "Neurosciences"
+    # Des cours (fichiers), seulement le nom et l'identifiant : jamais leur texte ni leurs chapitres
+    assert all(set(f) == {"id", "name"} for f in meta["courses"][0]["files"])
+    assert "neurone" not in json.dumps(meta["courses"], ensure_ascii=False).lower()
     assert run(s.run())["pushed"] == 0  # rien n'a changé
     store.delete_quiz("a1b2c3d4e5f6")
     again = run(s.run())

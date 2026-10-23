@@ -43,7 +43,7 @@ from .partiel import BATCH, GRADE_SCHEMA, GRADE_SYSTEM, build_grade_prompt, read
 from .quiz import (CHARS_PER_CARD, CHARS_PER_QUESTION, COURSE_SHARES, QUESTION_TYPES, QuizOptions,  # noqa: E402
                    assemble_quiz, cards_coverage_size, chunk_text, coverage_size, normalize_question)
 from .revision import STOPWORDS, is_duplicate, normalize_cards  # noqa: E402
-from .storage import NotFound, Store  # noqa: E402
+from .storage import NotFound, Store, file_of  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent
 # Claude est mis de côté pour l'instant : seule l'IA locale est proposée. PIROUETTE_CLAUDE=1 le réactive.
@@ -1850,25 +1850,7 @@ def _retro_units(ids: list[str], skip: set[str]) -> tuple[list[dict], list[dict]
     return units, [{"id": c["id"], "name": c["name"]} for c in courses if c["files"]]
 
 
-def _file_of(course: dict, item: dict) -> str | None:
-    """Le cours (fichier) d'où vient un quiz ou une carte, dans une matière à plusieurs fichiers : d'après le fichier
-    noté à la création (« fichier — chapitre »), sinon d'après ses chapitres (un titre présent dans plusieurs fichiers,
-    comme « Début du document », revient au premier fichier qui l'a)."""
-    files = course.get("files") or []
-    if not files:
-        return None
-    for source in item.get("sources") or item.get("origin") or []:
-        name = str(source).split(" — ")[0]
-        match = next((f["id"] for f in files if f["name"] == name), None)
-        if match:
-            return match
-    norm = lambda t: " ".join(re.findall(r"\w+", str(t).lower()))  # noqa: E731
-    wanted = {norm(t) for t in item.get("scope") or []}
-    for f in files:
-        titles = {norm(c["title"]) for c in f.get("chapters") or []} or {norm(f["name"])}
-        if titles & wanted:
-            return f["id"]
-    return files[0]["id"]
+_file_of = file_of  # (dans storage : la synchro avec le téléphone s'en sert aussi)
 
 
 def _same_title(title: str, scope: list[str]) -> bool:

@@ -558,6 +558,12 @@ function renderSubject(id, tab = "") {
   const weak = all.filter((x) => isWeak(x.card));
   const quizzes = quizzesOf(id);
   const pool = quizzes.reduce((n, q) => n + q.questions.length, 0);
+  // Une matière à plusieurs cours (fichiers) : ses quiz rangés par cours (le Mac dit de quel cours vient chaque quiz)
+  const owner = course.quiz_files || {};
+  const groups = (course.files || []).map((f) => ({ name: f.name, quizzes: quizzes.filter((q) => owner[q.id] === f.id) }))
+    .filter((g) => g.quizzes.length);
+  const loose = quizzes.filter((q) => !(course.files || []).some((f) => f.id === owner[q.id]));
+  if (groups.length && loose.length) groups.push({ name: "Autres quiz", quizzes: loose });
   const m = mastery(id);
   const href = (t) => `#/m/${encodeURIComponent(id)}${t ? `/${t}` : ""}`;
   const row = (attr, title, sub, disabled = false) => `<button class="row" type="button" ${attr} ${disabled ? "disabled" : ""}>
@@ -572,9 +578,16 @@ function renderSubject(id, tab = "") {
       </section>
       ${weak.length ? `<nav class="list">${row('id="weak"', "Là où tu bloques", plural(weak.length, "carte", "cartes"))}</nav>` : ""}`;
   } else if (tab === "quiz") {
+    const quizRows = (list) => `<nav class="list">${list.map((q) => row(`data-quiz="${esc(q.id)}"`, esc(q.title || "Quiz"),
+      plural(q.questions.length, "question", "questions"))).join("")}</nav>`;
     body = !quizzes.length ? `<p class="muted center">Pas encore de quiz dans cette matière.</p>` : `
       ${pool >= 2 ? `<div class="m1" id="mix"></div><button class="primary random-quiz" type="button" id="random"></button>` : ""}
-      <nav class="list">${quizzes.map((q) => row(`data-quiz="${esc(q.id)}"`, esc(q.title || "Quiz"), plural(q.questions.length, "question", "questions"))).join("")}</nav>`;
+      ${groups.length > 1 ? groups.map((g, i) => {
+        const n = g.quizzes.reduce((sum, q) => sum + q.questions.length, 0);
+        return `<h2 class="file-title">${esc(g.name)} <small>${plural(n, "question", "questions")}</small></h2>
+          ${n >= 2 ? `<div class="file-mix"><div class="m1" data-file-bar="${i}"></div><button class="ghost" type="button" data-file-go="${i}">Au hasard →</button></div>` : ""}
+          ${quizRows(g.quizzes)}`;
+      }).join("") : quizRows(quizzes)}`;
   } else {
     body = !all.length ? `<p class="muted center">Pas encore de flashcards dans cette matière.</p>` : `
       ${all.length >= 2 ? `<div class="m1" id="deck"></div>` : ""}<button class="primary random-quiz" type="button" id="cards-go"></button>
@@ -611,6 +624,13 @@ function renderSubject(id, tab = "") {
     } });
     $("#random").addEventListener("click", () => startRandom(quizzes, course.name, n));
   }
+  app.querySelectorAll("[data-file-bar]").forEach((bar) => {
+    const g = groups[Number(bar.dataset.fileBar)];
+    const total = g.quizzes.reduce((sum, q) => sum + q.questions.length, 0), min = Math.min(5, total);
+    let n = Math.min(total, Math.max(min, S.mixValue || 10));
+    m1Bar(bar, { min, max: total, value: n, onChange: (v) => { n = v; } });
+    app.querySelector(`[data-file-go="${bar.dataset.fileBar}"]`).addEventListener("click", () => startRandom(g.quizzes, g.name, n));
+  });
 }
 
 // Un petit « tic » à chaque cran : vibration très courte sur Android ; sur iPhone (iOS 18 et plus), le seul moyen
@@ -667,6 +687,7 @@ function m1Bar(box, { min, max, value, onChange, unit = ["question", "questions"
 function startSession(list, { title = "", free = false, quiz = null } = {}) {
   if (!list.length) return;
   session = { list: list.slice(0, 200), index: 0, ok: 0, title, free, quiz, back: location.hash || "#/" };
+  sessionTheme(true);
   tabBar();
   draw();
 }
@@ -680,11 +701,32 @@ function draw() {
 function startCards(items, title, { free = false } = {}) {
   startSession(items.map((x) => ({ kind: "card", ...x })), { title, free });
 }
+// Jour ou nuit pendant les séances : un choix gardé sur ce téléphone (sinon, comme le téléphone)
+const darkNow = () => document.documentElement.dataset.theme === "dark"
+  || (!document.documentElement.dataset.theme && matchMedia("(prefers-color-scheme: dark)").matches);
+function sessionTheme(on) {
+  let saved = "";
+  try { saved = localStorage.getItem("pirouette.sessionTheme") || ""; } catch {}
+  if (on && saved) document.documentElement.dataset.theme = saved;
+  else delete document.documentElement.dataset.theme;
+}
+const SUN_MOON = '<span class="dn-knob"><svg class="dn-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>'
+  + '<svg class="dn-moon" viewBox="0 0 24 24" fill="currentColor"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/></svg></span>';
 function sessionHead() {
   const s = session, total = s.list.length;
   return `<header class="session-top"><button class="icon-btn" type="button" id="quit" aria-label="Arrêter">${ICON.close}</button>
-    <div class="bar"><i style="width:${(100 * s.index) / total}%"></i></div><span class="count">${Math.min(s.index + 1, total)}/${total}</span></header>`;
+    <div class="bar"><i style="width:${(100 * s.index) / total}%"></i></div><span class="count">${Math.min(s.index + 1, total)}/${total}</span>
+    <button class="day-night" type="button" role="switch" aria-label="Mode nuit" aria-checked="${darkNow()}">${SUN_MOON}</button></header>`;
 }
+// L'interrupteur (dans chaque en-tête de séance)
+document.addEventListener("click", (e) => {
+  const button = e.target.closest(".day-night");
+  if (!button) return;
+  const theme = darkNow() ? "light" : "dark";
+  try { localStorage.setItem("pirouette.sessionTheme", theme); } catch {}
+  document.documentElement.dataset.theme = theme;
+  button.setAttribute("aria-checked", String(theme === "dark"));
+});
 function drawCard({ course, card }) {
   app.innerHTML = `${sessionHead()}
     <div class="stage"><div class="flash" id="flash" style="--c:${colorOf(course)}" role="button" tabindex="0" aria-label="Retourner la carte">
@@ -834,6 +876,7 @@ function endSession(ask) {
   }
   const back = session.back;
   session = null;
+  sessionTheme(false);  // le reste de l'app : comme le téléphone
   view = null;
   if (location.hash !== back) location.hash = back; else route();
 }
