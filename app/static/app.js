@@ -5065,6 +5065,9 @@ const WELCOME = [
 ];
 // Les nouveautés de chaque version (le carton « Quoi de neuf » ne s'affiche que si la version en a)
 const WHATS_NEW = {
+  "0.74.7": [
+    ["✦", "Une lumière plus douce", "Au survol de la révision du jour, la couleur naît sous « Commencer » et s'élargit en douceur, sans bord net"],
+  ],
   "0.74.6": [
     ["→", "Des bandeaux qui invitent à commencer", "Passe la souris sur la révision du jour : la couleur de « Commencer » s'étend sur tout le bandeau"],
   ],

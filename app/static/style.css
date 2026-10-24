@@ -2593,20 +2593,19 @@ input, textarea, [contenteditable] { -webkit-user-select: text; user-select: tex
 .course-card .mastery-ring.done span { font-size: 16px; }
 
 /* Les bandeaux qui lancent la révision du jour (Mes matières, et « Révision du jour » d'une matière) : tout le bandeau
-   est le bouton. Au survol, la couleur de « Commencer » (celle de l'app, comme le bouton) part du bouton et se répand sur le bandeau, le bouton s'éclaire
-   et une flèche apparaît. */
-.go-banner { position: relative; overflow: hidden; isolation: isolate; cursor: pointer; transition: box-shadow .3s ease; }
-.go-banner::before { content: ""; position: absolute; inset: 0; z-index: -1; pointer-events: none;
-  background: linear-gradient(100deg, transparent 0%, color-mix(in srgb, var(--accent) 16%, transparent) 40%,
-    color-mix(in srgb, var(--accent) 50%, transparent) 100%);
-  clip-path: inset(0 0 0 100%); transition: clip-path .5s cubic-bezier(.2, .8, .2, 1); }
-.go-banner:hover::before, .go-banner:focus-visible::before { clip-path: inset(0 0 0 0); }
-.go-banner:hover, .go-banner:focus-visible { box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 45%, transparent),
-  0 18px 34px -18px color-mix(in srgb, var(--accent) 80%, transparent); }
-/* Le bandeau d'une matière est en colonne (bouton en bas) : la couleur monte depuis le bouton */
-#scope-main .go-banner::before { background: linear-gradient(0deg, color-mix(in srgb, var(--accent) 45%, transparent) 0%,
-    color-mix(in srgb, var(--accent) 14%, transparent) 55%, transparent 100%); clip-path: inset(100% 0 0 0); }
-#scope-main .go-banner:hover::before, #scope-main .go-banner:focus-visible::before { clip-path: inset(0 0 0 0); }
+   est le bouton. Au survol, une lumière de la couleur de « Commencer » naît sous le bouton et s'élargit en douceur,
+   bords flous (comme une lampe qu'on allume) ; le bouton s'éclaire et une flèche apparaît. */
+.go-banner { --go-x: 88%; --go-y: 50%; --go-w: 95%; --go-h: 260%; position: relative; overflow: hidden; isolation: isolate; cursor: pointer; transition: box-shadow .4s ease; }
+@property --go-s { syntax: "<number>"; inherits: false; initial-value: .08; }
+.go-banner::before { content: ""; position: absolute; inset: 0; z-index: -1; pointer-events: none; --go-s: .08;
+  background: radial-gradient(ellipse calc(var(--go-w) * var(--go-s)) calc(var(--go-h) * var(--go-s)) at var(--go-x) var(--go-y), color-mix(in srgb, var(--accent) 48%, transparent) 0%,
+    color-mix(in srgb, var(--accent) 22%, transparent) 40%, color-mix(in srgb, var(--accent) 6%, transparent) 70%, transparent 100%);
+  opacity: 0; transition: --go-s .8s cubic-bezier(.2, .8, .2, 1), opacity .4s ease; }
+.go-banner:hover::before, .go-banner:focus-visible::before { --go-s: 1; opacity: 1; }
+.go-banner:hover, .go-banner:focus-visible { box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 40%, transparent),
+  0 18px 34px -18px color-mix(in srgb, var(--accent) 75%, transparent); }
+/* Le bandeau d'une matière est en colonne : la lumière naît sous le bouton, en bas au milieu */
+#scope-main .go-banner { --go-x: 50%; --go-y: 82%; --go-w: 75%; --go-h: 120%; }
 .go-btn { transition: filter .25s, box-shadow .25s; }
 .go-btn::after { content: "→"; display: inline-block; max-width: 0; margin-left: 0; opacity: 0; overflow: hidden; vertical-align: top;
   transition: max-width .3s ease, margin-left .3s ease, opacity .25s ease, transform .3s ease; transform: translateX(-6px); }
