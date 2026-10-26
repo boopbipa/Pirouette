@@ -38,6 +38,7 @@ if (ON_WINDOWS) {
 // Petites icônes dessinées (pas d'emoji dans l'app).
 const svgIcon = (path) => `<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${path}</svg>`;
 const ICON_EDIT = svgIcon('<path d="M4 20h4L19 9l-4-4L4 16z"/><path d="m13.5 6.5 4 4"/>');
+const ICON_GEAR = svgIcon('<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>');
 const ICON_CALENDAR = svgIcon('<rect x="3.5" y="5" width="17" height="15" rx="2"/><path d="M3.5 10h17M8 3v4M16 3v4"/>');
 const ICON_ALERT = svgIcon('<path d="M4 5.5A1.5 1.5 0 0 1 5.5 4h13A1.5 1.5 0 0 1 20 5.5v9a1.5 1.5 0 0 1-1.5 1.5H10l-4.5 4v-4A1.5 1.5 0 0 1 4 14.5z"/><path d="M12 7.5v3.5M12 13.6h.01"/>');
 const ICON_FILE = svgIcon('<path d="M14 3H6.5A1.5 1.5 0 0 0 5 4.5v15A1.5 1.5 0 0 0 6.5 21h11a1.5 1.5 0 0 0 1.5-1.5V8z"/><path d="M14 3v5h5M9 13h6M9 17h4"/>');
@@ -175,7 +176,7 @@ function setCrumbs(crumbs = []) {
 const COURSES_CRUMB = { label: "Mes matières", href: "#/cours" };
 const TAB_NAMES = { chapitres: "Chapitres", quiz: "Quiz", cartes: "Flashcards", fichiers: "Fichiers" };
 function courseCrumbs(course, tab = null, ...more) {
-  const list = [COURSES_CRUMB, { label: course.name, href: `#/reviser/cours/${course.id}` }, { label: "Gérer", href: `#/cours/${course.id}` }];
+  const list = [COURSES_CRUMB, { label: course.name, href: `#/reviser/cours/${course.id}` }, { label: "Cours", href: `#/cours/${course.id}` }];
   if (tab) list.push({ label: TAB_NAMES[tab], href: `#/cours/${course.id}/${tab}` });
   return [...list, ...more.map((label) => ({ label }))];
 }
@@ -510,7 +511,7 @@ function folderHtml(folder, courses) {
         <small class="muted">${plural(courses.length, "matière", "matières")}${folder.exam_week && !folder.archived ? ` · ${examLabel(folder.exam_week)}` : ""}</small>
         ${courses.length > 1 && !folder.archived ? `<a class="button primary small folder-revise" href="#/reviser/dossier/${folder.id}">Réviser le semestre</a>` : ""}
         <span class="folder-actions">
-          <button class="icon" type="button" data-folder-rename="${folder.id}" title="Renommer le semestre" aria-label="Renommer le semestre">${ICON_EDIT}</button>
+          <button class="icon" type="button" data-folder-rename="${folder.id}" title="Le semestre : nom et matières" aria-label="Modifier le semestre">${ICON_EDIT}</button>
           <button class="icon" type="button" data-folder-exam="${folder.id}" title="Semaine des partiels" aria-label="Semaine des partiels">${ICON_CALENDAR}</button>
           ${folder.archived ? `<button class="ghost small" type="button" data-folder-archive="${folder.id}">Désarchiver</button>` : ""}
           <button class="icon" type="button" data-folder-delete="${folder.id}" title="Supprimer le semestre (les cours sont gardés)" aria-label="Supprimer le semestre">${ICON_TRASH}</button>
@@ -525,6 +526,7 @@ function folderHtml(folder, courses) {
 
 function renderFolders(courses, folders) {
   state.folders = folders;
+  state.allCourses = courses;
   const known = new Set(folders.map((f) => f.id));
   const inFolder = (f) => courses.filter((c) => c.folder_id === f.id);
   $("#course-list").innerHTML = courses.filter((c) => !known.has(c.folder_id)).map(courseCard).join("");
@@ -571,11 +573,7 @@ $("#view-courses").addEventListener("click", async (e) => {
   const folder = state.folders.find((f) => f.id === (folderRename || folderArchive || folderDelete || folderExam));
   if (folderExam) return openExamDialog({ folder });
   try {
-    if (folderRename) {
-      const name = await askText("Nouveau nom du semestre", folder.name);
-      if (!name) return;
-      await api(`/api/folders/${folder.id}`, jsonBody("PATCH", { name }));
-    }
+    if (folderRename) return openFolderDialog(folder);
     if (folderArchive) {
       rememberFolder(folder.id, folder.archived);  // désarchivé : ouvert ; archivé : replié
       await api(`/api/folders/${folder.id}`, jsonBody("PATCH", { archived: !folder.archived }));
@@ -701,6 +699,40 @@ document.addEventListener("pointercancel", endDrag);
 window.addEventListener("blur", endDrag);  // la fenêtre perd la main en plein glisser : on lâche proprement
 // Pas de glisser natif des liens (il prendrait le dessus sur le nôtre).
 $("#view-courses").addEventListener("dragstart", (e) => { if (e.target.closest?.("[data-course-card]")) e.preventDefault(); });
+
+// Le crayon d'un semestre : son nom, et la liste de ses matières ; un clic sur une matière ouvre ses réglages
+function openFolderDialog(folder) {
+  const dialog = $("#folder-dialog");
+  const courses = (state.allCourses || []).filter((c) => c.folder_id === folder.id);
+  $("#folder-name-input").value = folder.name;
+  $("#folder-subjects").innerHTML = courses.map((c) => `<li><button type="button" class="folder-subject" data-subject-settings="${c.id}" style="--c:${subjectColor(c.id)}">
+      <span class="subject-dot" aria-hidden="true"></span><span class="fs-name">${escapeHtml(c.name)}</span>
+      <span class="fs-go">${ICON_GEAR}Réglages<span aria-hidden="true">›</span></span></button></li>`).join("")
+    || `<li class="muted small-text">Pas encore de matière : glisse-en une dans ce semestre.</li>`;
+  state.folderEdit = folder;
+  dialog.returnValue = "";
+  dialog.showModal();
+  $("#folder-name-input").select();
+}
+// Le nom, s'il a changé (avec « Enregistrer », ou avant d'aller dans une matière)
+async function saveFolderName() {
+  const folder = state.folderEdit, name = $("#folder-name-input").value.trim();
+  if (!folder || !name || name === folder.name) return false;
+  await api(`/api/folders/${folder.id}`, jsonBody("PATCH", { name }));
+  return true;
+}
+$("#folder-dialog").addEventListener("close", async () => {
+  if ($("#folder-dialog").returnValue !== "ok") return;
+  try { if (await saveFolderName()) loadCourses(); } catch (err) { notify(err.message); }
+});
+$("#folder-cancel").addEventListener("click", () => $("#folder-dialog").close(""));
+$("#folder-subjects").addEventListener("click", async (e) => {
+  const b = e.target.closest("[data-subject-settings]");
+  if (!b) return;
+  try { await saveFolderName(); } catch (err) { notify(err.message); }
+  $("#folder-dialog").close("");
+  go(`#/cours/${b.dataset.subjectSettings}/reglages`);
+});
 
 // Petite question avec un champ texte (remplace prompt(), absent de certaines fenêtres d'app).
 function askText(title, value = "", placeholder = "") {
@@ -1675,6 +1707,7 @@ async function openCourse(id, tab, { keepScroll = false } = {}) {
   if (state.course?.id !== id || !tab) state.chapterFilter = null;
   const course = await loadCourse(id);
   // Une seule page, en arbre : le fichier, puis chapitres, quiz et flashcards à déplier. `tab` ouvre un dépliant.
+  const toSettings = tab === "reglages";
   if (!TABS.includes(tab)) tab = null;
   state.tab = tab;
   $("#course-name").textContent = course.name;
@@ -1683,12 +1716,25 @@ async function openCourse(id, tab, { keepScroll = false } = {}) {
   const exam = course.exam?.date;
   $("#set-exam").textContent = exam ? examLabel(exam) + (course.exam.from === "dossier" ? " (date du semestre)" : "") : "Pas encore de date";
   $("#course-exam").textContent = exam ? "Changer" : "Choisir la date";
+  // ★ : la dernière valeur connue tout de suite (pas de clignement en venant de la révision), puis la valeur à jour
+  const known = (state.readyCache ||= {})[`#/reviser/cours/${course.id}`];
+  if (known) setAcqPill($("#course-acq"), known, subjectColor(course.id));
+  else $("#course-acq").hidden = true;
   api(`/api/readiness?course=${course.id}`).then((r) => {
+    state.readyCache[`#/reviser/cours/${course.id}`] = r;
     if (state.course?.id === course.id) setAcqPill($("#course-acq"), r, subjectColor(course.id));
   }).catch(() => {});
   $("#course-dot").style.background = subjectColor(course.id);
   $("#course-tree").style.setProperty("--c", subjectColor(course.id));
-  setCrumbs(courseCrumbs(course));
+  setCrumbs(toSettings ? [COURSES_CRUMB, { label: course.name, href: `#/reviser/cours/${course.id}` }, { label: "Réglages" }] : courseCrumbs(course));
+  // « Cours » ou « Réglages » : la même page, l'une ou l'autre partie (le titre et les onglets ne bougent pas)
+  $("#view-course").classList.toggle("settings-mode", toSettings);
+  $("#course-files-tab").href = `#/cours/${course.id}`;
+  $("#course-settings-tab").href = `#/cours/${course.id}/reglages`;
+  $("#course-files-tab").classList.toggle("active", !toSettings);
+  $("#course-settings-tab").classList.toggle("active", toSettings);
+  $("#course-files-tab").toggleAttribute("aria-current", !toSettings);
+  $("#course-settings-tab").toggleAttribute("aria-current", toSettings);
   renderFolderPick(course);
   renderTiles(course);
   // Cours tout neuf, sans fichier ni carte : on invite d'abord à importer le cours.
@@ -4145,10 +4191,15 @@ async function openReviewScope(kind, id = "", sub = "") {
   state.reviewScope = { params, name, hash: location.hash, base, single: kind === "cours", owner, parent };
   $("#review-scope-title").textContent = name;
   // ★ : l'avancée globale (exactement le pourcentage de « Prêt pour les partiels ? »), sur tous les onglets
-  if (state.acqBase !== base) $("#review-scope-acq").hidden = true;  // même matière : on garde la pastille (pas de clignement)
+  // (la dernière valeur connue tout de suite, aussi en revenant de « Cours » ou « Réglages » : pas de clignement)
+  const acqColor = kind === "cours" ? subjectColor(id) : "var(--accent)";
+  const known = (state.readyCache ||= {})[base];
+  if (known) setAcqPill($("#review-scope-acq"), known, acqColor);
+  else if (state.acqBase !== base) $("#review-scope-acq").hidden = true;  // même matière : on garde la pastille
   state.acqBase = base;
   api(`/api/readiness?${new URLSearchParams(params)}`).then((r) => {
-    if (state.reviewScope?.base === base) setAcqPill($("#review-scope-acq"), r, kind === "cours" ? subjectColor(id) : "var(--accent)");
+    state.readyCache[base] = r;
+    if (state.reviewScope?.base === base) setAcqPill($("#review-scope-acq"), r, acqColor);
   }).catch(() => {});
   $("#review-scope-dot").hidden = kind !== "cours";
   if (kind === "cours") $("#review-scope-dot").style.background = subjectColor(id);
@@ -4157,7 +4208,10 @@ async function openReviewScope(kind, id = "", sub = "") {
   else $("#today-hero").style.removeProperty("--c");
   renderReviewFiles();
   $("#scope-manage-pill").hidden = kind !== "cours";
-  if (kind === "cours") $("#scope-manage").href = `#/cours/${id}`;
+  if (kind === "cours") {
+    $("#scope-manage").href = `#/cours/${id}`;
+    $("#scope-settings").href = `#/cours/${id}/reglages`;
+  }
   document.querySelectorAll("[data-scope-tab]").forEach((a) => {
     const t = a.dataset.scopeTab;
     a.href = base + (t ? `/${t}` : "");
@@ -4430,7 +4484,7 @@ function renderScopeQuizzes() {
   }
   const files = state.reviewFile ? [] : state.reviewFiles || [];
   if (!all.length) {
-    $("#scope-quizzes").innerHTML = `<li class="empty muted">Pas encore de quiz : crée-les depuis « Gérer ».</li>`;
+    $("#scope-quizzes").innerHTML = `<li class="empty muted">Pas encore de quiz : crée-les depuis « Cours ».</li>`;
     return;
   }
   if (files.length < 2) {
@@ -5123,11 +5177,11 @@ const WELCOME = [
           Pirouette : crée un quiz qui couvre tout le chapitre « L'ADN » du cours « Biologie »…<span class="w-copy">Copier la demande</span></div>
           <span class="w-check">✓ Chaque question vérifiée dans ton cours</span></div>`,
     title: "Des quiz faits par Claude",
-    text: "Branche l'app Claude (Réglages), puis dans <b>Gérer</b> : <b>Créer</b> → <b>Copier la demande</b> → colle-la dans Claude. Il lit le chapitre et range le quiz dans Pirouette." },
+    text: "Branche l'app Claude (Réglages), puis dans <b>Cours</b> : <b>Créer</b> → <b>Copier la demande</b> → colle-la dans Claude. Il lit le chapitre et range le quiz dans Pirouette." },
   { art: `<div class="w-col"><div class="w-tabs"><span class="on">Aujourd'hui</span><span>Quiz</span><span>Cartes</span><span>Suivi</span></div>
           <div class="w-today"><i></i><b>Révision du jour</b><span>Commencer</span></div></div>`,
     title: "Une matière, quatre onglets",
-    text: "<b>Aujourd'hui</b> : ta révision du jour. <b>Quiz</b> et <b>Cartes</b> : tu choisis combien en faire, en glissant dans la barre orange. <b>Suivi</b> : ta progression et ton rétroplanning. Pour organiser tes cours et régler la matière : <b>⚙ Gérer</b>, à droite des onglets." },
+    text: "<b>Aujourd'hui</b> : ta révision du jour. <b>Quiz</b> et <b>Cartes</b> : tu choisis combien en faire, en glissant dans la barre orange. <b>Suivi</b> : ta progression et ton rétroplanning. Pour organiser tes cours : <b>Cours</b> ; pour le nom, le semestre, les partiels : <b>⚙ Réglages</b>, à droite des onglets." },
   { art: `<div class="w-cards"><div class="w-mini silver"><div>◇ NOUVELLE<em>L'ADN ?</em><span>001</span></div></div>
           <div class="w-mini gold"><div>◆◆ EN COURS<em>La mitochondrie ?</em><span>002</span></div></div>
           <div class="w-mini holo"><div>★ ACQUISE<em>Le neurone ?</em><span>003</span></div></div></div>`,
@@ -5145,6 +5199,11 @@ const WELCOME = [
 ];
 // Les nouveautés de chaque version (le carton « Quoi de neuf » ne s'affiche que si la version en a)
 const WHATS_NEW = {
+  "0.76.0": [
+    ["⚙", "« Cours » et « Réglages »", "À droite des onglets d'une matière : « Cours » pour tes fichiers, quiz et flashcards, « ⚙ Réglages » pour son nom, son semestre et ses partiels"],
+    ["✎", "Le crayon du semestre", "Son nom, et la liste de ses matières : un clic t'emmène dans les réglages de la matière"],
+    ["✦", "Des icônes qu'on voit", "Les icônes des semestres restent visibles, discrètes, et ressortent au survol"],
+  ],
   "0.75.0": [
     ["⇅", "Range tes matières comme tu veux", "Attrape une matière et glisse-la : les autres s'écartent pour lui faire place, dans son semestre ou un autre. L'ordre est gardé"],
     ["⚙", "« Gérer » une matière", "« Mes cours » s'appelle « Gérer » ; les réglages de la matière (nom, semestre, partiels, import) sont en bas de la page, plus de menu Options caché"],
@@ -5262,7 +5321,7 @@ const WHATS_NEW = {
     ["⤢", "Zoom sur une carte", "La carte reste nette (seul le fond se floute) et vient au milieu de la fenêtre"],
   ],
   "0.69.0": [
-    ["✎", "Claude relit tes cartes", "« Relire avec Claude » (Gérer › Flashcards) ou « ⋯ › Clarifier avec Claude » : il reformule ce qui ne se comprend pas sorti du cours"],
+    ["✎", "Claude relit tes cartes", "« Relire avec Claude » (Cours › Flashcards) ou « ⋯ › Clarifier avec Claude » : il reformule ce qui ne se comprend pas sorti du cours"],
     ["✦", "Des cartes qui se comprennent seules", "Les nouvelles cartes et questions donnent leur contexte (plus de « cette investigation » sans dire laquelle)"],
     ["−", "Plus épuré", "Moins d'étiquettes au-dessus des questions, et la révision du jour mêle toujours cartes et quiz"],
   ],

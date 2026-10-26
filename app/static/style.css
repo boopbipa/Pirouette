@@ -639,7 +639,8 @@ label.button:hover { border-color: var(--text); }
 .folder-head:hover { background: var(--sunken); }
 .folder-head strong { font: 600 18px/1.3 var(--display); }
 .folder-ico { width: 20px; height: 20px; color: var(--accent-ink); flex: none; }
-.folder-actions { margin-left: auto; display: flex; gap: 4px; align-items: center; opacity: 0; transition: opacity .15s; }
+/* Les icônes du semestre restent visibles, discrètes ; au survol de la ligne, elles ressortent */
+.folder-actions { margin-left: auto; display: flex; gap: 4px; align-items: center; opacity: .4; transition: opacity .15s; }
 .folder-head:hover .folder-actions, .folder-head:focus-within .folder-actions { opacity: 1; }
 @media (hover: none) { .folder-actions { opacity: 1; } }
 .folder.is-archived .folder-head strong { color: var(--muted); }
@@ -1645,7 +1646,7 @@ html.windows [data-mac-only], html:not(.windows) [data-win-only] { display: none
 }
 .claude-diag { max-height: 320px; overflow: auto; white-space: pre-wrap; word-break: break-all; font-size: 12px; }
 
-.msg-tools { margin-left: 6px; opacity: 0; transition: opacity .15s; }
+.msg-tools { margin-left: 6px; opacity: .35; transition: opacity .15s; }
 .msg-line:hover .msg-tools, .msg-tools:focus-within { opacity: 1; }
 .msg-tools .link-button { font-size: 11px; }
 .msg-toast { position: fixed; right: 20px; bottom: 92px; z-index: 50; max-width: min(380px, calc(100vw - 40px)); padding: 12px 16px;
@@ -2555,7 +2556,7 @@ body.focus.day .ratings.locked .rating-flip { background: rgba(0, 0, 0, .05); co
 /* Grille des cartes : un crayon au survol pour modifier la carte (la même fenêtre que partout) */
 .gcard { position: relative; }
 .gedit { position: absolute; left: 10px; bottom: 10px; z-index: 3; width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center;
-  background: var(--surface); color: var(--muted); box-shadow: 0 1px 4px rgba(0, 0, 0, .15); opacity: 0; transition: opacity .15s; cursor: pointer; }
+  background: var(--surface); color: var(--muted); box-shadow: 0 1px 4px rgba(0, 0, 0, .15); opacity: .45; transition: opacity .15s; cursor: pointer; }
 .gedit svg { width: 15px; height: 15px; }
 .gcard:hover .gedit, .gcard:focus-visible .gedit { opacity: 1; }
 .gedit:hover { color: var(--accent-ink); }
@@ -2638,8 +2639,11 @@ input, textarea, [contenteditable] { -webkit-user-select: text; user-select: tex
   transition: color .15s, background .15s; }
 .swipe-back.ready { color: #fff; background: var(--accent); }
 
-/* « Gérer » : les réglages de la matière, en bas de la page (avant : un menu Options en haut à droite) */
-.course-settings { margin-top: 40px; }
+/* « Réglages » d'une matière : la page de la matière, avec seulement ses réglages (« Cours » : tout sauf eux) */
+.course-settings { margin-top: 24px; }
+#view-course:not(.settings-mode) .course-settings { display: none; }
+#view-course.settings-mode #course-overview > :not(.course-head):not(.scope-nav):not(.course-settings) { display: none !important; }
+.course-settings .settings-title:first-child { margin-top: 0; }
 .course-settings .settings-title { margin: 0 0 10px 4px; font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
 .course-settings .settings-title.danger { margin-top: 28px; color: var(--muted); }
 .set-rows { padding: 4px 20px; }
@@ -2655,3 +2659,19 @@ input, textarea, [contenteditable] { -webkit-user-select: text; user-select: tex
 .danger-zone .ghost.danger { color: var(--ko); }
 .danger-zone .ghost.danger:not(:disabled):hover { border-color: currentColor; background: color-mix(in srgb, currentColor 8%, transparent); }
 @media (max-width: 640px) { .set-row { flex-wrap: wrap; } .set-label { width: 100%; } }
+
+/* Le crayon d'un semestre : son nom, et ses matières (un clic : leurs réglages) */
+.folder-dialog { width: min(480px, calc(100vw - 32px)); }
+.folder-dialog .folder-field { margin: 16px 0 6px; font-weight: 600; font-size: 14px; display: block; }
+.folder-dialog .folder-field small { font-weight: 400; margin-left: 6px; }
+.folder-subjects { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; max-height: 46vh; overflow: auto; }
+.folder-subject { width: 100%; display: flex; align-items: center; gap: 10px; padding: 11px 14px; border-radius: 12px; cursor: pointer;
+  border: 1px solid var(--border); background: var(--surface); color: var(--text); font: inherit; text-align: left;
+  transition: border-color .15s, background .15s; }
+.folder-subject:hover { border-color: color-mix(in srgb, var(--c, var(--accent)) 45%, var(--border));
+  background: color-mix(in srgb, var(--c, var(--accent)) 7%, var(--surface)); }
+.folder-subject .subject-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--c); flex: none; }
+.fs-name { flex: 1; min-width: 0; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fs-go { display: inline-flex; align-items: center; gap: 5px; font-size: 13px; color: var(--muted); transition: color .15s; }
+.fs-go .ico { width: 14px; height: 14px; }
+.folder-subject:hover .fs-go { color: var(--c, var(--accent-ink)); }

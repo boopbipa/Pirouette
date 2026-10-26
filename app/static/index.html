@@ -200,7 +200,7 @@
           <a role="tab" data-scope-tab="cartes">Cartes</a>
           <a role="tab" data-scope-tab="suivi">Suivi</a>
         </nav>
-        <nav class="filters scope-tabs manage-pill" id="scope-manage-pill" hidden><a id="scope-manage"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>Gérer</a></nav>
+        <nav class="filters scope-tabs manage-pill" id="scope-manage-pill" aria-label="Gérer la matière" hidden><a id="scope-manage"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>Cours</a><a id="scope-settings"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>Réglages</a></nav>
       </div>
       <!-- Une matière à plusieurs cours : réviser toute la matière ou un seul cours -->
       <div class="chips chapter-chips review-files" id="review-files" role="radiogroup" aria-label="Cours à réviser" hidden></div>
@@ -798,17 +798,10 @@
           <h1 class="subject-title"><span class="subject-dot" id="course-dot"></span><span id="course-name"></span><span class="acq-pill" id="course-acq" hidden></span></h1>
         </div>
         <input type="file" id="course-import-input" accept=".zip,application/zip,.txt,.csv,.tsv,.md,text/plain" hidden>
-        </div>
       </div>
 
-      <label class="dropzone start-drop" id="start-drop" for="file-input" hidden>
-        <svg class="tile-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 16V4M7 9l5-5 5 5"/><path d="M4 16v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/></svg>
-        <strong>Ajoute ton premier cours</strong>
-        <span class="muted">Glisse le fichier ici, ou clique. PDF, Word, PowerPoint, Pages, Keynote, texte.</span>
-        <span class="primary small fake-button">Choisir un fichier</span>
-      </label>
 
-      <!-- « Gérer » : une page à part pour organiser ; on revient aux révisions par ces onglets -->
+      <!-- « Cours » et « Réglages » : deux pages à part pour organiser ; on revient aux révisions par les onglets de gauche -->
       <div class="scope-nav course-nav">
         <nav class="filters scope-tabs" aria-label="Réviser">
           <a data-course-tab="">Aujourd'hui</a>
@@ -816,8 +809,14 @@
           <a data-course-tab="cartes">Cartes</a>
           <a data-course-tab="suivi">Suivi</a>
         </nav>
-        <nav class="filters scope-tabs manage-pill"><a class="active" aria-current="page"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>Gérer</a></nav>
+        <nav class="filters scope-tabs manage-pill" aria-label="Gérer la matière"><a id="course-files-tab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>Cours</a><a id="course-settings-tab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>Réglages</a></nav>
       </div>
+      <label class="dropzone start-drop" id="start-drop" for="file-input" hidden>
+        <svg class="tile-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 16V4M7 9l5-5 5 5"/><path d="M4 16v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/></svg>
+        <strong>Ajoute ton premier cours</strong>
+        <span class="muted">Glisse le fichier ici, ou clique. PDF, Word, PowerPoint, Pages, Keynote, texte.</span>
+        <span class="primary small fake-button">Choisir un fichier</span>
+      </label>
       <p class="status" id="course-status" hidden></p>
       <!-- Un cours tout juste ajouté (ni quiz ni flashcards) : un seul bouton, Claude découpe puis crée tout -->
       <div class="ready-card" id="ready-card" hidden>
@@ -918,9 +917,9 @@
         </div>
       </div>
 
-      <!-- Réglages de la matière : visibles en bas de « Gérer » (avant : un menu Options en haut à droite) -->
+      <!-- Réglages de la matière : la page « Réglages » (seule cette section y est visible) -->
       <section class="course-settings" aria-labelledby="course-settings-title">
-        <h2 class="settings-title" id="course-settings-title">Réglages de la matière</h2>
+        <h2 class="settings-title" id="course-settings-title">La matière</h2>
         <div class="card set-rows">
           <div class="set-row"><span class="set-label">Nom</span><span class="set-value" id="set-name"></span>
             <button class="ghost small" type="button" id="rename-course">Renommer</button></div>
@@ -1495,6 +1494,21 @@
       <div class="actions">
         <button class="primary" type="submit" value="ok">OK</button>
         <button class="ghost" type="button" id="ask-cancel">Annuler</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Un semestre (le crayon de sa ligne) : son nom, et ses matières, chacune menant à ses réglages -->
+  <dialog id="folder-dialog" class="report-dialog folder-dialog">
+    <form id="folder-form" method="dialog">
+      <h2>Le semestre</h2>
+      <label class="folder-field" for="folder-name-input">Nom</label>
+      <input type="text" id="folder-name-input" maxlength="120" autocomplete="off">
+      <p class="folder-field">Ses matières <small class="muted">un clic : ses réglages</small></p>
+      <ul class="folder-subjects" id="folder-subjects"></ul>
+      <div class="actions">
+        <button class="primary" type="submit" value="ok">Enregistrer</button>
+        <button class="ghost" type="button" id="folder-cancel">Annuler</button>
       </div>
     </form>
   </dialog>
