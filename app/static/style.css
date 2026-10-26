@@ -2835,3 +2835,16 @@ dialog.onboard::backdrop { background: var(--bg); }
   font: inherit; font-size: 13.5px; color: var(--muted); background: var(--surface); box-shadow: var(--shadow); }
 .ob-close:hover { color: var(--text); }
 .ob-close[hidden] { display: none; }
+/* Le bouton pour passer à la suite reste au même endroit d'un écran à l'autre : toutes les cartes ont la même
+   hauteur, et le bouton (puis « Plus tard ») est juste dessous, centré */
+.ob-screen { display: flex; flex-direction: column; align-items: center; gap: 22px; width: 100%; }
+.ob-box { height: min(500px, calc(100vh - 250px)); overflow: auto; }
+.ob-box.ob-card { justify-content: center; padding: 32px 40px; }
+.ob-box.ob-welcome { min-height: 0; }
+.ob-box.ob-welcome .ob-list { justify-content: center; }
+.ob-foot { display: flex; flex-direction: column; align-items: center; gap: 4px; height: 92px; }
+.ob-foot .primary, .ob-foot .google-btn { min-width: 260px; height: 50px; padding: 0 28px; font-size: 16px; justify-content: center; }
+.ob-foot .ob-later { margin-top: 6px; }
+.ob-later.ob-ph { visibility: hidden; height: 32px; }
+.ob-foot .ob-wait { visibility: hidden; }  /* la carte d'essai : « Continuer » apparaît à sa place après la récompense */
+.ob-flash { width: 200px; height: 270px; margin-bottom: 14px; }

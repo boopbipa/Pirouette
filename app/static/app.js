@@ -5792,24 +5792,23 @@ function obNext(markDone = true) {
   ob.i += 1;  // rien n'est sauté : une étape déjà faite le dit, avec « Suivant »
   drawOnboard();
 }
-const obLater = `<button class="ob-later" type="button" data-ob="later">Plus tard</button>`;
 function drawOnboard() {
   const stage = $("#ob-stage");
   $("#ob-progress").innerHTML = ob.i < 0 ? "" : ob.steps.map((k, j) => `<i class="${j < ob.i || ob.done.has(k) ? "on" : j === ob.i ? "now" : ""}"></i>`).join("");
+  const later = `<button class="ob-later" type="button" data-ob="later">Plus tard</button>`;
   if (ob.i < 0) {  // la bienvenue : la couleur de l'app à gauche, la liste à droite
-    stage.innerHTML = `<div class="ob-welcome">
-      <div class="ob-hero"><div class="ob-icon">${APP_ICON_SVG}</div><h1>Bienvenue dans Pirouette</h1>
+    stage.innerHTML = obScreen(`<div class="ob-hero"><div class="ob-icon">${APP_ICON_SVG}</div><h1>Bienvenue dans Pirouette</h1>
         <p>Tes cours deviennent des quiz et des flashcards, et Pirouette t'aide à tout revoir avant les partiels.
         Quelques petites choses et c'est prêt : compte trois minutes.</p></div>
       <div class="ob-list"><ol>${ob.steps.map((k) => `<li class="${ob.done.has(k) && k !== "card" ? "done" : ""}"><i>${ob.done.has(k) && k !== "card" ? "✓" : ""}</i>
-        <span>${OB_STEPS[k].label}</span>${OB_STEPS[k].min ? `<small>${OB_STEPS[k].min}</small>` : ""}</li>`).join("")}</ol>
-        <button class="primary ob-go" type="button" data-ob="start">Commencer</button></div></div>`;
+        <span>${OB_STEPS[k].label}</span>${OB_STEPS[k].min ? `<small>${OB_STEPS[k].min}</small>` : ""}</li>`).join("")}</ol></div>`,
+      `<button class="primary" type="button" data-ob="start">Commencer</button>`, "", "ob-welcome");
     return;
   }
   if (ob.i >= ob.steps.length) {
-    stage.innerHTML = obCard(`<div class="ob-icon small">${APP_ICON_SVG}</div><h2>C'est prêt${ob.info.profile?.name ? `, ${escapeHtml(ob.info.profile.name)}` : ""} !</h2>
-      <p>Tes matières t'attendent. Ce que tu as laissé pour plus tard se retrouve dans Réglages et dans Social.</p>
-      <button class="primary" type="button" data-ob="finish">Aller à mes matières</button>`, false);
+    stage.innerHTML = obScreen(`<div class="ob-icon small">${APP_ICON_SVG}</div><h2>C'est prêt${ob.info.profile?.name ? `, ${escapeHtml(ob.info.profile.name)}` : ""} !</h2>
+      <p>Tes matières t'attendent. Ce que tu as laissé pour plus tard se retrouve dans Réglages et dans Social.</p>`,
+      `<button class="primary" type="button" data-ob="finish">Aller à mes matières</button>`, "");
     return;
   }
   const step = ob.steps[ob.i];
@@ -5826,70 +5825,74 @@ function drawOnboard() {
       friends: [`Tu es connecté·e en tant que <b>${escapeHtml(info.online?.profile?.pseudo || "")}</b>.`, "Voir l'étape"],
       phone: [`<b>${plural(info.devices?.length || 0, "appareil jumelé", "appareils jumelés")}</b> : tes quiz et tes cartes y sont déjà.`, "Ajouter un appareil"],
     }[step];
-    stage.innerHTML = obCard(`<span class="ob-done-ic" aria-hidden="true">✓</span><h2>${OB_STEPS[step].label}</h2>
-      <p class="ob-done">C'est déjà fait. ${what[0]}</p>
-      <button class="primary" type="button" data-ob="next">Suivant</button>
-      <button class="ob-later" type="button" data-ob="redo">${what[1]}</button>`, false);
+    stage.innerHTML = obScreen(`<span class="ob-done-ic" aria-hidden="true">✓</span><h2>${OB_STEPS[step].label}</h2>
+      <p class="ob-done">C'est déjà fait. ${what[0]}</p>`,
+      `<button class="primary" type="button" data-ob="next">Suivant</button>`, `<button class="ob-later" type="button" data-ob="redo">${what[1]}</button>`);
     return;
   }
-  if (step === "card") {
-    stage.innerHTML = obCard(`<h2>Essaie : retourne la carte</h2><p>Clique dessus (ou Espace). C'est comme ça qu'on révise ses flashcards.</p>
+  if (step === "card") {  // « Continuer » attend sa place (invisible) jusqu'à la récompense
+    stage.innerHTML = obScreen(`<h2>Essaie : retourne la carte</h2><p>Clique dessus (ou Espace). C'est comme ça qu'on révise ses flashcards.</p>
       <button class="ob-flash" type="button" data-ob="flip" aria-label="Retourner la carte"><span class="ob-face front">Combien d'observations suffisent pour invalider une loi&nbsp;?</span>
         <span class="ob-face back">Une seule observation contraire suffit</span></button>
       <div class="ob-rate" hidden><button class="ghost" type="button" data-ob="rate">Je ne savais pas</button><button class="primary" type="button" data-ob="rate">Je savais</button></div>
       <div class="ob-reward" hidden><p><b>Bien joué !</b> Plus tu sais une carte, plus elle revient tard… et plus elle devient rare :</p>
-        <div class="ob-rarity"><span>Nouvelle</span><span class="rare">En cours</span><span class="holo">★ Acquise</span></div>
-        <button class="primary" type="button" data-ob="next">Continuer</button></div>`);
+        <div class="ob-rarity"><span>Nouvelle</span><span class="rare">En cours</span><span class="holo">★ Acquise</span></div></div>`,
+      `<button class="primary ob-wait" type="button" data-ob="next" id="ob-card-next">Continuer</button>`, later);
     return;
   }
   if (step === "name") {
-    stage.innerHTML = obCard(`<h2>Comment tu t'appelles ?</h2><p>Pour te dire bonjour (rien d'autre, ça reste sur cet ordinateur).</p>
-      <form class="ob-form" data-ob-form="name"><input type="text" id="ob-name" maxlength="40" placeholder="Ton prénom" value="${escapeHtml(info.profile?.name || "")}" required>
-      <button class="primary" type="submit">C'est moi</button></form>`);
+    stage.innerHTML = obScreen(`<h2>Comment tu t'appelles ?</h2><p>Pour te dire bonjour (rien d'autre, ça reste sur cet ordinateur).</p>
+      <form class="ob-form" id="ob-form" data-ob-form="name"><input type="text" id="ob-name" maxlength="40" placeholder="Ton prénom" value="${escapeHtml(info.profile?.name || "")}" required></form>`,
+      `<button class="primary" type="submit" form="ob-form">C'est moi</button>`, later);
     setTimeout(() => $("#ob-name")?.focus(), 50);
     return;
   }
   if (step === "semester") {
-    stage.innerHTML = obCard(`<h2>Ton semestre</h2><p>Tes matières s'y rangent. Avec la date de tes partiels, tes révisions s'organisent pour que tout soit revu à temps.</p>
-      <form class="ob-form column" data-ob-form="semester"><label>Nom <input type="text" id="ob-sem" maxlength="60" value="Semestre 1" required></label>
-      <label>Premier jour des partiels <small>(si tu le sais)</small><input type="date" id="ob-exam"></label>
-      <button class="primary" type="submit">Créer mon semestre</button></form>`);
+    stage.innerHTML = obScreen(`<h2>Ton semestre</h2><p>Tes matières s'y rangent. Avec la date de tes partiels, tes révisions s'organisent pour que tout soit revu à temps.</p>
+      <form class="ob-form column" id="ob-form" data-ob-form="semester"><label>Nom <input type="text" id="ob-sem" maxlength="60" value="Semestre 1" required></label>
+      <label>Premier jour des partiels <small>(si tu le sais)</small><input type="date" id="ob-exam"></label></form>`,
+      `<button class="primary" type="submit" form="ob-form">Créer mon semestre</button>`, later);
     return;
   }
   if (step === "course") {
-    stage.innerHTML = obCard(`<h2>Dépose ton premier cours</h2><p>Un PDF, un Word, un PowerPoint, un Pages… Pirouette le découpe en chapitres et le range dans sa matière.</p>
-      <button class="ob-drop" type="button" data-ob="course"><b>Choisir mon cours</b><small>ou glisse-le dans la fenêtre qui s'ouvre</small></button>`);
+    stage.innerHTML = obScreen(`<h2>Dépose ton premier cours</h2><p>Un PDF, un Word, un PowerPoint, un Pages… Pirouette le découpe en chapitres et le range dans sa matière.</p>
+      <button class="ob-drop" type="button" data-ob="course"><b>Glisse ton cours ici</b><small>ou clique pour le choisir</small></button>`,
+      `<button class="primary" type="button" data-ob="course">Choisir mon cours</button>`, later);
     return;
   }
   if (step === "claude") {
-    stage.innerHTML = obCard(`<h2>Branche Claude</h2><p>Claude (l'app, avec ton abonnement) lit tes cours et crée les quiz et les flashcards dans Pirouette. Un clic, puis tu quittes et rouvres l'app Claude.</p>
-      <button class="primary" type="button" data-ob="claude">Brancher l'app Claude</button><p class="ob-note" id="ob-claude-note" hidden></p>`);
+    stage.innerHTML = obScreen(`<h2>Branche Claude</h2><p>Claude (l'app, avec ton abonnement) lit tes cours et crée les quiz et les flashcards dans Pirouette. Un clic, puis tu quittes et rouvres l'app Claude.</p>
+      <p class="ob-note" id="ob-claude-note" hidden></p>`,
+      `<button class="primary" type="button" data-ob="claude">Brancher l'app Claude</button>`, later);
     return;
   }
   if (step === "friends") {
     const fresh = info.online?.connected && !info.online?.profile;
-    stage.innerHTML = obCard(fresh ? `<h2>Ton pseudo</h2><p>C'est ce que verront tes amis.</p>
-      <form class="ob-form" data-ob-form="pseudo"><input type="text" id="ob-pseudo" maxlength="24" value="${escapeHtml((info.online?.name || info.profile?.name || "").split(" ")[0])}" required>
-      <button class="primary" type="submit">Valider</button></form>`
-      : `<h2>Retrouve tes amis</h2><p>Connecte-toi avec Google pour discuter, vous envoyer des matières et des quiz, et vous lancer des défis.</p>
-      <button class="google-btn" type="button" data-ob="google">${$("[data-google-login]")?.querySelector("svg")?.outerHTML || ""} Se connecter avec Google</button>
-      <p class="ob-note" id="ob-google-note" hidden></p>`);
+    stage.innerHTML = fresh ? obScreen(`<h2>Ton pseudo</h2><p>C'est ce que verront tes amis.</p>
+      <form class="ob-form" id="ob-form" data-ob-form="pseudo"><input type="text" id="ob-pseudo" maxlength="24" value="${escapeHtml((info.online?.name || info.profile?.name || "").split(" ")[0])}" required></form>`,
+      `<button class="primary" type="submit" form="ob-form">Valider</button>`, later)
+      : obScreen(`<h2>Retrouve tes amis</h2><p>Connecte-toi avec Google pour discuter, vous envoyer des matières et des quiz, et vous lancer des défis.</p>
+      <p class="ob-note" id="ob-google-note" hidden></p>`,
+      `<button class="google-btn" type="button" data-ob="google">${$("[data-google-login]")?.querySelector("svg")?.outerHTML || ""} Se connecter avec Google</button>`, later);
     return;
   }
   if (step === "phone") {
-    stage.innerHTML = obCard(info.online?.connected ? `<h2>Révise aussi dans le bus</h2><p>Scanne ce code avec l'appareil photo de ton téléphone : tes quiz et tes cartes y arrivent tout seuls.</p>
-      <div class="ob-qr" id="ob-qr"><span class="muted small-text">Préparation du code…</span></div><div class="pair-code" id="ob-code"></div>
-      <button class="ghost" type="button" data-ob="next">C'est fait</button>`
-      : `<h2>Ton téléphone</h2><p>Pour retrouver tes quiz et tes cartes sur ton téléphone, il faut d'abord un compte (l'étape « Retrouver tes amis »). Tu pourras le faire plus tard dans Réglages.</p>
-      <button class="primary" type="button" data-ob="next">Continuer</button>`);
+    stage.innerHTML = info.online?.connected ? obScreen(`<h2>Révise aussi dans le bus</h2><p>Scanne ce code avec l'appareil photo de ton téléphone : tes quiz et tes cartes y arrivent tout seuls.</p>
+      <div class="ob-qr" id="ob-qr"><span class="muted small-text">Préparation du code…</span></div><div class="pair-code" id="ob-code"></div>`,
+      `<button class="primary" type="button" data-ob="next">C'est fait</button>`, later)
+      : obScreen(`<h2>Ton téléphone</h2><p>Pour retrouver tes quiz et tes cartes sur ton téléphone, il faut d'abord un compte (l'étape « Retrouver tes amis »). Tu pourras le faire plus tard dans Réglages.</p>`,
+      `<button class="primary" type="button" data-ob="next">Continuer</button>`, later);
     if (info.online?.connected) {
       api("/api/sync/pair", { method: "POST" }).then((p) => { $("#ob-qr").innerHTML = p.qr; $("#ob-code").textContent = p.code; })
         .catch((err) => { $("#ob-qr").innerHTML = `<span class="ko-text small-text">${escapeHtml(err.message)}</span>`; });
     }
   }
 }
-// Une étape : la carte, avec « Plus tard » en bas, dans la carte
-const obCard = (inner, later = true) => `<div class="ob-card">${inner}${later ? obLater : ""}</div>`;
+// Un écran : une carte de hauteur fixe, puis dessous, toujours au même endroit, le bouton pour passer à la suite et
+// « Plus tard » (la souris n'a pas à bouger d'une étape à l'autre)
+const obScreen = (box, primary, second = "", kind = "ob-card") => `<div class="ob-screen">
+  <div class="ob-box ${kind}">${box}</div>
+  <div class="ob-foot">${primary}${second || `<span class="ob-later ob-ph" aria-hidden="true"></span>`}</div></div>`;
 
 $("#ob-stage").addEventListener("click", async (e) => {
   const act = e.target.closest("[data-ob]")?.dataset.ob;
@@ -5908,6 +5911,7 @@ $("#ob-stage").addEventListener("click", async (e) => {
     $("#ob-stage .ob-rate").hidden = true;
     $("#ob-stage .ob-flash").classList.add("away");
     $("#ob-stage .ob-reward").hidden = false;
+    $("#ob-card-next")?.classList.remove("ob-wait");
     return;
   }
   if (act === "course") {
@@ -5924,7 +5928,7 @@ $("#ob-stage").addEventListener("click", async (e) => {
       $("#ob-claude-note").hidden = false;
       $("#ob-claude-note").textContent = info.installed ? "C'est branché ! Quitte l'app Claude et rouvre-la pour qu'elle trouve Pirouette."
         : "L'app Claude n'est pas installée sur cet ordinateur : tu pourras la brancher plus tard dans Réglages.";
-      e.target.closest("[data-ob]").outerHTML = `<button class="primary" type="button" data-ob="next">Continuer</button>`;
+      e.target.closest("[data-ob]").outerHTML = `<button class="primary" type="button" data-ob="next">Continuer</button>`;  // même place
     } catch (err) {
       $("#ob-claude-note").hidden = false;
       $("#ob-claude-note").textContent = err.message;
