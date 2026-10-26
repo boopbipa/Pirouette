@@ -175,11 +175,50 @@ function setCrumbs(crumbs = []) {
 const COURSES_CRUMB = { label: "Mes matières", href: "#/cours" };
 const TAB_NAMES = { chapitres: "Chapitres", quiz: "Quiz", cartes: "Flashcards", fichiers: "Fichiers" };
 function courseCrumbs(course, tab = null, ...more) {
-  const list = [COURSES_CRUMB, { label: course.name, href: `#/reviser/cours/${course.id}` }, { label: "Mes cours", href: `#/cours/${course.id}` }];
+  const list = [COURSES_CRUMB, { label: course.name, href: `#/reviser/cours/${course.id}` }, { label: "Gérer", href: `#/cours/${course.id}` }];
   if (tab) list.push({ label: TAB_NAMES[tab], href: `#/cours/${course.id}/${tab}` });
   return [...list, ...more.map((label) => ({ label }))];
 }
 window.addEventListener("hashchange", route);
+
+// Glisser à deux doigts vers la droite sur le trackpad : page précédente, comme dans Safari (une petite flèche
+// apparaît au bord gauche et suit le geste). Jamais pendant un quiz, une séance ou un partiel, ni dans une fenêtre
+// ouverte ou une zone qui défile de côté.
+const swipeBack = { x: 0, done: false, idle: null, el: null };
+function sideScroller(el) {
+  for (; el && el !== document.body; el = el.parentElement) {
+    if (el.scrollWidth > el.clientWidth + 1 && el.scrollLeft > 0 && /auto|scroll/.test(getComputedStyle(el).overflowX)) return true;
+  }
+  return false;
+}
+function showSwipeBack(progress) {
+  if (!swipeBack.el) {
+    swipeBack.el = Object.assign(document.createElement("div"), { className: "swipe-back", textContent: "‹" });
+    swipeBack.el.setAttribute("aria-hidden", "true");
+    document.body.append(swipeBack.el);
+  }
+  swipeBack.el.style.setProperty("--p", Math.min(1, progress).toFixed(3));
+  swipeBack.el.classList.toggle("ready", progress >= 1);
+}
+window.addEventListener("wheel", (e) => {
+  const reset = () => { swipeBack.x = 0; swipeBack.done = false; showSwipeBack(0); };
+  clearTimeout(swipeBack.idle);
+  swipeBack.idle = setTimeout(reset, 220);  // le geste (et son élan) fini, on repart de zéro
+  if (swipeBack.done) return;
+  if (e.ctrlKey || document.body.classList.contains("focus") || document.querySelector("dialog[open]") || sideScroller(e.target)) {
+    if (swipeBack.x) reset();
+    return;
+  }
+  if (Math.abs(e.deltaX) <= Math.abs(e.deltaY)) return;  // on fait défiler la page : rien à voir
+  swipeBack.x = Math.min(0, swipeBack.x + e.deltaX);  // doigts vers la droite = deltaX négatif
+  const progress = -swipeBack.x / 160;
+  showSwipeBack(progress);
+  if (progress >= 1) {
+    swipeBack.done = true;
+    history.back();
+    setTimeout(() => showSwipeBack(0), 180);
+  }
+}, { passive: true });
 
 async function api(url, options = {}) {
   const response = await fetch(url, options);
@@ -551,57 +590,103 @@ $("#view-courses").addEventListener("click", async (e) => {
   }
 });
 
-// Glisser un cours sur un dossier (ou sur « Mes cours » pour le sortir de son dossier).
+// Glisser une matière : la ranger où l'on veut dans son semestre (les autres s'écartent pour lui faire place), ou la
+// déposer dans un autre semestre (ou hors semestre). L'ordre choisi est gardé.
 // Fait à la main (souris / doigt) : le glisser-déposer du navigateur ne marche pas dans la fenêtre de l'app Mac.
-const drag = { card: null, ghost: null, zone: null, startX: 0, startY: 0, moved: false };
+const drag = { card: null, ghost: null, grid: null, from: null, startX: 0, startY: 0, moved: false, pointer: null };
+// La grille où ranger : celle d'un semestre (sa ligne de titre compte aussi), ou celle des matières hors semestre
+function dropGrid(el) {
+  const zone = el?.closest("[data-drop-folder]");
+  if (!zone) return null;
+  const grid = zone.matches(".course-grid") ? zone : zone.closest("details")?.querySelector(".course-grid");
+  return grid?.querySelector("#course-list") || grid;
+}
+const gridOf = (container) => container?.closest(".course-grid") || container;
+const gridFolder = (container) => gridOf(container)?.dataset.dropFolder || null;
 
 $("#view-courses").addEventListener("pointerdown", (e) => {
   const card = e.target.closest("[data-course-card]");
-  if (!card || e.button !== 0) return;
-  Object.assign(drag, { card, zone: null, startX: e.clientX, startY: e.clientY, moved: false });
+  if (!card || e.button !== 0 || e.pointerType === "touch") return;
+  Object.assign(drag, { card, grid: null, from: card.parentElement, startX: e.clientX, startY: e.clientY, moved: false, pointer: e.pointerId });
 });
+
+function startDrag() {
+  drag.moved = true;
+  const rect = drag.card.getBoundingClientRect();
+  drag.ghost = drag.card.cloneNode(true);
+  drag.ghost.removeAttribute("href");
+  drag.ghost.classList.add("drag-ghost");
+  drag.ghost.style.width = `${rect.width}px`;
+  drag.ghost.style.height = `${rect.height}px`;
+  drag.offsetX = drag.startX - rect.left;
+  drag.offsetY = drag.startY - rect.top;
+  document.body.appendChild(drag.ghost);
+  drag.card.classList.add("drag-source");  // reste dans la grille : c'est la place réservée, qui bouge avec la souris
+  document.body.classList.add("dragging-course");
+  try { drag.card.setPointerCapture(drag.pointer); } catch {}  // le lâcher arrive toujours, même hors de la fenêtre
+  window.getSelection()?.removeAllRanges();
+}
+
+// Les autres tuiles glissent doucement vers leur nouvelle place (au lieu de sauter)
+function slideCards(grid, change) {
+  const cards = [...grid.querySelectorAll("[data-course-card]:not(.drag-source)")];
+  const before = new Map(cards.map((c) => [c, c.getBoundingClientRect()]));
+  change();
+  for (const c of cards) {
+    const a = before.get(c), b = c.getBoundingClientRect();
+    if (!a || (a.left === b.left && a.top === b.top)) continue;
+    c.animate([{ transform: `translate(${a.left - b.left}px, ${a.top - b.top}px)` }, { transform: "none" }],
+      { duration: 180, easing: "cubic-bezier(.2, .8, .2, 1)" });
+  }
+}
 
 document.addEventListener("pointermove", (e) => {
   if (!drag.card) return;
   if (!drag.moved) {
     if (Math.hypot(e.clientX - drag.startX, e.clientY - drag.startY) < 6) return;
-    drag.moved = true;
-    const rect = drag.card.getBoundingClientRect();
-    drag.ghost = drag.card.cloneNode(true);
-    drag.ghost.classList.add("drag-ghost");
-    drag.ghost.style.width = `${rect.width}px`;
-    drag.offsetX = drag.startX - rect.left;
-    drag.offsetY = drag.startY - rect.top;
-    document.body.appendChild(drag.ghost);
-    drag.card.classList.add("drag-source");
-    document.body.classList.add("dragging-course");
+    startDrag();
   }
   e.preventDefault();
-  drag.ghost.style.transform = `translate(${e.clientX - drag.offsetX}px, ${e.clientY - drag.offsetY}px)`;
-  const zone = document.elementFromPoint(e.clientX, e.clientY)?.closest("[data-drop-folder]") || null;
-  if (zone !== drag.zone) {
-    drag.zone?.classList.remove("drop-over");
-    zone?.classList.add("drop-over");
-    drag.zone = zone;
+  drag.ghost.style.transform = `translate3d(${e.clientX - drag.offsetX}px, ${e.clientY - drag.offsetY}px, 0)`;
+  const under = document.elementFromPoint(e.clientX, e.clientY);
+  const grid = dropGrid(under);
+  if (grid !== drag.grid) {
+    drag.grid && gridOf(drag.grid).classList.remove("drop-over");
+    grid && gridOf(grid).classList.add("drop-over");
+    drag.grid = grid;
   }
+  if (!grid) return;
+  // La place : avant la tuile survolée (moitié gauche) ou après (moitié droite) ; sinon, au bout du semestre
+  const over = under.closest("[data-course-card]");
+  let before = null;
+  if (over && over !== drag.card && grid.contains(over)) {
+    const r = over.getBoundingClientRect();
+    before = e.clientX < r.left + r.width / 2 ? over : over.nextElementSibling;
+  } else if (over === drag.card) return;
+  else if (drag.card.parentElement === grid) return;  // dans le vide de sa propre grille : on ne bouge pas
+  if (before === drag.card || (drag.card.parentElement === grid && drag.card.nextElementSibling === before)) return;
+  grid.querySelector(".folder-empty")?.remove();
+  slideCards(grid, () => grid.insertBefore(drag.card, before));
 });
 
 async function endDrag() {
-  const { card, ghost, zone, moved } = drag;
+  const { card, ghost, grid, from, moved } = drag;
   drag.card = null;
-  if (!moved) return;
+  if (!card || !moved) return;
   ghost?.remove();
   card.classList.remove("drag-source");
-  zone?.classList.remove("drop-over");
+  grid && gridOf(grid).classList.remove("drop-over");
   document.body.classList.remove("dragging-course");
   // Le lâcher ne doit pas ouvrir le cours (le clic qui suit tout de suite est ignoré).
   drag.justDropped = true;
   setTimeout(() => { drag.justDropped = false; }, 80);
-  if (!zone) return;
-  const folderId = zone.dataset.dropFolder || null;
-  const course = card.dataset.courseCard;
+  // Lâchée hors d'une grille : elle reste là où la place réservée l'a menée (ou à sa place de départ)
+  const target = card.parentElement;
+  if (!grid && target === from) return;
+  const folderId = gridFolder(target);
   try {
-    await api(`/api/courses/${course}/folder`, jsonBody("PUT", { folder_id: folderId }));
+    await api("/api/courses-order", jsonBody("PUT", {
+      folder_id: folderId, courses: [...target.querySelectorAll("[data-course-card]")].map((c) => c.dataset.courseCard) }));
     if (folderId) rememberFolder(folderId, true);
   } catch (err) {
     notify(err.message);
@@ -613,6 +698,7 @@ document.addEventListener("click", (e) => {
 }, true);
 document.addEventListener("pointerup", endDrag);
 document.addEventListener("pointercancel", endDrag);
+window.addEventListener("blur", endDrag);  // la fenêtre perd la main en plein glisser : on lâche proprement
 // Pas de glisser natif des liens (il prendrait le dessus sur le nôtre).
 $("#view-courses").addEventListener("dragstart", (e) => { if (e.target.closest?.("[data-course-card]")) e.preventDefault(); });
 
@@ -1592,6 +1678,11 @@ async function openCourse(id, tab, { keepScroll = false } = {}) {
   if (!TABS.includes(tab)) tab = null;
   state.tab = tab;
   $("#course-name").textContent = course.name;
+  // Réglages de la matière, en bas de la page
+  $("#set-name").textContent = course.name;
+  const exam = course.exam?.date;
+  $("#set-exam").textContent = exam ? examLabel(exam) + (course.exam.from === "dossier" ? " (date du semestre)" : "") : "Pas encore de date";
+  $("#course-exam").textContent = exam ? "Changer" : "Choisir la date";
   api(`/api/readiness?course=${course.id}`).then((r) => {
     if (state.course?.id === course.id) setAcqPill($("#course-acq"), r, subjectColor(course.id));
   }).catch(() => {});
@@ -1654,15 +1745,6 @@ $("#news-dismiss").addEventListener("click", async () => {
   $("#news-card").hidden = true;
 });
 
-// Menu « ••• » du cours : renommer, supprimer.
-$("#course-more").addEventListener("click", () => {
-  const menu = $("#course-more-menu");
-  menu.hidden = !menu.hidden;
-});
-document.addEventListener("click", (e) => {
-  if (!e.target.closest(".more")) $("#course-more-menu").hidden = true;
-});
-
 async function renderFolderPick(course) {
   const folders = await api("/api/folders");
   state.folders = folders;
@@ -1681,7 +1763,7 @@ $("#course-folder").addEventListener("change", async (e) => {
     folderId = (await api("/api/folders", jsonBody("POST", { name }))).id;
   }
   state.course = { ...state.course, ...(await api(`/api/courses/${state.course.id}/folder`, jsonBody("PUT", { folder_id: folderId }))) };
-  renderFolderPick(state.course);
+  refreshCourse();  // la date des partiels peut venir du semestre
 });
 
 // Recharge le cours affiché sans changer d'onglet ni de position.
@@ -2135,7 +2217,6 @@ async function launchQuiz(id, n) {
 
 // ---------- Paquets : tous les quiz et flashcards d'un cours ou d'un semestre (.zip), à réimporter ----------
 $("#course-export").addEventListener("click", () => {
-  $("#course-more-menu").hidden = true;
   exportItem("course", state.course.id, "#course-status");
 });
 $("#pack-import-btn").addEventListener("click", () => {
@@ -2186,7 +2267,6 @@ const packSummary = (done) => {
 };
 // Gérer le cours → Importer quiz et flashcards : un paquet .zip (exporté de Pirouette) ou un quiz / des cartes en texte
 $("#course-import").addEventListener("click", () => {
-  $("#course-more-menu").hidden = true;
   $("#course-import-input").value = "";
   $("#course-import-input").click();
 });
@@ -2371,7 +2451,6 @@ document.addEventListener("click", async (e) => {
 });
 
 $("#rename-course").addEventListener("click", async () => {
-  $("#course-more-menu").hidden = true;
   const name = await askText("Nouveau nom de la matière", state.course.name);
   if (!name) return;
   await api(`/api/courses/${state.course.id}`, jsonBody("PATCH", { name }));
@@ -2380,7 +2459,6 @@ $("#rename-course").addEventListener("click", async () => {
 
 // Repartir de zéro (après avoir beaucoup créé, modifié, supprimé des quiz) : le contenu reste, le suivi repart à zéro.
 $("#reset-stats").addEventListener("click", async () => {
-  $("#course-more-menu").hidden = true;
   if (!await askConfirm(`Réinitialiser les statistiques de « ${state.course.name} » ?\n\nLes scores des quiz, les réussites et erreurs par question, `
     + "la progression des flashcards (elles redeviennent nouvelles), l'historique des révisions et les notes des partiels "
     + "de ce cours sont remis à zéro. Les quiz, les cartes et les fichiers sont gardés.")) return;
@@ -2391,7 +2469,6 @@ $("#reset-stats").addEventListener("click", async () => {
 });
 
 $("#delete-course").addEventListener("click", async () => {
-  $("#course-more-menu").hidden = true;
   if (!await askConfirm(`Supprimer la matière « ${state.course.name} », ses cours, ses quiz et ses flashcards ?`)) return;
   await api(`/api/courses/${state.course.id}`, { method: "DELETE" });
   location.hash = "#/cours";
@@ -2715,7 +2792,8 @@ function appRequest() {
     const howMany = coverCards() ? "des flashcards qui couvrent tout le texte (une par définition et par notion importante, de 10 à 50 selon la longueur)"
       : `${$("#cards-count").value || 20} flashcards`;
     return `Pirouette : ajoute ${howMany} sur ${where}${theme}.\n${ids}\n`
-      + `Va droit au but : ne liste pas les cours, ${read}, puis enregistre les cartes (pirouette_ajouter_cartes). ${brief}`;
+      + `Va droit au but : ne liste pas les cours, ${read}, puis enregistre les cartes (pirouette_ajouter_cartes). `
+      + `Avant d'enregistrer, relis chaque recto seul : s'il ne dit pas clairement ce qu'on attend, fais-en une vraie question avec son contexte. ${brief}`;
   }
   const names = { qcm: "QCM", vrai_faux: "vrai/faux", reponse_courte: "réponse courte", texte_a_trous: "texte à trous" };
   const types = [...document.querySelectorAll("input[name=types]:checked")].map((b) => names[b.value]);
@@ -2735,7 +2813,8 @@ function appFollowUp() {
   const chosen = units.filter((u) => isChecked(u.key));
   const listed = chosen.length ? chosen : units;
   return `Dans cette même conversation, ajoute aussi 15 flashcards sur ces mêmes cours (${listed.map((u) => u.key).join(", ")}). `
-    + "Tu as déjà lu le texte : ne le relis pas. Enregistre-les avec pirouette_ajouter_cartes, puis réponds par un résumé court.";
+    + "Tu as déjà lu le texte : ne le relis pas. Chaque recto doit être une vraie question qui se comprend seule. "
+    + "Enregistre-les avec pirouette_ajouter_cartes, puis réponds par un résumé court.";
 }
 function renderAppRequest() {
   if ($("#app-request").hidden) return;
@@ -3842,7 +3921,8 @@ document.addEventListener("click", (e) => { if (!e.target.closest("#card-keys"))
 $("#card-more-menu").addEventListener("click", closeCardMore);
 // Claude relit (outil pirouette_relire) et reformule ce qui ne se comprend pas hors du cours (pirouette_corriger)
 const CLARIFY_HOW = "Corrige avec pirouette_corriger celles qui ne se comprennent pas seules (« cette investigation », "
-  + "« le 2e aspect »… : donne le contexte dans le recto, remplace les renvois par ce qu'ils désignent), qui sont mal "
+  + "« le 2e aspect »… : donne le contexte dans le recto, remplace les renvois par ce qu'ils désignent), dont le recto "
+  + "n'est qu'un bout de phrase (« Invalider une loi » : fais-en une vraie question), qui sont mal "
   + "formulées ou fausses ; garde les autres telles quelles. Réponds ensuite par un résumé court.";
 function clarifyRequest(course, refs = []) {
   return refs.length
@@ -4350,7 +4430,7 @@ function renderScopeQuizzes() {
   }
   const files = state.reviewFile ? [] : state.reviewFiles || [];
   if (!all.length) {
-    $("#scope-quizzes").innerHTML = `<li class="empty muted">Pas encore de quiz : crée-les depuis « Mes cours ».</li>`;
+    $("#scope-quizzes").innerHTML = `<li class="empty muted">Pas encore de quiz : crée-les depuis « Gérer ».</li>`;
     return;
   }
   if (files.length < 2) {
@@ -5043,11 +5123,11 @@ const WELCOME = [
           Pirouette : crée un quiz qui couvre tout le chapitre « L'ADN » du cours « Biologie »…<span class="w-copy">Copier la demande</span></div>
           <span class="w-check">✓ Chaque question vérifiée dans ton cours</span></div>`,
     title: "Des quiz faits par Claude",
-    text: "Branche l'app Claude (Réglages), puis dans <b>Mes cours</b> : <b>Créer</b> → <b>Copier la demande</b> → colle-la dans Claude. Il lit le chapitre et range le quiz dans Pirouette." },
+    text: "Branche l'app Claude (Réglages), puis dans <b>Gérer</b> : <b>Créer</b> → <b>Copier la demande</b> → colle-la dans Claude. Il lit le chapitre et range le quiz dans Pirouette." },
   { art: `<div class="w-col"><div class="w-tabs"><span class="on">Aujourd'hui</span><span>Quiz</span><span>Cartes</span><span>Suivi</span></div>
           <div class="w-today"><i></i><b>Révision du jour</b><span>Commencer</span></div></div>`,
     title: "Une matière, quatre onglets",
-    text: "<b>Aujourd'hui</b> : ta révision du jour. <b>Quiz</b> et <b>Cartes</b> : tu choisis combien en faire, en glissant dans la barre orange. <b>Suivi</b> : ta progression et ton rétroplanning. Pour organiser tes cours : <b>✎ Mes cours</b>, à droite du titre." },
+    text: "<b>Aujourd'hui</b> : ta révision du jour. <b>Quiz</b> et <b>Cartes</b> : tu choisis combien en faire, en glissant dans la barre orange. <b>Suivi</b> : ta progression et ton rétroplanning. Pour organiser tes cours et régler la matière : <b>⚙ Gérer</b>, à droite des onglets." },
   { art: `<div class="w-cards"><div class="w-mini silver"><div>◇ NOUVELLE<em>L'ADN ?</em><span>001</span></div></div>
           <div class="w-mini gold"><div>◆◆ EN COURS<em>La mitochondrie ?</em><span>002</span></div></div>
           <div class="w-mini holo"><div>★ ACQUISE<em>Le neurone ?</em><span>003</span></div></div></div>`,
@@ -5065,6 +5145,13 @@ const WELCOME = [
 ];
 // Les nouveautés de chaque version (le carton « Quoi de neuf » ne s'affiche que si la version en a)
 const WHATS_NEW = {
+  "0.75.0": [
+    ["⇅", "Range tes matières comme tu veux", "Attrape une matière et glisse-la : les autres s'écartent pour lui faire place, dans son semestre ou un autre. L'ordre est gardé"],
+    ["⚙", "« Gérer » une matière", "« Mes cours » s'appelle « Gérer » ; les réglages de la matière (nom, semestre, partiels, import) sont en bas de la page, plus de menu Options caché"],
+    ["✎", "Des cartes plus claires", "Claude écrit chaque recto comme une vraie question, avec son contexte, et le relit avant de l'enregistrer"],
+    ["←", "Revenir en arrière", "Glisse à deux doigts vers la droite sur le trackpad (hors quiz et révisions) pour revenir à la page précédente"],
+    ["🃏", "Sur le téléphone", "Séances de 30 et « Une autre série » sur tout le semestre, paquet de cartes, cartes qui se retournent en glissant"],
+  ],
   "0.74.7": [
     ["✦", "Une lumière plus douce", "Au survol de la révision du jour, la couleur naît sous « Commencer » et s'élargit en douceur, sans bord net"],
   ],
@@ -5175,7 +5262,7 @@ const WHATS_NEW = {
     ["⤢", "Zoom sur une carte", "La carte reste nette (seul le fond se floute) et vient au milieu de la fenêtre"],
   ],
   "0.69.0": [
-    ["✎", "Claude relit tes cartes", "« Relire avec Claude » (Mes cours › Flashcards) ou « ⋯ › Clarifier avec Claude » : il reformule ce qui ne se comprend pas sorti du cours"],
+    ["✎", "Claude relit tes cartes", "« Relire avec Claude » (Gérer › Flashcards) ou « ⋯ › Clarifier avec Claude » : il reformule ce qui ne se comprend pas sorti du cours"],
     ["✦", "Des cartes qui se comprennent seules", "Les nouvelles cartes et questions donnent leur contexte (plus de « cette investigation » sans dire laquelle)"],
     ["−", "Plus épuré", "Moins d'étiquettes au-dessus des questions, et la révision du jour mêle toujours cartes et quiz"],
   ],
@@ -6680,14 +6767,8 @@ $("#exam-form").addEventListener("submit", (e) => {
 $("#exam-clear").addEventListener("click", () => saveExam(""));
 $("#exam-cancel").addEventListener("click", () => $("#exam-dialog").close());
 $("#course-exam").addEventListener("click", () => {
-  $("#course-more-menu").hidden = true;
   openExamDialog({ course: state.course });
 });
-$("#course-semester").addEventListener("click", () => {
-  $("#course-more-menu").hidden = true;
-  $("#semester-dialog").showModal();
-});
-$("#semester-done").addEventListener("click", () => $("#semester-dialog").close());
 
 // ---------- Mises à jour de l'app ----------
 // Au lancement : s'il existe une version plus récente, une petite fenêtre propose de l'installer en un clic.

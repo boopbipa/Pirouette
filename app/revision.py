@@ -28,7 +28,10 @@ CARDS_SYSTEM = """Tu crées des flashcards (cartes mémoire recto/verso) pour ai
 Règles :
 - N'utilise que des informations présentes dans le cours fourni, avec ses mots. Aucune connaissance extérieure :
   si le cours ne donne pas un détail, ne fais pas de carte sur ce détail.
-- Recto ("front") : une question courte et précise, ou un terme à définir. Une seule notion par carte.
+- Recto ("front") : une vraie question, courte et précise, qui dit ce qu'on attend et dans quel cadre (« En méthode
+  expérimentale, combien d'observations suffisent pour invalider une loi ? »). Un terme seul n'est permis que si le
+  verso en est la définition ; jamais un bout de phrase du cours (« Invalider une loi ») dont on ne devine pas la
+  question. Une seule notion par carte.
 - Verso ("back") : la réponse, courte (une à deux phrases maximum), mémorisable.
 - Le verso répond exactement à ce que demande le recto. Relis chaque carte avant de la donner : un recto « Quelle
   théorie… ? » attend le nom d'une théorie, « Qui… ? » une personne, « Combien… ? » un nombre. Si le verso est une
@@ -46,6 +49,9 @@ Règles :
   rendre), calendrier, horaires, salles, contacts, plan du cours, bibliographie. Seul le contenu à apprendre compte.
 - "source" : recopie mot pour mot, sans rien changer, la phrase du cours qui contient la réponse. Chaque carte est
   vérifiée : une source qui n'est pas dans le cours fait rejeter la carte.
+- Dernière vérification, carte par carte : lis seulement le recto, comme l'étudiant qui révise sans le cours. S'il
+  ne peut pas deviner ce qu'on lui demande, ni de quel sujet on parle, reformule le recto (une phrase de contexte
+  suffit, pas besoin de l'allonger beaucoup).
 - Réponds uniquement avec le JSON demandé."""
 
 

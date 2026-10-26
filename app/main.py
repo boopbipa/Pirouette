@@ -510,6 +510,20 @@ async def move_course(course_id: str, body: MoveIn) -> dict:
     return course
 
 
+class OrderIn(BaseModel):
+    folder_id: str | None = None  # None : les cours hors dossier
+    courses: list[str]
+
+
+@app.put("/api/courses-order")
+async def order_courses(body: OrderIn) -> dict:
+    """Ordre des matières d'un semestre, choisi en les glissant (une matière peut aussi y arriver d'ailleurs)."""
+    store.order_courses(body.folder_id, body.courses)
+    if body.folder_id:
+        store.save_settings(last_folder=body.folder_id)
+    return {"ok": True}
+
+
 # ---------- Dossiers de cours (un semestre, une UE…) ----------
 
 class FolderIn(BaseModel):

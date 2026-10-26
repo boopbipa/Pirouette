@@ -377,6 +377,65 @@ function tabBar(on) {
 }
 window.addEventListener("hashchange", () => { if (session) endSession(false); route(); });
 
+// Glisser vers la droite (au doigt, ou à deux doigts sur le trackpad d'un iPad) : page précédente. Une petite flèche
+// apparaît au bord gauche et suit le geste. Jamais pendant une séance ou un quiz, ni sur l'accueil, ni dans une zone
+// qui défile de côté. Dans Safari (pas l'app sur l'écran d'accueil), le bord gauche reste au geste de Safari.
+const swipeBack = { x: 0, done: false, idle: null, el: null, t: null };
+const standalone = () => navigator.standalone || matchMedia("(display-mode: standalone)").matches;
+function sideScroller(el) {
+  for (; el && el !== document.body; el = el.parentElement) {
+    if (el.scrollWidth > el.clientWidth + 1 && el.scrollLeft > 0 && /auto|scroll/.test(getComputedStyle(el).overflowX)) return true;
+  }
+  return false;
+}
+const canSwipeBack = (target) => !session && location.hash.replace(/^#\/?/, "") !== "" && !sideScroller(target);
+function showSwipeBack(progress) {
+  if (!swipeBack.el) {
+    swipeBack.el = Object.assign(document.createElement("div"), { className: "swipe-back", textContent: "‹" });
+    swipeBack.el.setAttribute("aria-hidden", "true");
+    document.body.append(swipeBack.el);
+  }
+  swipeBack.el.style.setProperty("--p", Math.max(0, Math.min(1, progress)).toFixed(3));
+  swipeBack.el.classList.toggle("ready", progress >= 1);
+}
+function goBackBySwipe() {
+  swipeBack.done = true;
+  history.back();
+  setTimeout(() => showSwipeBack(0), 180);
+}
+addEventListener("touchstart", (e) => {
+  const t = e.touches[0];
+  swipeBack.t = e.touches.length === 1 && (standalone() || t.clientX > 30) && canSwipeBack(e.target)
+    ? { x: t.clientX, y: t.clientY, side: null } : null;
+}, { passive: true });
+addEventListener("touchmove", (e) => {
+  const start = swipeBack.t;
+  if (!start) return;
+  const dx = e.touches[0].clientX - start.x, dy = e.touches[0].clientY - start.y;
+  if (!start.side && Math.hypot(dx, dy) > 10) start.side = Math.abs(dx) > Math.abs(dy) * 1.5 && dx > 0;  // un vrai geste de côté ?
+  if (start.side) showSwipeBack(dx / 110);
+  else if (start.side === false) swipeBack.t = null;  // on fait défiler la page : rien à voir
+}, { passive: true });
+addEventListener("touchend", (e) => {
+  const start = swipeBack.t;
+  swipeBack.t = null;
+  if (!start?.side) return;
+  if (e.changedTouches[0].clientX - start.x >= 110) goBackBySwipe();
+  else showSwipeBack(0);
+});
+addEventListener("touchcancel", () => { swipeBack.t = null; showSwipeBack(0); });
+addEventListener("wheel", (e) => {
+  const reset = () => { swipeBack.x = 0; swipeBack.done = false; showSwipeBack(0); };
+  clearTimeout(swipeBack.idle);
+  swipeBack.idle = setTimeout(reset, 220);  // le geste (et son élan) fini, on repart de zéro
+  if (swipeBack.done) return;
+  if (e.ctrlKey || !canSwipeBack(e.target)) { if (swipeBack.x) reset(); return; }
+  if (Math.abs(e.deltaX) <= Math.abs(e.deltaY)) return;
+  swipeBack.x = Math.min(0, swipeBack.x + e.deltaX);  // doigts vers la droite = deltaX négatif
+  showSwipeBack(-swipeBack.x / 160);
+  if (-swipeBack.x >= 160) goBackBySwipe();
+}, { passive: true });
+
 function renderMissing() {
   app.innerHTML = `<section class="center-page"><div class="logo-tile">${logoSvg()}</div>
     <h1>Pirouette</h1><p class="muted">Cette version n'est pas branchée au service en ligne.</p></section>`;
@@ -452,14 +511,48 @@ function refreshSyncLine() {
 
 // ---------- Aujourd'hui : une seule séance, préparée pour toi (cartes du jour + quelques questions, toutes matières) ----------
 const DAILY_QUESTIONS = 7;
-function dailyQuestions(n = DAILY_QUESTIONS) {
-  // Jamais posées ou ratées la dernière fois d'abord, dans les matières non archivées
+function dailyQuestions(n = DAILY_QUESTIONS, skip = new Set()) {
+  // Jamais posées ou ratées la dernière fois d'abord, dans les matières non archivées (sans celles de `skip`)
   const active = new Set(courses().filter((c) => !c.archived).map((c) => c.id));
   const pool = Object.values(current().quiz).filter((q) => active.has(q.course_id))
-    .flatMap((quiz) => asQuestions(quiz).map((q) => ({ q, last: quiz.stats?.[q.index]?.last })));
+    .flatMap((quiz) => asQuestions(quiz).filter((q) => !skip.has(`${quiz.id}:${q.index}`))
+      .map((q) => ({ q, last: quiz.stats?.[q.index]?.last })));
   return shuffle(pool).sort((a, b) => (a.last === true) - (b.last === true)).slice(0, n).map((x) => x.q);
 }
 // Les cartes, et une question toutes les quelques cartes
+// ---------- Séries (30 par défaut) : la séance du jour, puis autant de séries d'entraînement qu'on veut ----------
+// La séance du jour garde ses 7 questions et s'arrête à la taille d'une série (le reste des cartes passe dans la série suivante).
+// Une série d'entraînement reprend ce qu'il reste du jour, puis des cartes à consolider et des questions de tout le
+// semestre, jamais posées ou ratées d'abord ; rien de ce qui a déjà été vu depuis l'ouverture de l'app ne revient.
+const SERIES_DEFAULT = 30;  // « Taille de la révision du jour » des Réglages de l'ordinateur, sinon 30
+const seriesSize = () => Math.max(10, Number(current().meta?.daily_size) || SERIES_DEFAULT);
+const seenInSeries = new Set();  // « carte:<id> » et « <quiz>:<index> » déjà vus depuis l'ouverture de l'app
+function dailySeries() {
+  const cards = todayCards();
+  const questions = dailyQuestions(Math.max(0, DAILY_QUESTIONS - questionsDoneToday()));
+  return { cards: cards.slice(0, Math.max(0, seriesSize() - questions.length)), questions, left: cards.length + questions.length };
+}
+function practiceSeries() {
+  const fresh = (x) => !seenInSeries.has(`carte:${x.card.id}`);
+  const due = todayCards().filter(fresh);
+  const dueIds = new Set(due.map((x) => x.card.id));
+  const toConsolidate = shuffle(courses().filter((c) => !c.archived).flatMap((course) => (current().deck[course.id]?.cards || [])
+    .filter((card) => !dueIds.has(card.id) && (isWeak(card) || card.status !== "known")).map((card) => ({ course, card })))).filter(fresh);
+  const questionSkip = new Set([...seenInSeries].filter((k) => !k.startsWith("carte:")));
+  // Au moins un tiers de questions quand il y en a ; les cartes complètent
+  const size = seriesSize();
+  const questions = dailyQuestions(size, questionSkip);
+  const cards = [...due, ...toConsolidate].slice(0, size - Math.min(questions.length, Math.round(size / 3)));
+  return interleave(cards, questions.slice(0, size - cards.length));
+}
+function rememberSeries(list) {
+  for (const x of list) seenInSeries.add(x.kind === "card" ? `carte:${x.card.id}` : `${x.q.quiz_id}:${x.q.index}`);
+}
+function startPractice() {
+  const list = practiceSeries();
+  if (!list.length) return toast("Tu as tout vu : bravo !");
+  startSession(list, { title: "Série d'entraînement", free: true, series: true });
+}
 function interleave(cards, questions) {
   const list = cards.map((x) => ({ kind: "card", ...x }));
   const step = Math.max(2, Math.floor((cards.length + questions.length) / Math.max(1, questions.length)));
@@ -513,10 +606,9 @@ function renderHome() {
     $("#retry").addEventListener("click", () => syncNow());
     return;
   }
-  const cards = todayCards();
-  const questions = dailyQuestions(Math.max(0, DAILY_QUESTIONS - questionsDoneToday()));
+  const { cards, questions, left } = dailySeries();
   const total = cards.length + questions.length, done = doneToday();
-  const pct = total ? Math.round((100 * done) / (done + total)) : 100;
+  const pct = left ? Math.round((100 * done) / (done + left)) : 100;
   // Le mélange des matières de la séance (les 3 plus présentes nommées)
   const share = {};
   for (const x of cards) share[x.course.id] = (share[x.course.id] || 0) + 1;
@@ -533,23 +625,17 @@ function renderHome() {
       <span class="ring big" style="--m:${pct}%"><i>${catSvg()}</i></span>
       <h2>${total ? "Ta séance du jour" : "C'est fait pour aujourd'hui"}</h2>
       <p>${total ? `${[cards.length ? plural(cards.length, "carte", "cartes") : "", questions.length ? plural(questions.length, "question", "questions") : ""].filter(Boolean).join(" · ")}<br>environ ${minutes} min`
-        : "Bravo ! Tes cartes reviennent demain."}</p>
+        : "Bravo ! Tes cartes reviennent demain. En attendant : des séries de 30, sur tout le semestre."}</p>
       ${parts.length ? `<div class="mix">${parts.map((x) => `<i style="flex:${x.n};background:${colorOf(x.course)}"></i>`).join("")}</div>
         <div class="legend">${parts.slice(0, 3).map((x) => `<span><i style="background:${colorOf(x.course)}"></i>${esc(x.course.name)}</span>`).join("")}${parts.length > 3 ? `<span>+${parts.length - 3}</span>` : ""}</div>` : ""}
-      ${total ? `<button class="primary" type="button" id="go">Commencer</button>` : `<button class="primary" type="button" id="more">Encore 10 minutes</button>`}
-      ${total ? `<button class="link" type="button" id="more">ou encore 10 minutes après</button>` : ""}
+      ${total ? `<button class="primary" type="button" id="go">Commencer</button>` : `<button class="primary" type="button" id="more">Une série d'entraînement</button>`}
+      ${total ? `<button class="link" type="button" id="more">ou une série d'entraînement sur tout le semestre</button>` : ""}
     </section>
     ${top && cards.length ? `<div class="hint-card" style="--c:${colorOf(top)}"><i></i><span><b>${esc(top.name)}</b><small>c'est là que tu as le plus à revoir</small></span></div>` : ""}
     ${courses().length ? "" : `<p class="muted center">Pas encore de matière : crée tes quiz et tes cartes sur ton ordinateur.</p>`}`;
-  $("#go")?.addEventListener("click", () => startSession(interleave(cards, questions), { title: "Séance du jour" }));
-  $("#more")?.addEventListener("click", () => {
-    // Une petite séance en plus : quelques cartes difficiles ou pas encore sues, et des questions
-    const extra = shuffle(courses().filter((c) => !c.archived).flatMap((course) => (current().deck[course.id]?.cards || [])
-      .filter((card) => isWeak(card) || card.status !== "known").map((card) => ({ course, card })))).slice(0, 8);
-    const list = interleave(extra, dailyQuestions(6));
-    if (!list.length) return toast("Rien de plus à revoir : profite !");
-    startSession(list, { title: "Encore 10 minutes", free: true });
-  });
+  $("#go")?.addEventListener("click", () => startSession(interleave(cards, questions), { title: "Séance du jour", series: true }));
+  $("#more")?.addEventListener("click", startPractice);
+
 }
 function catSvg() {
   return `<svg viewBox="0 0 100 100" aria-hidden="true"><path d="M14 78 Q14 46 40 40 L44 26 Q45 23.5 47 25.5 L54 33 Q60 32 66 33.5 L74 26 Q76 24 77 26.5 L79 40 Q90 50 90 66 Q90 78 80 78 Z" fill="var(--accent)"/><path d="M56 55 q4 4 8 0 M70 55 q4 4 8 0" fill="none" stroke="var(--surface)" stroke-width="3.5" stroke-linecap="round"/></svg>`;
@@ -800,10 +886,12 @@ function m1Bar(box, { min, max, value, onChange, unit = ["question", "questions"
 }
 
 // ---------- Séances : une liste de cartes et de questions, dans l'ordre ----------
-function startSession(list, { title = "", free = false, quiz = null } = {}) {
+function startSession(list, { title = "", free = false, quiz = null, series = false } = {}) {
   if (!list.length) return;
-  session = { list: list.slice(0, 200), index: 0, ok: 0, title, free, quiz, back: location.hash || "#/" };
+  session = { list: list.slice(0, 200), index: 0, ok: 0, title, free, quiz, series, back: location.hash || "#/" };
+  rememberSeries(session.list);
   sessionTheme(true);
+  document.body.classList.add("in-session");  // la page ne défile plus : on reste sur la carte ou la question
   tabBar();
   draw();
 }
@@ -849,11 +937,12 @@ function drawCard({ course, card }) {
   const r = rarity(card), s = session, pad = (n) => String(n).padStart(3, "0");
   const head = `<div class="fhead"><span>${esc(shortChapter(card.scope?.[0]) || "Flashcard")}</span><span class="frarity">${r.label}</span></div>`;
   const foot = `<div class="ffoot"><span>${pad(s.index + 1)}/${pad(s.list.length)}</span>${catSvg()}<span>${esc(course.name)}</span></div>`;
-  app.innerHTML = `${sessionHead()}
+  app.innerHTML = `${sessionHead()}<div class="session-body">
     <div class="card-line"><span class="s-subject" style="--c:${colorOf(course)}"><i></i>${esc(course.name)}</span>
       <div class="seg card-mode" role="radiogroup" aria-label="Façon de réviser les cartes">${[["flip", "Retourner"], ["type", "Écrire"]].map(([m, label]) =>
         `<a role="radio" href="#" data-card-mode="${m}" class="${cardMode() === m ? "on" : ""}" aria-checked="${cardMode() === m}">${label}</a>`).join("")}</div></div>
-    <div class="stage"><div class="flash ${r.cls}" id="flash" style="--c:${colorOf(course)}" role="button" tabindex="0" aria-label="Retourner la carte">
+    <div class="stage" id="stage">${s.index + 2 < s.list.length ? '<i class="under u2" aria-hidden="true"></i>' : ""}${s.index + 1 < s.list.length ? '<i class="under" aria-hidden="true"></i>' : ""}
+      <div class="flash ${r.cls} enter" id="flash" style="--c:${colorOf(course)}" role="button" tabindex="0" aria-label="Retourner la carte">
       <div class="face front">${head}<div class="txt">${rich(card.front)}</div>${foot}</div>
       <div class="face back">${head}<p class="fq">${rich(card.front)}</p><div class="txt">${rich(card.back)}</div>${foot}</div>
     </div></div>
@@ -863,7 +952,7 @@ function drawCard({ course, card }) {
       <button class="flip-btn" type="button" id="flip-btn">Retourner la carte</button>
       <button class="rate again" type="button" data-rate="again">Je ne savais pas</button>
       <button class="rate good" type="button" data-rate="good">Je savais</button>
-    </div>`;
+    </div></div>`;
   $("#quit").addEventListener("click", () => endSession(true));
   const flash = $("#flash");
   // Une touche retourne la carte ; une fois la réponse vue, on peut la retourner autant qu'on veut, et noter
@@ -892,31 +981,81 @@ function drawCard({ course, card }) {
   if (writing) setTimeout(() => $("#card-answer")?.focus(), 50);
   const flip = () => {
     if (moved > 10 || (writing && !revealed)) return;  // en mode Écrire, on répond d'abord
+    turn();
+  };
+  const turn = () => {
     flash.classList.toggle("flipped");
     revealed = true;
     $("#rates").classList.remove("locked");  // « Retourner la carte » se partage en « Je ne savais pas » / « Je savais »
   };
-  flash.addEventListener("click", flip);
+  const stage = $("#stage");
+  flash.addEventListener("animationend", () => flash.classList.remove("enter"), { once: true });
   $("#flip-btn").addEventListener("click", () => { moved = 0; flip(); });
-  app.querySelectorAll("[data-rate]").forEach((b) => b.addEventListener("click", () => rate(b.dataset.rate)));
-  // Glisser : à droite « je savais », à gauche « je ne savais pas » (une fois la réponse vue)
-  let x0 = null;
-  flash.addEventListener("touchstart", (e) => { x0 = e.touches[0].clientX; moved = 0; }, { passive: true });
-  flash.addEventListener("touchmove", (e) => {
-    if (x0 === null || !revealed) return;
-    const dx = e.touches[0].clientX - x0;
-    moved = Math.abs(dx);
-    flash.style.transform = `translateX(${dx}px) rotate(${dx / 25}deg) ${flash.classList.contains("flipped") ? back : ""}`;
-    flash.dataset.lean = dx > 40 ? "good" : dx < -40 ? "again" : "";
-  }, { passive: true });
-  flash.addEventListener("touchend", (e) => {
+  app.querySelectorAll("[data-rate]").forEach((b) => b.addEventListener("click", () => throwCard(b.dataset.rate)));
+  // Glisser, avant d'avoir vu la réponse : vers le haut ou vers la gauche, la carte se retourne.
+  // Une fois la réponse vue : à droite « je savais », à gauche « je ne savais pas ». La carte suit le doigt sans retard,
+  // puis elle part de l'écran (ou revient en place).
+  const lean = (dx) => {
+    const tilt = flash.classList.contains("flipped") ? back : "";
+    flash.style.transform = `translateX(${dx}px) rotate(${dx / 22}deg) ${tilt}`;
+    const side = dx > 0 ? "good" : "again", was = flash.dataset.lean;
+    flash.dataset.lean = Math.abs(dx) > SWIPE_RATE ? side : "";
+    if (flash.dataset.lean && flash.dataset.lean !== was) navigator.vibrate?.(8);  // Android : un petit « tic »
+  };
+  let x0 = null, y0 = 0;
+  const start = (e) => { x0 = e.touches[0].clientX; y0 = e.touches[0].clientY; moved = 0; };
+  const move = (e) => {
     if (x0 === null) return;
-    const dx = e.changedTouches[0].clientX - x0;
+    const dx = e.touches[0].clientX - x0, dy = e.touches[0].clientY - y0;
+    if (!revealed) {
+      if (writing) return;
+      if ((dx < -SWIPE_FLIP && -dx > Math.abs(dy)) || (dy < -SWIPE_FLIP && -dy > Math.abs(dx))) { x0 = null; moved = 99; turn(); }
+      return;
+    }
+    if (!moved && Math.abs(e.touches[0].clientY - y0) > Math.abs(dx) + 4) { x0 = null; return; }  // on fait défiler
+    moved = Math.abs(dx);
+    flash.classList.add("dragging");
+    lean(dx);
+  };
+  const release = (e) => {
+    if (x0 === null) return;
+    const dx = (e.changedTouches?.[0]?.clientX ?? x0) - x0;
     x0 = null;
-    if (revealed && Math.abs(dx) > 90) return rate(dx > 0 ? "good" : "again");
+    flash.classList.remove("dragging");
+    if (revealed && Math.abs(dx) > SWIPE_RATE) return throwCard(dx > 0 ? "good" : "again", dx);
+    flash.style.transition = "transform .42s cubic-bezier(.3, 1.4, .5, 1)";  // elle revient en place, avec un petit rebond
     flash.style.transform = "";
+    setTimeout(() => { flash.style.transition = ""; }, 420);
     flash.dataset.lean = "";
-  });
+  };
+  cardGesture = { start, move, release, flip };
+}
+// Tout l'écran répond, pas seulement la carte : toucher ou glisser à côté (jusqu'aux bords, même sur une tablette)
+// retourne la carte ou la note quand même. Les boutons, le champ et l'en-tête gardent leur rôle.
+let cardGesture = null;
+const NOT_CARD = "button, a, input, form, .session-top, .card-line, .rates";
+const onCard = (e) => session && cardGesture && $("#flash") && !e.target.closest(NOT_CARD);
+addEventListener("touchstart", (e) => { if (onCard(e)) cardGesture.start(e); }, { passive: true });
+addEventListener("touchmove", (e) => { if (session && cardGesture && $("#flash")) cardGesture.move(e); }, { passive: true });
+addEventListener("touchend", (e) => { if (session && cardGesture && $("#flash")) cardGesture.release(e); });
+addEventListener("touchcancel", (e) => { if (session && cardGesture && $("#flash")) cardGesture.release(e); });
+addEventListener("click", (e) => { if (onCard(e)) cardGesture.flip(); });
+const SWIPE_RATE = 90;  // px : au-delà, la carte est notée
+const SWIPE_FLIP = 50;  // px : vers le haut ou vers la gauche, la carte se retourne (avant d'avoir vu la réponse)
+// La carte notée part de l'écran du côté choisi (doigt ou bouton), puis la suivante arrive
+function throwCard(rating, from = 0) {
+  const flash = $("#flash");
+  if (!flash || flash.classList.contains("thrown")) return;
+  if (matchMedia("(prefers-reduced-motion: reduce)").matches) return rate(rating);
+  const dir = rating === "good" ? 1 : -1;
+  flash.classList.add("thrown");
+  flash.dataset.lean = rating;
+  const tilt = flash.classList.contains("flipped") ? "rotateY(180deg)" : "";
+  flash.style.transform = `translateX(${from || dir * 30}px) rotate(${(from || dir * 30) / 22}deg) ${tilt}`;
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    flash.style.transform = `translateX(${dir * Math.max(innerWidth, 600)}px) rotate(${dir * 24}deg) ${tilt}`;
+  }));
+  setTimeout(() => rate(rating), 260);
 }
 function rate(rating) {
   const s = session, { course, card } = s.list[s.index];
@@ -947,7 +1086,7 @@ function drawQuestion(q) {
   const s = session;
   const stem = q.type === "texte_a_trous" ? esc(q.question).replace(BLANK, '<span class="blank">______</span>') : rich(q.question);
   app.innerHTML = `${sessionHead()}
-    <section class="question">${q.course ? `<span class="tag q-tag" style="--c:${colorOf(q.course)}"><i></i>${esc(q.course.name)}</span>` : ""}<p class="q">${stem}</p>
+    <section class="question session-body">${q.course ? `<span class="tag q-tag" style="--c:${colorOf(q.course)}"><i></i>${esc(q.course.name)}</span>` : ""}<p class="q">${stem}</p>
       ${typed(q) ? `<form id="typed" class="typed"><input id="answer" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Ta réponse">
           <button class="primary" type="submit">Valider</button><button class="link" type="button" id="dunno">Je ne sais pas</button></form>`
         : `<div class="choices">${q.choices.map((c, i) => `<button class="choice" type="button" data-i="${i}">${rich(c)}</button>`).join("")}</div>`}
@@ -1024,8 +1163,18 @@ function finish() {
   app.innerHTML = `<section class="center-page finish"><div class="score-ring" style="--m:${pct}%"><span>${s.ok}<small>/${total}</small></span></div>
     <h1>${pct >= 80 ? "Bravo !" : pct >= 50 ? "Bien joué" : "Ça viendra"}</h1>
     <p class="muted">${kinds.size > 1 ? `${plural(s.ok, "réussite", "réussites")} sur ${total}` : kinds.has("card") ? `${plural(s.ok, "carte sue", "cartes sues")} sur ${total}` : `${plural(s.ok, "bonne réponse", "bonnes réponses")} sur ${total}`}</p>
-    <button class="primary" type="button" id="back">Terminer</button></section>`;
+    ${s.series ? `<button class="primary" type="button" id="again">Une autre série</button>` : ""}
+    <button class="${s.series ? "ghost" : "primary"}" type="button" id="back">Terminer</button></section>`;
   $("#back").addEventListener("click", () => endSession(false));
+  $("#again")?.addEventListener("click", () => {
+    const list = practiceSeries();
+    if (!list.length) return toast("Tu as tout vu : bravo !");
+    const back = session.back;
+    session = null;
+    view = null;
+    startSession(list, { title: "Série d'entraînement", free: true, series: true });
+    session.back = back;
+  });
 }
 function endSession(ask) {
   if (!session) return;
@@ -1038,6 +1187,7 @@ function endSession(ask) {
   }
   const back = session.back;
   session = null;
+  document.body.classList.remove("in-session");
   sessionTheme(false);  // le reste de l'app : comme le téléphone
   view = null;
   if (location.hash !== back) location.hash = back; else route();

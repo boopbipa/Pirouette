@@ -125,13 +125,16 @@ TOOLS = [
     },
     {
         "name": "pirouette_ajouter_cartes",
-        "description": "Ajoute des flashcards à un cours dans Pirouette. Recto : une question ou un terme ; verso : "
+        "description": "Ajoute des flashcards à un cours dans Pirouette. Recto : une vraie question qui dit ce qu'on "
+                       "attend et dans quel cadre (un terme seul seulement si le verso est sa définition ; jamais un bout "
+                       "de phrase comme « Invalider une loi ») ; verso : "
                        "la réponse, courte, avec les mots du cours ; source : la phrase du cours recopiée mot pour mot. "
                        "Le verso doit répondre exactement au recto : relis chaque carte (un recto « Quelle théorie… ? » "
                        "attend une théorie ; si le verso est une définition, le recto est « Qu'est-ce que… ? »). "
                        "Chaque carte se comprend seule, sans le cours sous les yeux : pas de « cette investigation », "
                        "« le 2e aspect », « ce dernier » sans dire de quoi il s'agit ; donne le contexte dans le recto et "
-                       "remplace les renvois du verso par ce qu'ils désignent. "
+                       "remplace les renvois du verso par ce qu'ils désignent. Avant d'envoyer, relis chaque recto seul, "
+                       "comme l'étudiant qui révise : s'il ne devine pas ce qu'on lui demande, reformule-le. "
                        "Les cartes qui ne viennent pas du cours ou qui existent déjà sont refusées (avec la raison).",
         "inputSchema": {"type": "object", "properties": {
             "cours": {"type": "string", "description": "Identifiant du cours."},
@@ -600,6 +603,9 @@ class Pirouette:
                  "pirouette_corriger (action « modifier », même repère) seulement ceux qui posent problème :",
                  "- il ne se comprend pas seul (« cette investigation », « le 2e aspect », « ce dernier »… sans dire de "
                  "quoi il s'agit) : donne le contexte dans le recto ou l'énoncé, et remplace les renvois par ce qu'ils désignent ;",
+                 "- un recto réduit à quelques mots (« Invalider une loi ») qui ne dit pas ce qu'on attend : fais-en une "
+                 "vraie question, avec son cadre (« En méthode expérimentale, combien d'observations suffisent pour "
+                 "invalider une loi ? ») ;",
                  "- une phrase coupée, mal tournée, ambiguë ou fausse : reformule-la clairement, avec les mots du cours ;",
                  "- le verso ne répond pas exactement au recto (ou la réponse à la question).",
                  "Garde la même notion. Renvoie la même « source » (mot pour mot du cours ; vide pour une carte écrite à la "

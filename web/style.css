@@ -142,6 +142,7 @@ input:focus { border-color: var(--accent); background: var(--surface); }
 
 .finish h1 { margin-top: 20px; }
 .finish .primary { margin-top: 18px; min-width: 200px; }
+.finish .ghost { margin-top: 10px; min-width: 200px; }
 .score-ring { --m: 0%; width: 150px; height: 150px; border-radius: 50%; display: grid; place-items: center;
   background: conic-gradient(var(--accent) var(--m), var(--sunken) 0); }
 .score-ring span { width: 126px; height: 126px; border-radius: 50%; background: var(--bg); display: flex; align-items: center; justify-content: center;
@@ -390,3 +391,56 @@ input, textarea { -webkit-user-select: text; user-select: text; }
 .subject-card .ring i { font-size: 10px; }
 .ring.big.done i { font-size: 30px; }
 .subject-card .ring.done i { font-size: 14px; }
+
+/* Glisser vers la droite (page précédente) : la flèche qui suit le geste au bord gauche */
+.swipe-back { position: fixed; z-index: 20; left: calc(env(safe-area-inset-left) + 10px); top: 50%; width: 40px; height: 40px;
+  border-radius: 50%; display: grid; place-items: center; font: 700 26px/1 var(--sans); color: var(--muted);
+  background: var(--surface); box-shadow: 0 4px 16px -6px rgba(0, 0, 0, .35); pointer-events: none;
+  opacity: var(--p, 0); transform: translate(calc(-60px + 60px * var(--p, 0)), -50%) scale(calc(.7 + .3 * var(--p, 0)));
+  transition: color .15s, background .15s; }
+.swipe-back.ready { color: var(--on-accent); background: var(--accent); }
+
+/* ---------- Séances (cartes et quiz) : la page ne défile plus, le contenu est centré ---------- */
+/* Le corps de la page est figé (plus de rebond ni de défilement) ; seule une question trop longue pour l'écran
+   (avec son explication) peut encore défiler, à l'intérieur. */
+body.in-session { position: fixed; inset: 0; overflow: hidden; overscroll-behavior: none; }
+body.in-session main { max-width: none; padding-inline: max(18px, env(safe-area-inset-left), calc((100% - 720px) / 2));
+  height: 100%; overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; display: flex; flex-direction: column; }
+body.in-session .session-top { flex: none; }
+/* Centré dans la hauteur restante (et collé en haut si ça déborde : les marges automatiques tombent à 0) */
+body.in-session .session-body, body.in-session .finish { margin-block: auto; }
+body.in-session .finish { min-height: 0; }
+.question .feedback:not([hidden]) { animation: rise .28s cubic-bezier(.2, .8, .2, 1); }
+@keyframes rise { from { opacity: 0; transform: translateY(8px); } }
+
+/* La carte : on peut aussi toucher ou glisser à côté d'elle, n'importe où sur l'écran (voir cardGesture) */
+.stage { position: relative; cursor: pointer; padding-bottom: 20px; }  /* la place du paquet sous la carte */
+body.in-session { touch-action: pan-y; }  /* glisser de côté, c'est pour la carte (pas de zoom ni de défilement de côté) */
+.flash.dragging { transition: none; }  /* la carte suit le doigt sans retard */
+.flash.thrown { transition: transform .3s cubic-bezier(.5, 0, .9, .4), opacity .3s ease-in; opacity: 0; pointer-events: none; }
+/* Le paquet : le bord des cartes suivantes dépasse sous la carte (le décalage compense la réduction) */
+.flash, .under { grid-area: 1 / 1; }
+.under { width: min(100%, 400px); aspect-ratio: 5 / 7; max-height: 60dvh; border-radius: 24px; pointer-events: none;
+  background: linear-gradient(155deg, #FFFFFF 0%, #F4F3F0 48%, #E9E7E2 100%);
+  box-shadow: inset 0 0 0 .5px rgba(0, 0, 0, .07), 0 14px 30px -22px rgba(60, 35, 20, .5);
+  transform: translateY(calc(3% + 11px)) scale(.94); filter: brightness(.97); }
+.under.u2 { transform: translateY(calc(6% + 20px)) scale(.88); filter: brightness(.93); }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .under { background: linear-gradient(160deg, #2C2C2E, #1C1C1E 60%, #141415);
+  box-shadow: inset 0 0 0 .5px rgba(255, 255, 255, .1), 0 14px 30px -22px #000; } }
+:root[data-theme="dark"] .under { background: linear-gradient(160deg, #2C2C2E, #1C1C1E 60%, #141415);
+  box-shadow: inset 0 0 0 .5px rgba(255, 255, 255, .1), 0 14px 30px -22px #000; }
+.stage:has(+ .card-typed) .under { max-height: 42dvh; }
+.flash.enter { animation: deal .38s cubic-bezier(.2, .8, .2, 1); }
+@keyframes deal { from { transform: translateY(calc(3% + 11px)) scale(.94); } }  /* la carte du dessous monte */
+@media (prefers-reduced-motion: reduce) { .flash.enter, .question .feedback:not([hidden]) { animation: none; } }
+
+/* Tablettes : une colonne un peu plus large, des textes et des cartes plus grands */
+@media (min-width: 700px) {
+  main { max-width: 720px; }
+  .flash, .under { width: min(100%, 460px); max-height: 64dvh; }
+  .txt { font-size: 26px; }
+  .back .txt { font-size: 22px; }
+  .question .q { font-size: 26px; margin: 14px 0 26px; }
+  .choice { font-size: 18px; padding: 18px 20px; }
+  .rates { max-width: 520px; margin-inline: auto; width: 100%; }
+}

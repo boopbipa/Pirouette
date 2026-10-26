@@ -352,7 +352,19 @@ class Store:
             own = [q for q in quizzes if q.get("course_id") == course["id"]]
             deck = self.get_doc(course["id"], "cards") or {}
             courses.append(course | {"quiz_count": len(own), "card_count": len(deck.get("cards", []))})
-        return sorted(courses, key=lambda c: c["updated_at"], reverse=True)
+        # L'ordre choisi en glissant les matières (« rank ») d'abord ; sans ordre choisi (nouvelle matière, ou
+        # semestre jamais trié) : la plus récemment modifiée en premier.
+        courses.sort(key=lambda c: c["updated_at"], reverse=True)
+        return sorted(courses, key=lambda c: c["rank"] if isinstance(c.get("rank"), int) else -1)
+
+    def order_courses(self, folder_id: str | None, course_ids: list[str]) -> None:
+        """Range ces cours dans ce dossier (None : hors dossier), dans cet ordre."""
+        if folder_id is not None:
+            self.get_folder(folder_id)
+        for rank, course_id in enumerate(course_ids):
+            course = self.get_course(course_id)
+            course.update(folder_id=folder_id, rank=rank)
+            self._save_course(course)
 
     def move_course(self, course_id: str, folder_id: str | None) -> dict:
         """Range le cours dans un dossier (None : le sortir de son dossier)."""

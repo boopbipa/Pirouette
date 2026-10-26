@@ -214,7 +214,8 @@ jobs:
     needs: [dmg, windows]
     # Le Mac est publié même si la version Windows a échoué (elle rejoindra la version suivante), et même si GitHub
     # n'a trouvé aucun Mac Apple Silicon (manque de machines chez GitHub) : la version Intel sert alors aux deux
-    if: ${{ always() && needs.dmg.result != 'cancelled' }}
+    # Comme les fabrications : seulement sur le dépôt public (sur le dépôt privé, il n'y a rien à publier)
+    if: ${{ always() && !github.event.repository.private && needs.dmg.result != 'cancelled' }}
     # Un Mac Intel : les Mac Apple Silicon de GitHub manquent parfois pendant des heures (file d'attente)
     runs-on: macos-15-intel
     permissions:

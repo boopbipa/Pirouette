@@ -188,11 +188,11 @@
     </section>
 
     <section id="view-review-scope" class="view" hidden>
-      <!-- En haut : le nom de la matière et, à part, « Mes cours » (ajouter, modifier ses cours) ; dessous, les onglets pour réviser -->
+      <!-- En haut : le nom de la matière et, à part, « Gérer » (ses cours, quiz, flashcards et réglages) ; dessous, les onglets pour réviser -->
       <div class="scope-head">
         <h1 class="subject-title"><span class="subject-dot" id="review-scope-dot" hidden></span><span id="review-scope-title"></span><span class="acq-pill" id="review-scope-acq" hidden></span></h1>
       </div>
-      <!-- Les onglets pour réviser, et à part (même allure) « Mes cours » : ajouter, modifier ses cours -->
+      <!-- Les onglets pour réviser, et à part (même allure) « Gérer » : ses cours, quiz, flashcards et réglages -->
       <div class="scope-nav">
         <nav class="filters scope-tabs" id="scope-tabs" role="tablist" aria-label="Réviser">
           <a role="tab" data-scope-tab="">Aujourd'hui</a>
@@ -200,7 +200,7 @@
           <a role="tab" data-scope-tab="cartes">Cartes</a>
           <a role="tab" data-scope-tab="suivi">Suivi</a>
         </nav>
-        <nav class="filters scope-tabs manage-pill" id="scope-manage-pill" hidden><a id="scope-manage"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16z"/></svg>Mes cours</a></nav>
+        <nav class="filters scope-tabs manage-pill" id="scope-manage-pill" hidden><a id="scope-manage"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>Gérer</a></nav>
       </div>
       <!-- Une matière à plusieurs cours : réviser toute la matière ou un seul cours -->
       <div class="chips chapter-chips review-files" id="review-files" role="radiogroup" aria-label="Cours à réviser" hidden></div>
@@ -797,20 +797,7 @@
         <div class="course-title">
           <h1 class="subject-title"><span class="subject-dot" id="course-dot"></span><span id="course-name"></span><span class="acq-pill" id="course-acq" hidden></span></h1>
         </div>
-        <div class="more">
-          <button class="ghost small manage-btn" type="button" id="course-more" aria-haspopup="menu">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
-            Options <span class="caret" aria-hidden="true">▾</span></button>
-          <input type="file" id="course-import-input" accept=".zip,application/zip,.txt,.csv,.tsv,.md,text/plain" hidden>
-          <div class="plus-menu more-menu" id="course-more-menu" role="menu" hidden>
-            <button type="button" role="menuitem" id="rename-course"><strong>Renommer la matière</strong></button>
-            <button type="button" role="menuitem" id="course-semester"><strong>Changer de semestre</strong></button>
-            <button type="button" role="menuitem" id="course-exam"><strong>Semaine des partiels</strong></button>
-            <button type="button" role="menuitem" id="course-import"><strong>Importer quiz et flashcards</strong></button>
-            <button type="button" role="menuitem" id="course-export" hidden><strong>Exporter quiz et flashcards</strong></button>
-            <button type="button" role="menuitem" id="reset-stats"><strong>Réinitialiser les statistiques</strong></button>
-            <button type="button" role="menuitem" id="delete-course" class="danger"><strong>Supprimer la matière</strong></button>
-          </div>
+        <input type="file" id="course-import-input" accept=".zip,application/zip,.txt,.csv,.tsv,.md,text/plain" hidden>
         </div>
       </div>
 
@@ -821,7 +808,7 @@
         <span class="primary small fake-button">Choisir un fichier</span>
       </label>
 
-      <!-- « Mes cours » : une page à part pour organiser ; on revient aux révisions par ce lien -->
+      <!-- « Gérer » : une page à part pour organiser ; on revient aux révisions par ces onglets -->
       <div class="scope-nav course-nav">
         <nav class="filters scope-tabs" aria-label="Réviser">
           <a data-course-tab="">Aujourd'hui</a>
@@ -829,7 +816,7 @@
           <a data-course-tab="cartes">Cartes</a>
           <a data-course-tab="suivi">Suivi</a>
         </nav>
-        <nav class="filters scope-tabs manage-pill"><a class="active" aria-current="page"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16z"/></svg>Mes cours</a></nav>
+        <nav class="filters scope-tabs manage-pill"><a class="active" aria-current="page"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>Gérer</a></nav>
       </div>
       <p class="status" id="course-status" hidden></p>
       <!-- Un cours tout juste ajouté (ni quiz ni flashcards) : un seul bouton, Claude découpe puis crée tout -->
@@ -930,6 +917,29 @@
         </div>
         </div>
       </div>
+
+      <!-- Réglages de la matière : visibles en bas de « Gérer » (avant : un menu Options en haut à droite) -->
+      <section class="course-settings" aria-labelledby="course-settings-title">
+        <h2 class="settings-title" id="course-settings-title">Réglages de la matière</h2>
+        <div class="card set-rows">
+          <div class="set-row"><span class="set-label">Nom</span><span class="set-value" id="set-name"></span>
+            <button class="ghost small" type="button" id="rename-course">Renommer</button></div>
+          <div class="set-row"><label class="set-label" for="course-folder">Semestre</label>
+            <select id="course-folder" class="chip set-select" data-icon="folder"></select></div>
+          <div class="set-row"><span class="set-label">Partiels</span><span class="set-value" id="set-exam"></span>
+            <button class="ghost small" type="button" id="course-exam">Choisir la date</button></div>
+          <div class="set-row"><span class="set-label">Quiz et flashcards</span><span class="set-value muted">D'un paquet .zip, d'un tableau ou d'un .txt</span>
+            <button class="ghost small" type="button" id="course-import">Importer</button>
+            <button class="ghost small" type="button" id="course-export" hidden>Exporter</button></div>
+        </div>
+        <h2 class="settings-title danger">Zone sensible</h2>
+        <div class="card set-rows danger-zone">
+          <div class="set-row"><span class="set-label">Réinitialiser les statistiques<small>Les scores et la progression repartent de zéro ; quiz, cartes et fichiers restent.</small></span>
+            <button class="ghost small" type="button" id="reset-stats">Réinitialiser</button></div>
+          <div class="set-row"><span class="set-label">Supprimer la matière<small>Ses cours, ses quiz et ses flashcards sont effacés.</small></span>
+            <button class="ghost small danger" type="button" id="delete-course">Supprimer</button></div>
+        </div>
+      </section>
 
       </div>
 
@@ -1439,13 +1449,6 @@
 
   <!-- Mode concentration (séances, quiz) : une croix pour sortir -->
   <button class="focus-close" id="focus-close" type="button" aria-label="Quitter" title="Quitter (Échap)">✕</button>
-
-  <!-- Semestre d'une matière (menu Options de « Gérer ») -->
-  <dialog id="semester-dialog" class="report-dialog">
-    <h2>Semestre</h2>
-    <div class="field"><select id="course-folder" class="chip" data-icon="folder" aria-label="Semestre de la matière"></select></div>
-    <div class="actions"><button class="primary" type="button" id="semester-done">OK</button></div>
-  </dialog>
 
   <!-- Nouveau cours -->
   <dialog id="new-course-dialog" class="report-dialog">

@@ -54,6 +54,7 @@ def build_docs(store) -> dict[tuple[str, str], dict]:
         "courses": courses,
         "folders": [{k: f.get(k) for k in ("id", "name", "archived", "exam_week")} for f in store.list_folders()],
         "new_per_day": store.new_per_day(),
+        "daily_size": int(store.get_settings().get("daily_size", 30)),  # taille d'une série (téléphone) = révision du jour
         "activity": {day: v for day, v in store.activity().items() if day >= since},
     }
     for quiz in quizzes:
