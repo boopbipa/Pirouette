@@ -4,6 +4,7 @@
 "use strict";
 
 const CONFIG = window.PIROUETTE_CONFIG || {};
+const WEB_VERSION = "dev";  // remplacé à la publication (voir .github/workflows/web.yml)
 const BLANK = "_____";
 const $ = (sel) => document.querySelector(sel);
 const app = $("#app");
@@ -677,7 +678,8 @@ function renderSettings() {
     <nav class="list">
       <button class="row" type="button" id="unpair"><span class="row-text"><b class="danger">Dissocier cet appareil</b><small>il ne verra plus tes quiz ni tes cartes</small></span></button>
     </nav>
-    <p class="muted small center" style="margin-top:22px">Tes quiz et tes cartes se créent et se modifient sur ton ordinateur ; ici, tu révises. Tes réponses y reviennent toutes seules.</p>`;
+    <p class="muted small center" style="margin-top:22px">Tes quiz et tes cartes se créent et se modifient sur ton ordinateur ; ici, tu révises. Tes réponses y reviennent toutes seules.</p>
+    <p class="muted small center">Version ${esc(WEB_VERSION)}</p>`;
   $("#sync").addEventListener("click", () => syncNow());
   app.querySelectorAll("[data-session-theme]").forEach((a) => a.addEventListener("click", (e) => {
     e.preventDefault();
@@ -1207,4 +1209,20 @@ function endSession(ask) {
   addEventListener("online", () => S.owner && syncNow({ quiet: true }));
   setInterval(refreshSyncLine, 30000);
   if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
+  checkWebUpdate();
+  document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") checkWebUpdate(); });
 })();
+
+// Une nouvelle version de la page est en ligne : on la prend tout de suite (l'app de l'écran d'accueil gardait
+// parfois l'ancienne). Jamais au milieu d'une séance ; une seule fois par version (pas de boucle).
+async function checkWebUpdate() {
+  if (WEB_VERSION === "dev" || session) return;
+  try {
+    const latest = (await (await fetch(`version.txt?t=${Date.now()}`, { cache: "no-store" })).text()).trim();
+    if (!latest || latest === WEB_VERSION) return;
+    if (sessionStorage.getItem("pirouette.reloadedFor") === latest) return;
+    sessionStorage.setItem("pirouette.reloadedFor", latest);
+    await navigator.serviceWorker?.getRegistration().then((r) => r?.update()).catch(() => {});
+    location.reload();
+  } catch {}
+}
