@@ -994,7 +994,7 @@ function drawCard({ course, card }) {
   flash.addEventListener("animationend", () => flash.classList.remove("enter"), { once: true });
   $("#flip-btn").addEventListener("click", () => { moved = 0; flip(); });
   app.querySelectorAll("[data-rate]").forEach((b) => b.addEventListener("click", () => throwCard(b.dataset.rate)));
-  // Glisser, avant d'avoir vu la réponse : vers le haut ou vers la gauche, la carte se retourne.
+  // Glisser, avant d'avoir vu la réponse : à gauche ou à droite (au doigt), ou vers le haut, la carte se retourne.
   // Une fois la réponse vue : à droite « je savais », à gauche « je ne savais pas ». La carte suit le doigt sans retard,
   // puis elle part de l'écran (ou revient en place).
   const lean = (dx) => {
@@ -1005,13 +1005,21 @@ function drawCard({ course, card }) {
     if (flash.dataset.lean && flash.dataset.lean !== was) navigator.vibrate?.(8);  // Android : un petit « tic »
   };
   let x0 = null, y0 = 0;
-  const start = (e) => { x0 = e.touches[0].clientX; y0 = e.touches[0].clientY; moved = 0; };
+  // Avant la réponse, glisser à gauche ou à droite retourne la carte : elle pivote sous le doigt (on garde la main :
+  // lâchée avant la moitié, elle revient) ; vers le haut, elle se retourne d'un coup.
+  let angle = null;
+  const start = (e) => { x0 = e.touches[0].clientX; y0 = e.touches[0].clientY; moved = 0; angle = null; };
   const move = (e) => {
     if (x0 === null) return;
     const dx = e.touches[0].clientX - x0, dy = e.touches[0].clientY - y0;
     if (!revealed) {
       if (writing) return;
-      if ((dx < -SWIPE_FLIP && -dx > Math.abs(dy)) || (dy < -SWIPE_FLIP && -dy > Math.abs(dx))) { x0 = null; moved = 99; turn(); }
+      if (angle === null && dy < -SWIPE_FLIP && -dy > Math.abs(dx)) { x0 = null; moved = 99; turn(); return; }
+      if (angle === null && (Math.abs(dx) < 8 || Math.abs(dx) < Math.abs(dy))) return;  // pas encore de côté
+      moved = Math.max(moved, Math.abs(dx));
+      angle = Math.max(-180, Math.min(180, (dx / FLIP_SPAN) * 180));
+      flash.classList.add("dragging");
+      flash.style.transform = `rotateY(${angle}deg)`;
       return;
     }
     if (!moved && Math.abs(e.touches[0].clientY - y0) > Math.abs(dx) + 4) { x0 = null; return; }  // on fait défiler
@@ -1024,6 +1032,20 @@ function drawCard({ course, card }) {
     const dx = (e.changedTouches?.[0]?.clientX ?? x0) - x0;
     x0 = null;
     flash.classList.remove("dragging");
+    if (!revealed && angle !== null) {  // le retournement au doigt : fini s'il a passé la moitié, sinon il revient
+      const done = Math.abs(angle) >= 75, to = done ? Math.sign(angle) * 180 : 0;
+      angle = null;
+      flash.style.transition = "transform .3s cubic-bezier(.2, .8, .2, 1)";
+      flash.style.transform = `rotateY(${to}deg)`;
+      setTimeout(() => {
+        flash.style.transition = "none";
+        if (done) turn();  // la carte est retournée : la classe prend le relais du doigt
+        flash.style.transform = "";
+        void flash.offsetWidth;
+        flash.style.transition = "";
+      }, 300);
+      return;
+    }
     if (revealed && Math.abs(dx) > SWIPE_RATE) return throwCard(dx > 0 ? "good" : "again", dx);
     flash.style.transition = "transform .42s cubic-bezier(.3, 1.4, .5, 1)";  // elle revient en place, avec un petit rebond
     flash.style.transform = "";
@@ -1043,7 +1065,8 @@ addEventListener("touchend", (e) => { if (session && cardGesture && $("#flash"))
 addEventListener("touchcancel", (e) => { if (session && cardGesture && $("#flash")) cardGesture.release(e); });
 addEventListener("click", (e) => { if (onCard(e)) cardGesture.flip(); });
 const SWIPE_RATE = 90;  // px : au-delà, la carte est notée
-const SWIPE_FLIP = 50;  // px : vers le haut ou vers la gauche, la carte se retourne (avant d'avoir vu la réponse)
+const SWIPE_FLIP = 50;  // px : vers le haut, la carte se retourne d'un coup (avant d'avoir vu la réponse)
+const FLIP_SPAN = 170;  // px : de côté, la carte a fait un demi-tour (avant d'avoir vu la réponse)
 // La carte notée part de l'écran du côté choisi (doigt ou bouton), puis la suivante arrive
 function throwCard(rating, from = 0) {
   const flash = $("#flash");
