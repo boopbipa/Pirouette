@@ -4,6 +4,9 @@
 "use strict";
 
 const CONFIG = window.PIROUETTE_CONFIG || {};
+// Pas de zoom (comme une app) : Safari sur iPhone et iPad ignore parfois l'interdiction de la page, on bloque donc aussi
+// le pincement (gestes iOS) ; le double-tap, lui, est coupé par touch-action (style.css)
+for (const ev of ["gesturestart", "gesturechange", "gestureend"]) document.addEventListener(ev, (e) => e.preventDefault(), { passive: false });
 const WEB_VERSION = "dev";  // remplacé à la publication (voir .github/workflows/web.yml)
 const BLANK = "_____";
 const $ = (sel) => document.querySelector(sel);

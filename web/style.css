@@ -26,6 +26,8 @@
 }
 :root[data-theme="light"] { color-scheme: light; }
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+/* Pas de zoom : ni en pinçant ni en tapant deux fois (comme une app ; défiler reste possible) */
+html, body { touch-action: pan-x pan-y; }
 html, body { margin: 0; background: var(--bg); color: var(--text); font-family: var(--sans); font-size: 16px; line-height: 1.4;
   -webkit-text-size-adjust: 100%; }
 body { min-height: 100dvh; }
