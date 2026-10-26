@@ -92,9 +92,31 @@ def daily_text(store, today: date | None = None) -> str | None:
 
 
 def notify(text: str, title: str = "Pirouette") -> bool:
+    """Une notification de l'ordinateur (Mac : centre de notifications ; Windows : notification de Windows 10/11)."""
+    if sys.platform == "win32":
+        return _notify_windows(text, title)
     script = f"display notification {_quote(text)} with title {_quote(title)} sound name \"Glass\""
     try:
         return subprocess.run(["osascript", "-e", script], capture_output=True, timeout=20).returncode == 0
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+
+
+def _notify_windows(text: str, title: str) -> bool:
+    """Notification Windows, sans module à installer : celle de PowerShell (seule appli toujours inscrite pour en
+    montrer), avec le titre « Pirouette » en première ligne."""
+    xml_escape = lambda t: t.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("'", "&apos;")  # noqa: E731
+    toast = (f"<toast><visual><binding template='ToastGeneric'><text>{xml_escape(title)}</text>"
+             f"<text>{xml_escape(text)}</text></binding></visual></toast>").replace("'", "''")
+    script = ("[Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType = WindowsRuntime] | Out-Null;"
+              "[Windows.Data.Xml.Dom.XmlDocument, Windows.Data.Xml.Dom.XmlDocument, ContentType = WindowsRuntime] | Out-Null;"
+              f"$x = New-Object Windows.Data.Xml.Dom.XmlDocument; $x.LoadXml('{toast}');"
+              "$app = '{1AC14E77-02E7-4E5D-B744-2EB1AE5198B7}\\WindowsPowerShell\\v1.0\\powershell.exe';"
+              "[Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier($app).Show("
+              "[Windows.UI.Notifications.ToastNotification]::new($x))")
+    try:
+        return subprocess.run(["powershell", "-NoProfile", "-NonInteractive", "-Command", script], capture_output=True,
+                              timeout=20, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0)).returncode == 0
     except (OSError, subprocess.TimeoutExpired):
         return False
 

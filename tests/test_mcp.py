@@ -227,6 +227,20 @@ def test_claude_link_diagnostic_on_windows(tmp_path, monkeypatch):
     assert [f["pirouette"] and f["same_command"] for f in report["files"]] == [True, True, True]
     assert report["logs"][0]["lines"] == ["ok", "[pirouette] Server started", "autre ligne", "[x] error: boom"]  # mcp.log en entier
 
+    # Comme chez une utilisatrice Windows : connexion de l'app Claude expirée, et Pirouette jamais lancée
+    # (mcp.log plus ancien que le branchement, pas de mcp-server-pirouette.log)
+    (logs / "main.log").write_text("[info] oauth failed: authorize returned 403 <json error=permission_error "
+                                   "code=session_stale_relogin len=238>\n", encoding="utf-8")
+    import os
+    os.utime(logs / "mcp.log", (1, 1))
+    advice = claude_desktop.diagnose()["advice"]
+    assert any("déconnecte-toi" in a for a in advice) and any("jamais lancé Pirouette" in a for a in advice)
+    # Une fois lancée : son journal passe en premier, et plus de conseil « jamais lancé »
+    (logs / "mcp-server-pirouette.log").write_text("[pirouette] Server started and connected successfully\n", encoding="utf-8")
+    report = claude_desktop.diagnose()
+    assert report["logs"][0]["path"].endswith("mcp-server-pirouette.log")
+    assert not any("jamais lancé" in a for a in report["advice"])
+
 
 def test_claude_updates_a_course_after_a_new_version(tmp_path):
     store, cid = _store(tmp_path)

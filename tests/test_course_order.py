@@ -24,3 +24,15 @@ def test_courses_keep_the_order_chosen_by_dragging(tmp_path, monkeypatch):
     # Déposée dans un autre groupe (ici hors semestre) : elle y va, à sa place
     client.put("/api/courses-order", json={"folder_id": None, "courses": [ids["Philo"]]})
     assert names(s1) == ["Neuro", "Psycho"] and names(None) == ["Philo"]
+
+
+def test_notify_only_inside_the_desktop_app(tmp_path, monkeypatch):
+    monkeypatch.setattr(main, "store", Store(tmp_path))
+    monkeypatch.delenv("PIROUETTE_DESKTOP", raising=False)
+    client = TestClient(main.app)
+    assert client.post("/api/notify", json={"title": "Léa", "text": "Salut"}).json() == {"shown": False}
+    shown = []
+    monkeypatch.setenv("PIROUETTE_DESKTOP", "1")
+    monkeypatch.setattr(main.reminder, "notify", lambda text, title: shown.append((title, text)) or True)
+    assert client.post("/api/notify", json={"title": "Léa", "text": "Salut"}).json() == {"shown": True}
+    assert shown == [("Léa", "Salut")]

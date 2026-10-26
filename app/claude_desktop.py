@@ -190,10 +190,41 @@ def diagnose() -> dict:
                 lines = log.read_text(encoding="utf-8", errors="replace").splitlines()
             except OSError:
                 continue
-            # mcp.log : en entier (la fin) ; les autres : seulement ce qui parle de Pirouette, des outils ou d'erreurs
-            keep = lines if log.name == "mcp.log" else \
-                [line for line in lines if any(w in line.lower() for w in ("pirouette", "mcp", "error"))]
-            logs.append({"path": str(log), "lines": keep[-15 if log.name == "mcp.log" else -8:],
-                         "modified": int(log.stat().st_mtime)})
+            # mcp.log et le journal de Pirouette (mcp-server-pirouette.log) : en entier (la fin) ; les autres :
+            # seulement ce qui parle de Pirouette, des outils, d'erreurs ou de connexion
+            whole = log.name == "mcp.log" or log.name.startswith("mcp-server-")
+            keep = lines if whole else [line for line in lines if any(
+                w in line.lower() for w in ("pirouette", "mcp", "error", "oauth", "relogin"))]
+            logs.append({"path": str(log), "lines": keep[-15 if whole else -8:], "modified": int(log.stat().st_mtime),
+                         "all": lines[-400:]})
+    advice = _advice(files, logs)
+    for log in logs:
+        log.pop("all", None)
+    # Le journal de Pirouette d'abord (s'il existe), puis les plus récents
+    logs.sort(key=lambda log: (not Path(log["path"]).name.startswith("mcp-server-"), -log["modified"]))
     return {"platform": sys.platform, "command": program, "command_exists": Path(program[0]).exists(),
-            "claude_running": _claude_processes(), "files": files, "logs": logs[-8:]}
+            "claude_running": _claude_processes(), "files": files, "logs": logs[:8], "advice": advice}
+
+
+def _advice(files: list[dict], logs: list[dict]) -> list[str]:
+    """Ce que les journaux disent de faire, en clair (les cas déjà rencontrés)."""
+    advice = []
+    if any("session_stale_relogin" in line for log in logs for line in log["all"][-200:]):
+        advice.append("L'app Claude a perdu ta connexion (« session_stale_relogin ») : dans l'app Claude, déconnecte-toi "
+                      "(ton nom en bas à gauche → Se déconnecter), reconnecte-toi, puis quitte-la complètement et rouvre-la.")
+    pirouette_log = [log for log in logs if Path(log["path"]).name.startswith("mcp-server-pirouette")]
+    configured = [f for f in files if f.get("pirouette")]
+    if configured and not pirouette_log:
+        mcp = [log for log in logs if Path(log["path"]).name == "mcp.log"]
+        newest_config = max((Path(f["path"]).stat().st_mtime for f in configured if Path(f["path"]).exists()), default=0)
+        if not mcp or mcp[0]["modified"] < newest_config:
+            advice.append("L'app Claude n'a encore jamais lancé Pirouette (aucun journal « mcp-server-pirouette ») : "
+                          "quitte-la complètement (Windows : icône Claude près de l'horloge → Quitter ; Mac : Claude → "
+                          "Quitter), rouvre-la, puis regarde dans ses Réglages → Développeur que « pirouette » apparaît. "
+                          "Sur un compte d'organisation (Team, Enterprise), l'administrateur peut avoir désactivé les "
+                          "outils locaux.")
+    for log in pirouette_log:
+        if any("error" in line.lower() or "exited" in line.lower() for line in log["lines"]):
+            advice.append("L'app Claude a lancé Pirouette mais quelque chose a coincé : le journal mcp-server-pirouette "
+                          "ci-dessous dit quoi.")
+    return advice

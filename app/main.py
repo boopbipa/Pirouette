@@ -3053,6 +3053,20 @@ async def online_import(message_id: str, body: ImportIn) -> dict:
             "replaced": replaced}
 
 
+class NotifyIn(BaseModel):
+    title: str = "Pirouette"
+    text: str
+
+
+@app.post("/api/notify")
+async def system_notify(body: NotifyIn) -> dict:
+    """Une notification de l'ordinateur (un message, une invitation reçus quand Pirouette est en arrière-plan)."""
+    if os.getenv("PIROUETTE_DESKTOP") != "1":
+        return {"shown": False}  # dans un navigateur : la page s'en charge elle-même
+    shown = await asyncio.to_thread(reminder.notify, body.text[:240], body.title[:80] or "Pirouette")
+    return {"shown": shown}
+
+
 @app.post("/api/quit")
 async def quit_app(reopen: bool = False) -> dict:
     """Arrête l'app Mac (après une mise à jour). Réponse d'abord, puis arrêt net un instant plus tard : les données

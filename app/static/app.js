@@ -71,7 +71,7 @@ const ICONS = {
 const icon = (name) => svgIcon(ICONS[name]);
 const ICON_TIMER = icon("timer");
 // Les nouveautés gardent leurs emojis dans WHATS_NEW (lisibles dans le code) : on les affiche en icônes au trait
-const NEWS_ICONS = { "💬": "msg", "📚": "book", "⚔️": "swords", "🔔": "bell", "🔌": "plug", "🩺": "pulse", "🎲": "dice", "👥": "users",
+const NEWS_ICONS = { "👥": "users", "🔔": "bell", "📱": "chip", "🩺": "pulse", "💬": "msg", "📚": "book", "⚔️": "swords", "🔔": "bell", "🔌": "plug", "🩺": "pulse", "🎲": "dice", "👥": "users",
   "🏁": "flag", "🏆": "trophy", "🪟": "window", "🔍": "search", "🔀": "shuffle", "🎯": "target", "📝": "note", "🃏": "cards", "✂": "scissors",
   "⏱": "timer", "📌": "pin", "🦙": "chip" };
 
@@ -303,7 +303,7 @@ function renderGuide(config, folders, stats) {
   // L'IA (app Claude ou IA locale, en option) n'est pas demandée ici : elle se branche dans Réglages, au besoin.
   const steps = [
     { done: folders.length > 0, title: "Crée ton semestre",
-      text: "Tes cours s'y rangent, avec la date de tes partiels et ton plan de révision.", action: `<button class="primary small" type="button" data-guide="semestre">Créer un semestre</button>` },
+      text: "Tes matières s'y rangent, avec la date de tes partiels et ton plan de révision.", action: `<button class="primary small" type="button" data-guide="semestre">Créer un semestre</button>` },
     { done: stats.courses > 0, title: "Importe ton premier cours",
       text: "Un PDF, un Word, un Pages… Pirouette repère les chapitres et prépare quiz et flashcards.", action: `<button class="primary small" type="button" data-guide="cours">Importer un cours</button>` },
   ];
@@ -389,6 +389,7 @@ async function loadCourses() {
   $("#course-count").textContent = courses.length ? `· ${courses.length}` : "";
   $("#courses-empty").hidden = courses.length > 0;
   renderFolders(courses, folders);
+  renderPhoneHint(courses);
 
   $("#orphans").hidden = orphans.length === 0;
   $("#orphan-list").innerHTML = orphans.map((q) => quizItem(q, null, null, { play: true })).join("");
@@ -486,6 +487,24 @@ function courseCard(c) {
     </a>`;
 }
 
+// « Révise aussi sur ton téléphone » : dès qu'il y a de quoi réviser, tant qu'aucun appareil n'est jumelé
+// (« Plus tard » le range 2 semaines)
+async function renderPhoneHint(courses) {
+  const box = $("#phone-hint");
+  let later = 0;
+  try { later = Number(localStorage.getItem("pirouette.phoneHintLater") || 0); } catch {}
+  const content = courses.some((c) => c.quiz_count || c.card_count);
+  if (!content || Date.now() < later) { box.hidden = true; return; }
+  const s = await api("/api/sync").catch(() => null);
+  if (!s?.configured) { box.hidden = true; return; }
+  const devices = s.connected ? await api("/api/sync/devices").catch(() => []) : [];
+  box.hidden = devices.length > 0;
+}
+$("#phone-hint-close").addEventListener("click", () => {
+  try { localStorage.setItem("pirouette.phoneHintLater", String(Date.now() + 14 * 86400000)); } catch {}
+  $("#phone-hint").hidden = true;
+});
+
 // ---------- Dossiers de cours (un semestre, une UE…) ----------
 // Dossiers repliés : une préférence de cet ordinateur (les dossiers archivés sont repliés par défaut).
 function folderOpen(folder) {
@@ -516,7 +535,7 @@ function folderHtml(folder, courses) {
           <button class="icon" type="button" data-folder-rename="${folder.id}" title="Le semestre : nom et matières" aria-label="Modifier le semestre">${ICON_EDIT}</button>
           <button class="icon" type="button" data-folder-exam="${folder.id}" title="Semaine des partiels" aria-label="Semaine des partiels">${ICON_CALENDAR}</button>
           ${folder.archived ? `<button class="ghost small" type="button" data-folder-archive="${folder.id}">Désarchiver</button>` : ""}
-          <button class="icon" type="button" data-folder-delete="${folder.id}" title="Supprimer le semestre (les cours sont gardés)" aria-label="Supprimer le semestre">${ICON_TRASH}</button>
+          <button class="icon" type="button" data-folder-delete="${folder.id}" title="Supprimer le semestre (les matières sont gardées)" aria-label="Supprimer le semestre">${ICON_TRASH}</button>
         </span>
       </summary>
       <div class="course-grid drop-zone" data-drop-folder="${folder.id}">
@@ -925,6 +944,7 @@ $("#claude-diag").addEventListener("click", async () => {
   if (d.error) return setStatus("#claude-app-status", d.error, false);
   const yes = (v) => (v ? "oui" : "non");
   const lines = [`Pirouette : ${d.command.join(" ")} (${d.command_exists ? "trouvée" : "INTROUVABLE"})`, ""];
+  if (d.advice?.length) lines.unshift("À faire :", ...d.advice.map((a) => `→ ${a}`), "");
   if (d.platform === "win32") {
     lines.push(d.claude_running.length ? `App Claude ouverte : ${d.claude_running.join(" ; ")}`
       : "App Claude pour ordinateur : AUCUNE en cours (ouvre-la avant le diagnostic ; si elle est ouverte, c'est peut-être la version web)", "");
@@ -941,6 +961,7 @@ $("#claude-diag").addEventListener("click", async () => {
     lines.push(...(log.lines.length ? log.lines.map((l) => `  ${l}`) : ["  (rien sur Pirouette)"]));
   }
   $("#claude-diag-out").textContent = lines.join("\n");
+  if (d.advice?.length) setStatus("#claude-app-status", d.advice[0], false);
   $("#claude-diag-out").hidden = false;
   $("#claude-diag-copy").hidden = false;
 });
@@ -2321,7 +2342,7 @@ function showPackDialog(into = null) {
   const target = (row, i) => into ? (i === best ? into.id : "") : row.match?.id ?? "new";
   const options = (row, i) => [
     ...state.pack.existing.map((c) => `<option value="${c.id}" ${target(row, i) === c.id ? "selected" : ""}>${escapeHtml(c.name)}</option>`),
-    `<option value="new" ${target(row, i) === "new" ? "selected" : ""}>Créer le cours « ${escapeHtml(row.name)} »</option>`,
+    `<option value="new" ${target(row, i) === "new" ? "selected" : ""}>Créer la matière « ${escapeHtml(row.name)} »</option>`,
     `<option value="" ${target(row, i) === "" ? "selected" : ""}>Ne pas importer</option>`].join("");
   $("#pack-rows").innerHTML = state.pack.courses.map((row, i) => `
     <li class="pack-row">
@@ -2386,7 +2407,7 @@ $("#pack-go").addEventListener("click", async () => {
     if (state.packInto && state.course?.id === state.packInto) return afterCourseImport(done);  // depuis la page du cours
     const text = packSummary(done);
     setStatus("#courses-status", text
-      ? `${text} dans ${plural(done.courses, "cours", "cours")}${done.created ? ` (dont ${plural(done.created, "nouveau cours", "nouveaux cours")})` : ""}.`
+      ? `${text} dans ${plural(done.courses, "matière", "matières")}${done.created ? ` (dont ${plural(done.created, "nouvelle matière", "nouvelles matières")})` : ""}.`
       : "Rien de nouveau : ces quiz et ces cartes étaient déjà là.", true);
     loadCourses();
   } catch (err) {
@@ -2534,7 +2555,7 @@ $("#rename-course").addEventListener("click", async () => {
 $("#reset-stats").addEventListener("click", async () => {
   if (!await askConfirm(`Réinitialiser les statistiques de « ${state.course.name} » ?\n\nLes scores des quiz, les réussites et erreurs par question, `
     + "la progression des flashcards (elles redeviennent nouvelles), l'historique des révisions et les notes des partiels "
-    + "de ce cours sont remis à zéro. Les quiz, les cartes et les fichiers sont gardés.")) return;
+    + "de cette matière sont remis à zéro. Les quiz, les cartes et les fichiers sont gardés.")) return;
   const { quizzes, cards } = await api(`/api/courses/${state.course.id}/reset-stats`, { method: "POST" });
   state.deck = null;
   await refreshCourse();
@@ -3099,7 +3120,7 @@ function renderCardGrid() {
   $("#cards-link-count").textContent = $("#fold-cards-count").textContent;
   $("#cards-link").href = `#/reviser/cours/${state.course.id}/cartes`;
   $("#cards-empty").hidden = !none;
-  $("#cards-empty").textContent = "Pas encore de flashcards pour ce cours : clique sur « + Ajouter des cartes ».";
+  $("#cards-empty").textContent = "Pas encore de flashcards dans cette matière : clique sur « + Ajouter des cartes ».";
   $("#cards-chip").innerHTML = chapterChip();
   $("#card-grid").innerHTML = cards.filter((c) => inChapter(c.scope)).map((c) => fcardHtml(c, { removable: true })).join("");
   $("#cards-flip-all").textContent = "Voir les réponses";
@@ -3174,7 +3195,7 @@ $("#card-grid").addEventListener("keydown", (e) => {
 });
 
 $("#cards-clear").addEventListener("click", async () => {
-  if (!await askConfirm("Effacer toutes les flashcards de ce cours (et leur suivi) ?")) return;
+  if (!await askConfirm("Effacer toutes les flashcards de cette matière (et leur suivi) ?")) return;
   await api(`/api/courses/${state.course.id}/cards`, { method: "DELETE" });
   state.deck = null;
   refreshCourse();
@@ -3263,7 +3284,7 @@ $("#card-save-next").addEventListener("click", () => saveCardDialog(true));
 $("#card-cancel").addEventListener("click", () => $("#card-dialog").close());
 $("#card-delete").addEventListener("click", async () => {
   const { card, courseId, onDeleted } = state.editing;
-  if (!await askConfirm("Supprimer cette carte ? Elle disparaît du cours et de tes révisions.")) return;
+  if (!await askConfirm("Supprimer cette carte ? Elle disparaît de la matière et de tes révisions.")) return;
   try {
     await api(`/api/courses/${courseId}/cards/${card.id}`, { method: "DELETE" });
   } catch (err) {
@@ -4029,7 +4050,7 @@ $("#card-edit-current").addEventListener("click", () => {
 $("#card-delete-current").addEventListener("click", async () => {
   const s = state.session;
   const item = s.items[s.index];
-  if (!await askConfirm("Supprimer cette carte ? Elle disparaît du cours et de tes révisions.")) return;
+  if (!await askConfirm("Supprimer cette carte ? Elle disparaît de la matière et de tes révisions.")) return;
   try {
     await api(`/api/courses/${item.course_id}/cards/${item.card.id}`, { method: "DELETE" });
   } catch (err) {
@@ -4198,7 +4219,7 @@ async function openReviewScope(kind, id = "", sub = "") {
   if (kind === "cours" && sub === "partiel") return openPartielPrep(id);
   state.course = null;
   const folders = await api("/api/folders");
-  let params = {}, name = "Tous mes cours", owner = null, parent = null;
+  let params = {}, name = "Toutes mes matières", owner = null, parent = null;
   state.reviewFiles = [];
   if (kind === "dossier") {
     params = { folder: id };
@@ -4245,7 +4266,7 @@ async function openReviewScope(kind, id = "", sub = "") {
     a.classList.toggle("active", t === tab);
     a.setAttribute("aria-selected", String(t === tab));
   });
-  $("#scope-tabs").hidden = !owner && !parent && kind !== "cours";  // « Tous mes cours » : pas de plan
+  $("#scope-tabs").hidden = !owner && !parent && kind !== "cours";  // « Toutes mes matières » : pas de plan
   $("#scope-main").hidden = tab === "suivi";
   if (tab !== "suivi") setScopeMode(tab || "jour");
   $("#view-review-scope").dataset.place = tab || "jour";
@@ -4422,7 +4443,7 @@ async function onDecksClick(e) {
     }
     if (act === "import") { state.importFrom = "cartes"; $("#import-input").click(); }
     if (act === "export") exportItem("cards", course.id, "#grid-status");
-    if (act === "clear" && await askConfirm("Effacer toutes les flashcards de ce cours (et leur suivi) ?")) {
+    if (act === "clear" && await askConfirm("Effacer toutes les flashcards de cette matière (et leur suivi) ?")) {
       await api(`/api/courses/${course.id}/cards`, { method: "DELETE" });
       state.deck = null;
       route();
@@ -4616,7 +4637,7 @@ async function renderReadiness() {
   $("#prep-ring span").textContent = `${data.pct}%`;
   const exam = data.exam;
   $("#prep-sub").textContent = exam ? (exam.days > 0 ? `Partiels dans ${plural(exam.days, "jour", "jours")}` : "Semaine de partiels")
-    : "Ce que tu maîtrises déjà, cours par cours";
+    : "Ce que tu maîtrises déjà, matière par matière";
   $("#mastery-list").innerHTML = data.groups.length > 1 ? data.groups.map((g) => `<li class="prep-row">
       <span class="prep-name">${escapeHtml(g.name)}</span>
       <span class="prep-bar"><i style="width:${g.pct}%;background:${color}"></i></span>
@@ -4847,7 +4868,7 @@ async function renderProgress() {
       <td>${c.weak ? `<b class="ko-text">${c.weak}</b>` : `<span class="muted">0</span>`}</td>
       <td>${pct(c.cards_success)}</td><td>${pct(c.questions_success)}</td>
       <td>${c.last ? formatDay(c.last) : `<span class="muted">jamais</span>`}</td></tr>`).join("")
-    : `<tr><td colspan="7" class="muted">Aucun cours.</td></tr>`;
+    : `<tr><td colspan="7" class="muted">Aucune matière.</td></tr>`;
 }
 
 $("#start-today").addEventListener("click", () => startSession({ mode: "today", ...reviewScope() },
@@ -4912,7 +4933,7 @@ function startQuiz(quiz, questions, { back = state.quizBack, drawn: picked = fal
   const inCourse = quiz.course_id && state.course?.id === quiz.course_id;
   if (state.quizBack) setCrumbs(sessionCrumbs(state.quizBack, quiz.title));
   else setCrumbs(inCourse ? courseCrumbs(state.course, "quiz", quiz.title)
-    : quiz.course_id ? [COURSES_CRUMB, { label: quiz.course_name || "Cours", href: `#/cours/${quiz.course_id}/quiz` }, { label: quiz.title }]
+    : quiz.course_id ? [COURSES_CRUMB, { label: quiz.course_name || "Matière", href: `#/cours/${quiz.course_id}/quiz` }, { label: quiz.title }]
     : [COURSES_CRUMB, { label: quiz.title }]);
   $("#back-course-btn").textContent = state.quizBack === "#/defis" ? "Retour aux défis"
     : state.quizBack ? "Retour à la matière" : quiz.course_id ? "Retour à la matière" : "Mes matières";
@@ -5226,9 +5247,16 @@ const WELCOME = [
 ];
 // Les nouveautés de chaque version (le carton « Quoi de neuf » ne s'affiche que si la version en a)
 const WHATS_NEW = {
+  "0.78.0": [
+    ["👥", "« Social »", "Le menu Défis devient Social : tes amis, tes défis, les quiz en direct et les partages au même endroit, avec une pastille quand on t'invite ou te défie"],
+    ["🔔", "Me prévenir", "Une notification de l'ordinateur quand on t'écrit, t'invite ou te défie (Social → Me prévenir)"],
+    ["📱", "Ton téléphone", "Sur la page Matières, Pirouette te propose de connecter ton téléphone pour réviser partout"],
+    ["⚙", "Cours | Réglages à droite", "Le groupe « Cours | Réglages » d'une matière est rangé à droite des onglets"],
+    ["🩺", "Brancher Claude", "Le diagnostic de l'app Claude dit maintenant quoi faire (connexion expirée, Claude à relancer…)"],
+  ],
   "0.77.0": [
-    ["📚", "Envoie tous tes cours d'un coup", "Dans une conversation, « + » → « Envoyer des cours » : coche ceux que tu veux, ou « Tout »"],
-    ["✦", "« Tout ajouter »", "Tu as reçu plusieurs cours ? Un bouton les ajoute tous, chacun dans la matière du même nom"],
+    ["📚", "Envoie toutes tes matières d'un coup", "Dans une conversation, « + » → « Envoyer des matières » : coche celles que tu veux, ou « Tout »"],
+    ["✦", "« Tout ajouter »", "Tu as reçu plusieurs matières ? Un bouton les ajoute toutes, chacune dans ta matière du même nom"],
     ["🔍", "Comparer avant d'ajouter", "Une carte ou une question que tu as déjà, avec une autre réponse : garde la tienne, prends la sienne, les deux, ou signale le problème"],
     ["●", "L'icône à ta couleur", "La couleur choisie dans Réglages colore aussi l'icône du chat, dans l'app et dans le Dock"],
   ],
@@ -5715,13 +5743,225 @@ $("#prepare-local-off").addEventListener("click", (e) => {
   showLocalTuto();
 });
 
-// Au lancement : les cartons une seule fois, puis le « Quoi de neuf » de chaque version qui en a
-api("/api/settings").then((settings) => {
-  // La présentation, la première fois, et une fois de plus quand l'interface a beaucoup changé (WELCOME_VERSION)
-  if (settings.welcome_seen !== WELCOME_VERSION) return showWelcome(settings);
+// ---------- Accueil des nouveaux, en plein écran ----------
+// Un écran de bienvenue (la liste de ce qu'on va faire), une carte d'essai à retourner, puis une vraie action par
+// étape : prénom, semestre et partiels, premier cours, Claude, amis (Google), téléphone. « Plus tard » est en bas de
+// chaque étape (on ne saute pas tout d'un coup) ; ce qui est déjà fait est coché et passé.
+const ONBOARD_VERSION = "3";
+const ob = { steps: [], i: 0, info: {} };
+const OB_STEPS = {
+  card: { label: "Essayer une carte", min: "20 s" },
+  name: { label: "Ton prénom" },
+  semester: { label: "Ton semestre et tes partiels", min: "1 min" },
+  course: { label: "Ton premier cours", min: "1 min" },
+  claude: { label: "Brancher Claude" },
+  friends: { label: "Retrouver tes amis" },
+  phone: { label: "Ton téléphone" },
+};
+async function openOnboard() {
+  const [profile, folders, stats, claude, online, sync] = await Promise.all([
+    api("/api/profile").catch(() => ({})), api("/api/folders").catch(() => []), api("/api/stats").catch(() => ({})),
+    api("/api/claude-app").catch(() => ({ supported: false })), api("/api/online").catch(() => ({})), api("/api/sync").catch(() => null)]);
+  ob.info = { profile, folders, stats, claude, online, sync };
+  ob.done = new Set([profile.name && "name", folders.length && "semester", stats.courses && "course",
+    claude.installed && "claude", online.connected && online.profile && "friends"].filter(Boolean));
+  ob.steps = ["card", "name", "semester", "course", ...(claude.supported ? ["claude"] : []),
+    ...(online.configured ? ["friends"] : []), ...(sync?.configured ? ["phone"] : [])];
+  ob.i = -1;  // -1 : l'écran de bienvenue
+  $("#onboard").showModal();
+  drawOnboard();
+}
+$("#onboard").addEventListener("cancel", (e) => e.preventDefault());  // Échap ne ferme pas : « Plus tard » étape par étape
+function obNext(markDone = true) {
+  if (markDone && ob.i >= 0) ob.done.add(ob.steps[ob.i]);
+  ob.i += 1;
+  while (ob.i < ob.steps.length && ob.done.has(ob.steps[ob.i]) && ob.steps[ob.i] !== "card") ob.i += 1;  // déjà fait : passé
+  drawOnboard();
+}
+const obLater = `<button class="ob-later" type="button" data-ob="later">Plus tard</button>`;
+function drawOnboard() {
+  const stage = $("#ob-stage");
+  $("#ob-progress").innerHTML = ob.i < 0 ? "" : ob.steps.map((k, j) => `<i class="${j < ob.i || ob.done.has(k) ? "on" : j === ob.i ? "now" : ""}"></i>`).join("");
+  if (ob.i < 0) {  // la bienvenue : la couleur de l'app à gauche, la liste à droite
+    stage.innerHTML = `<div class="ob-welcome">
+      <div class="ob-hero"><div class="ob-icon">${APP_ICON_SVG}</div><h1>Bienvenue dans Pirouette</h1>
+        <p>Tes cours deviennent des quiz et des flashcards, et Pirouette t'aide à tout revoir avant les partiels.
+        Quelques petites choses et c'est prêt : compte trois minutes.</p></div>
+      <div class="ob-list"><ol>${ob.steps.map((k) => `<li class="${ob.done.has(k) && k !== "card" ? "done" : ""}"><i>${ob.done.has(k) && k !== "card" ? "✓" : ""}</i>
+        <span>${OB_STEPS[k].label}</span>${OB_STEPS[k].min ? `<small>${OB_STEPS[k].min}</small>` : ""}</li>`).join("")}</ol>
+        <button class="primary ob-go" type="button" data-ob="start">Commencer</button></div></div>`;
+    return;
+  }
+  if (ob.i >= ob.steps.length) {
+    stage.innerHTML = obCard(`<div class="ob-icon small">${APP_ICON_SVG}</div><h2>C'est prêt${ob.info.profile?.name ? `, ${escapeHtml(ob.info.profile.name)}` : ""} !</h2>
+      <p>Tes matières t'attendent. Ce que tu as laissé pour plus tard se retrouve dans Réglages et dans Social.</p>
+      <button class="primary" type="button" data-ob="finish">Aller à mes matières</button>`, false);
+    return;
+  }
+  const step = ob.steps[ob.i];
+  const info = ob.info;
+  if (step === "card") {
+    stage.innerHTML = obCard(`<h2>Essaie : retourne la carte</h2><p>Clique dessus (ou Espace). C'est comme ça qu'on révise ses flashcards.</p>
+      <button class="ob-flash" type="button" data-ob="flip" aria-label="Retourner la carte"><span class="ob-face front">Combien d'observations suffisent pour invalider une loi&nbsp;?</span>
+        <span class="ob-face back">Une seule observation contraire suffit</span></button>
+      <div class="ob-rate" hidden><button class="ghost" type="button" data-ob="rate">Je ne savais pas</button><button class="primary" type="button" data-ob="rate">Je savais</button></div>
+      <div class="ob-reward" hidden><p><b>Bien joué !</b> Plus tu sais une carte, plus elle revient tard… et plus elle devient rare :</p>
+        <div class="ob-rarity"><span>Nouvelle</span><span class="rare">En cours</span><span class="holo">★ Acquise</span></div>
+        <button class="primary" type="button" data-ob="next">Continuer</button></div>`);
+    return;
+  }
+  if (step === "name") {
+    stage.innerHTML = obCard(`<h2>Comment tu t'appelles ?</h2><p>Pour te dire bonjour (rien d'autre, ça reste sur cet ordinateur).</p>
+      <form class="ob-form" data-ob-form="name"><input type="text" id="ob-name" maxlength="40" placeholder="Ton prénom" value="${escapeHtml(info.profile?.name || "")}" required>
+      <button class="primary" type="submit">C'est moi</button></form>`);
+    setTimeout(() => $("#ob-name")?.focus(), 50);
+    return;
+  }
+  if (step === "semester") {
+    stage.innerHTML = obCard(`<h2>Ton semestre</h2><p>Tes matières s'y rangent. Avec la date de tes partiels, tes révisions s'organisent pour que tout soit revu à temps.</p>
+      <form class="ob-form column" data-ob-form="semester"><label>Nom <input type="text" id="ob-sem" maxlength="60" value="Semestre 1" required></label>
+      <label>Premier jour des partiels <small>(si tu le sais)</small><input type="date" id="ob-exam"></label>
+      <button class="primary" type="submit">Créer mon semestre</button></form>`);
+    return;
+  }
+  if (step === "course") {
+    stage.innerHTML = obCard(`<h2>Dépose ton premier cours</h2><p>Un PDF, un Word, un PowerPoint, un Pages… Pirouette le découpe en chapitres et le range dans sa matière.</p>
+      <button class="ob-drop" type="button" data-ob="course"><b>Choisir mon cours</b><small>ou glisse-le dans la fenêtre qui s'ouvre</small></button>`);
+    return;
+  }
+  if (step === "claude") {
+    stage.innerHTML = obCard(`<h2>Branche Claude</h2><p>Claude (l'app, avec ton abonnement) lit tes cours et crée les quiz et les flashcards dans Pirouette. Un clic, puis tu quittes et rouvres l'app Claude.</p>
+      <button class="primary" type="button" data-ob="claude">Brancher l'app Claude</button><p class="ob-note" id="ob-claude-note" hidden></p>`);
+    return;
+  }
+  if (step === "friends") {
+    const fresh = info.online?.connected && !info.online?.profile;
+    stage.innerHTML = obCard(fresh ? `<h2>Ton pseudo</h2><p>C'est ce que verront tes amis.</p>
+      <form class="ob-form" data-ob-form="pseudo"><input type="text" id="ob-pseudo" maxlength="24" value="${escapeHtml((info.online?.name || info.profile?.name || "").split(" ")[0])}" required>
+      <button class="primary" type="submit">Valider</button></form>`
+      : `<h2>Retrouve tes amis</h2><p>Connecte-toi avec Google pour discuter, vous envoyer des matières et des quiz, et vous lancer des défis.</p>
+      <button class="google-btn" type="button" data-ob="google">${$("[data-google-login]")?.querySelector("svg")?.outerHTML || ""} Se connecter avec Google</button>
+      <p class="ob-note" id="ob-google-note" hidden></p>`);
+    return;
+  }
+  if (step === "phone") {
+    stage.innerHTML = obCard(info.online?.connected ? `<h2>Révise aussi dans le bus</h2><p>Scanne ce code avec l'appareil photo de ton téléphone : tes quiz et tes cartes y arrivent tout seuls.</p>
+      <div class="ob-qr" id="ob-qr"><span class="muted small-text">Préparation du code…</span></div><div class="pair-code" id="ob-code"></div>
+      <button class="ghost" type="button" data-ob="next">C'est fait</button>`
+      : `<h2>Ton téléphone</h2><p>Pour retrouver tes quiz et tes cartes sur ton téléphone, il faut d'abord un compte (l'étape « Retrouver tes amis »). Tu pourras le faire plus tard dans Réglages.</p>
+      <button class="primary" type="button" data-ob="next">Continuer</button>`);
+    if (info.online?.connected) {
+      api("/api/sync/pair", { method: "POST" }).then((p) => { $("#ob-qr").innerHTML = p.qr; $("#ob-code").textContent = p.code; })
+        .catch((err) => { $("#ob-qr").innerHTML = `<span class="ko-text small-text">${escapeHtml(err.message)}</span>`; });
+    }
+  }
+}
+// Une étape : la carte, avec « Plus tard » en bas, dans la carte
+const obCard = (inner, later = true) => `<div class="ob-card">${inner}${later ? obLater : ""}</div>`;
+
+$("#ob-stage").addEventListener("click", async (e) => {
+  const act = e.target.closest("[data-ob]")?.dataset.ob;
+  if (!act) return;
+  if (act === "start") return obNext(false);
+  if (act === "later" || act === "next") return obNext(act === "next");
+  if (act === "finish") return finishOnboard();
+  if (act === "flip") {
+    const card = e.target.closest(".ob-flash");
+    card.classList.toggle("flipped");
+    $("#ob-stage .ob-rate").hidden = $("#ob-stage .ob-reward").hidden === false;
+    return;
+  }
+  if (act === "rate") {
+    $("#ob-stage .ob-rate").hidden = true;
+    $("#ob-stage .ob-flash").classList.add("away");
+    $("#ob-stage .ob-reward").hidden = false;
+    return;
+  }
+  if (act === "course") {
+    await openNewCourse({ folder: (await api("/api/folders").catch(() => [])).at(-1)?.id || "" });
+    $("#new-course-dialog").addEventListener("close", async () => {
+      const stats = await api("/api/stats").catch(() => ({}));
+      if (stats.courses) { ob.info.stats = stats; obNext(); }
+    }, { once: true });
+    return;
+  }
+  if (act === "claude") {
+    try {
+      const info = await api("/api/claude-app", { method: "POST" });
+      $("#ob-claude-note").hidden = false;
+      $("#ob-claude-note").textContent = info.installed ? "C'est branché ! Quitte l'app Claude et rouvre-la pour qu'elle trouve Pirouette."
+        : "L'app Claude n'est pas installée sur cet ordinateur : tu pourras la brancher plus tard dans Réglages.";
+      e.target.closest("[data-ob]").outerHTML = `<button class="primary" type="button" data-ob="next">Continuer</button>`;
+    } catch (err) {
+      $("#ob-claude-note").hidden = false;
+      $("#ob-claude-note").textContent = err.message;
+    }
+    return;
+  }
+  if (act === "google") {
+    try {
+      const { url, opened } = await api("/api/online/google", { method: "POST" });
+      if (!opened) window.open(url, "_blank");
+      $("#ob-google-note").hidden = false;
+      $("#ob-google-note").textContent = "Termine la connexion dans ton navigateur, puis reviens ici.";
+      clearInterval(ob.wait);
+      let tries = 0;
+      ob.wait = setInterval(async () => {
+        const me = await api("/api/online").catch(() => null);
+        if (++tries > 120 || !$("#onboard").open) return clearInterval(ob.wait);
+        if (me?.connected) { clearInterval(ob.wait); ob.info.online = me; if (me.profile) obNext(); else drawOnboard(); }
+      }, 2000);
+    } catch (err) {
+      $("#ob-google-note").hidden = false;
+      $("#ob-google-note").textContent = err.message;
+    }
+  }
+});
+$("#ob-stage").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const form = e.target.dataset.obForm;
+  try {
+    if (form === "name") {
+      ob.info.profile = await api("/api/profile", jsonBody("PUT", { name: $("#ob-name").value.trim() }));
+      state.profile = ob.info.profile;
+    }
+    if (form === "semester") {
+      const folder = await api("/api/folders", jsonBody("POST", { name: $("#ob-sem").value.trim() }));
+      if ($("#ob-exam").value) await api(`/api/folders/${folder.id}`, jsonBody("PATCH", { exam_week: $("#ob-exam").value }));
+    }
+    if (form === "pseudo") {
+      await api("/api/online/start", jsonBody("POST", { text: $("#ob-pseudo").value.trim() }));
+      ob.info.online = await api("/api/online").catch(() => ob.info.online);
+      startDock();
+    }
+    obNext();
+  } catch (err) {
+    notify(err.message);
+  }
+});
+document.addEventListener("keydown", (e) => {
+  if (!$("#onboard").open || e.key !== " " || e.target.matches("input, textarea")) return;
+  const card = $("#ob-stage .ob-flash");
+  if (card) { e.preventDefault(); card.click(); }
+});
+function finishOnboard() {
+  api("/api/settings", jsonBody("PUT", { welcome_seen: ONBOARD_VERSION })).catch(() => {});
+  $("#onboard").close();
+  go("#/cours");
+  loadCourses().catch(() => {});
+}
+
+// Au lancement : l'accueil plein écran pour les nouveaux, puis le « Quoi de neuf » de chaque version qui en a
+api("/api/settings").then(async (settings) => {
+  if (settings.welcome_seen !== ONBOARD_VERSION && settings.welcome_seen !== WELCOME_VERSION) {
+    // Nouveau (rien vu encore) : l'accueil ; déjà des matières (ancienne version) : rien de plus à présenter
+    const courses = await api("/api/courses").catch(() => []);
+    if (!courses.length) return openOnboard();
+    api("/api/settings", jsonBody("PUT", { welcome_seen: ONBOARD_VERSION })).catch(() => {});
+  }
   if (settings.news_seen !== settings.version && WHATS_NEW[settings.version]) return showWhatsNew(settings.version);
 }).catch(() => {});
-$("#welcome-replay").addEventListener("click", () => showWelcome(null, { replay: true }));
+$("#welcome-replay").addEventListener("click", () => openOnboard());
 
 function quizKeys(e) {
   const typing = e.target.matches?.("textarea, input[type=text]");
@@ -6374,7 +6614,7 @@ async function openPartielPrep(courseId) {
   $("#partiel-cards").max = cards;
   $("#partiel-timer").value = "none";
   $("#partiel-minutes-field").hidden = true;
-  showError("#partiel-error", questions + cards ? "" : "Ce cours n'a encore ni quiz ni flashcards : crée-en d'abord.");
+  showError("#partiel-error", questions + cards ? "" : "Cette matière n'a encore ni quiz ni flashcards : crée-en d'abord.");
   $("#partiel-go").disabled = !(questions + cards);
   const history = info.history.slice().reverse();
   $("#partiel-history").hidden = !history.length;
@@ -6829,9 +7069,9 @@ function openExamDialog({ folder = null, course = null }) {
   $("#exam-date").value = own || "";
   const inherited = course && !own && course.exam?.from === "dossier" ? course.exam.date : null;
   $("#exam-inherit").hidden = !inherited;
-  if (inherited) $("#exam-inherit").textContent = `Pour l'instant, ce cours suit la date de son semestre : ${dayLong(inherited)}. Une date ici la remplace pour ce cours seulement.`;
+  if (inherited) $("#exam-inherit").textContent = `Pour l'instant, cette matière suit la date de son semestre : ${dayLong(inherited)}. Une date ici la remplace pour cette matière seulement.`;
   $("#exam-dialog-text").textContent = (folder
-    ? `Premier jour de la semaine de partiels pour tous les cours du semestre « ${folder.name} ». `
+    ? `Premier jour de la semaine de partiels pour toutes les matières du semestre « ${folder.name} ». `
     : "Indique le premier jour de ta semaine de partiels. ")
     + "Les révisions s'organisent pour que tout soit revu avant, de plus en plus souvent à l'approche, puis chaque jour pendant la semaine.";
   $("#exam-clear").hidden = !own;
@@ -7182,7 +7422,7 @@ function openPrepare(course = state.course) {
   if (!units.length) return go(courseHash("fichiers"));
   const focus = focusFile(course);
   const which = focus ? ` dans « ${focus.name.replace(/\.[^.]+$/, "")} »` : "";
-  $("#prepare-text").textContent = `Pirouette peut tout créer maintenant pour ce cours${which} :`;
+  $("#prepare-text").textContent = `Pirouette peut tout créer maintenant pour cette matière${which} :`;
   showError("#prepare-error", "");
   $("#prepare-status").hidden = true;
   setPrepareLocal();
@@ -7334,7 +7574,7 @@ $("#prepare-go").addEventListener("click", async () => {
   if (!quizzes && !cards) return showError("#prepare-error", "Coche au moins les quiz ou les flashcards.");
   if (state.prepareEngine === "app") {
     await copyText(prepareRequest());
-    return setStatus("#prepare-status", "Demande copiée : colle-la dans l'app Claude. Quiz et flashcards apparaîtront dans ce cours au fur et à mesure.", true);
+    return setStatus("#prepare-status", "Demande copiée : colle-la dans l'app Claude. Quiz et flashcards apparaîtront dans cette matière au fur et à mesure.", true);
   }
   const form = new FormData();
   form.append("provider", "local");
@@ -7363,7 +7603,7 @@ function dismissDialog(dialog) {
   if (!cancel.defaultPrevented && dialog.open) dialog.close("");
 }
 document.querySelectorAll("dialog").forEach((dialog) => {
-  if (!dialog.classList.contains("welcome")) {
+  if (!dialog.classList.contains("welcome") && !dialog.classList.contains("onboard")) {  // l'accueil : « Plus tard » étape par étape, pas de croix
     const x = Object.assign(document.createElement("button"), { type: "button", className: "dialog-x", innerHTML: "&times;" });
     x.setAttribute("aria-label", "Fermer");
     x.addEventListener("click", () => dismissDialog(dialog));
@@ -7429,8 +7669,64 @@ async function openOnline() {
   $("#online-link-google").hidden = me.google;   // compte « pseudo » : on peut le relier à Google
   $("#online-logout").hidden = !me.google;       // compte Google : on peut se déconnecter (et revenir plus tard)
   $("#online-code-me").textContent = me.profile.friend_code;
+  $("#social-friends-slot").append($("#online-friends-card"));  // les amis : ici tant que la page Social est ouverte
+  $("#notify-on").checked = notifyWanted();
   renderOnlineQuizzes();
+  renderSocialRooms();
   await Promise.all([renderChallenges(), renderFriends()]);
+  refreshSocialBadge();
+}
+
+// ---------- Social : jouer et partager depuis la page, la pastille du menu, les notifications ----------
+async function renderSocialRooms() {
+  const rooms = await api("/api/online/rooms").catch(() => []);
+  msg.rooms = rooms.length ? rooms : msg.rooms;
+  $("#social-room").innerHTML = rooms.length ? rooms.map((r) => `<option value="${r.id}">${escapeHtml(r.name)}${r.kind === "group" ? " (groupe)" : ""}</option>`).join("")
+    : `<option value="">Pas encore de conversation : ajoute un ami, puis écris-lui</option>`;
+  document.querySelectorAll("[data-social-act]").forEach((b) => { b.disabled = !rooms.length; });
+}
+document.addEventListener("click", async (e) => {
+  const kind = e.target.closest("[data-social-act]")?.dataset.socialAct;
+  const roomId = kind && $("#social-room").value;
+  if (!roomId) return;
+  msg.ready = true;
+  openChat(roomId, { focus: false });  // la conversation s'ouvre : c'est là qu'arrivent le quiz ou les matières
+  const w = msg.wins.get(roomId);
+  if (w) openShare(w, kind);
+});
+// Me prévenir : choix gardé sur cet ordinateur (oui par défaut)
+function notifyWanted() {
+  try { return localStorage.getItem("pirouette.notify") !== "0"; } catch { return true; }
+}
+$("#notify-on").addEventListener("change", (e) => {
+  try { localStorage.setItem("pirouette.notify", e.target.checked ? "1" : "0"); } catch {}
+  if (e.target.checked && !window.pywebview && "Notification" in window && Notification.permission === "default") Notification.requestPermission();
+});
+// Une notification de l'ordinateur, seulement si Pirouette est en arrière-plan (sinon, la pastille et le petit mot suffisent)
+async function systemNotify(title, text) {
+  if (!notifyWanted() || document.hasFocus()) return;
+  const done = await api("/api/notify", jsonBody("POST", { title, text })).catch(() => ({}));
+  if (!done.shown && "Notification" in window && Notification.permission === "granted") new Notification(title, { body: text, icon: "/brand/icon.svg" });
+}
+// La pastille de « Social » : invitations d'amis reçues et défis d'amis pas encore faits
+async function refreshSocialBadge() {
+  if (!msg.ready) return;
+  const [friends, challenges] = await Promise.all([api("/api/online/friends").catch(() => null), api("/api/online/challenges").catch(() => null)]);
+  if (!friends) return;
+  const invites = friends.received || [];
+  const todo = (challenges || []).filter((c) => !c.mine && !c.done);
+  const n = invites.length + todo.length;
+  $("#social-badge").hidden = !n;
+  $("#social-badge").textContent = n > 99 ? "99+" : String(n);
+  $("#social-badge").title = [invites.length ? plural(invites.length, "invitation", "invitations") : "", todo.length ? plural(todo.length, "défi à faire", "défis à faire") : ""].filter(Boolean).join(" · ");
+  // Du nouveau depuis la dernière fois : un petit mot, et une notification si Pirouette est en arrière-plan
+  const seen = msg.socialSeen;
+  msg.socialSeen = { invites: new Set(invites.map((f) => f.id)), todo: new Set(todo.map((c) => c.id)) };
+  if (!seen) return;
+  const newInvite = invites.find((f) => !seen.invites.has(f.id));
+  const newChallenge = todo.find((c) => !seen.todo.has(c.id));
+  if (newInvite) { notify(`${newInvite.pseudo} veut être ton ami·e : va dans Social pour accepter.`); systemNotify("Nouvelle invitation", `${newInvite.pseudo} veut être ton ami·e sur Pirouette.`); }
+  if (newChallenge) { notify(`${newChallenge.author} te lance un défi : « ${newChallenge.title} ».`); systemNotify("Nouveau défi", `${newChallenge.author} te lance un défi : « ${newChallenge.title} ».`); }
 }
 
 // Connexion avec Google : le navigateur s'ouvre ; au retour, Pirouette guette la connexion quelques minutes
@@ -7499,7 +7795,7 @@ async function renderOnlineQuizzes() {
     courses.set(q.course_id, c);
   });
   $("#online-quiz").innerHTML = quizzes.length
-    ? `<optgroup label="Tout un cours">${[...courses].map(([id, c]) =>
+    ? `<optgroup label="Toute une matière">${[...courses].map(([id, c]) =>
         `<option value="course:${id}">${escapeHtml(c.name)} (${c.count} questions)</option>`).join("")}</optgroup>
        <optgroup label="Un quiz">${quizzes.map((q) =>
         `<option value="quiz:${q.id}">${escapeHtml(q.course_name ? `${q.course_name} · ${q.title}` : q.title)}</option>`).join("")}</optgroup>`
@@ -7623,7 +7919,7 @@ $("#online-friends").addEventListener("click", async (e) => {
     if (!await askConfirm("Retirer cet ami ? Vous ne verrez plus vos défis.", { ok: "Retirer" })) return;
     await api(`/api/online/friends/${remove.dataset.removeFriend}`, { method: "DELETE" }).catch(() => {});
   }
-  if (accept || remove) { renderFriends(); renderChallenges(); }
+  if (accept || remove) { renderFriends(); renderChallenges(); refreshSocialBadge(); }
 });
 
 
@@ -7653,6 +7949,13 @@ async function renderSync() {
 async function renderDevices() {
   let list = [];
   try { list = await api("/api/sync/devices"); } catch {}
+  // Sans appareil : pas de case « aussi sur mon téléphone » (décochée, elle intriguait) ; jumeler l'active toute seule
+  const none = !list.length && !$("#sync-on").checked;
+  $("#sync-on").closest(".toggle-row").hidden = none;
+  if (none) $("#sync-state").textContent = "Ajoute ton téléphone ou ta tablette : tes quiz et tes flashcards y arrivent tout seuls, "
+    + "et ce que tu révises là-bas revient ici.";
+  $("#sync-pair").classList.toggle("ghost", !none);
+  $("#sync-pair").classList.toggle("primary", none);
   $("#device-list").innerHTML = list.map((d) => `<li><span class="device-ic">${PREF_ICON('<rect x="7" y="3" width="10" height="18" rx="2.5"/><path d="M11 18h2"/>')}</span>
     <span><b>${escapeHtml(d.name || "Appareil")}</b><small class="muted">jumelé le ${new Date(d.created_at).toLocaleDateString("fr-FR", { day: "numeric", month: "long" })}</small></span>
     <button class="link-button" type="button" data-unpair="${escapeHtml(d.device)}">Retirer</button></li>`).join("");
@@ -7715,7 +8018,7 @@ setInterval(() => syncSoon(0), 180000);
 // amis ; chaque conversation s'ouvre dans une petite fenêtre en bas de l'écran, qu'on réduit ou ferme, et qui reste
 // ouverte quand on change de page. Les nouveaux messages arrivent toutes les 4 s dans les fenêtres ouvertes.
 const msg = { rooms: [], wins: new Map(), ready: false, me: null, unreadSeen: null, tick: 0 };
-const MSG_KINDS = { quiz: "Quiz", cards: "Flashcards", course: "Cours", challenge: "Défi", result: "Résultat", live: "Quiz en direct" };
+const MSG_KINDS = { quiz: "Quiz", cards: "Flashcards", course: "Matière", challenge: "Défi", result: "Résultat", live: "Quiz en direct" };
 const MAX_WINDOWS = 3;
 const avatarColor = (text) => ["#B4532A", "#2F7D4F", "#5B6CB5", "#8A6D3B", "#9C4F8F", "#3E7F8C"][
   [...String(text)].reduce((n, c) => n + c.charCodeAt(0), 0) % 6];
@@ -7742,6 +8045,7 @@ async function startDock() {
   if (!msg.ready) return;
   await loadRooms();
   msg.unreadSeen = msg.rooms.reduce((n, r) => n + r.unread, 0);  // déjà là au lancement : la pastille suffit
+  refreshSocialBadge();
   for (const w of savedWindows()) if (msg.rooms.some((r) => r.id === w.id)) openChat(w.id, { min: w.min, focus: false });
 }
 setTimeout(startDock, 1200);
@@ -7789,7 +8093,7 @@ document.querySelectorAll("[data-panel-tab]").forEach((b) => b.addEventListener(
   document.querySelectorAll("[data-panel-tab]").forEach((x) => x.classList.toggle("active", x === b));
   $("#chat-convs").hidden = b.dataset.panelTab !== "convs";
   $("#chat-friends").hidden = b.dataset.panelTab !== "amis";
-  if (b.dataset.panelTab === "amis") renderFriends();
+  if (b.dataset.panelTab === "amis") { $("#chat-friends").append($("#online-friends-card")); renderFriends(); }
 }));
 $("#chat-panel-close").addEventListener("click", () => togglePanel(false));
 // Un clic ailleurs (hors de la bulle, de son panneau et des fenêtres qu'elle ouvre) referme le panneau
@@ -7840,7 +8144,10 @@ async function checkUnread() {
   const unread = msg.rooms.reduce((n, r) => n + (openIds.has(r.id) ? 0 : r.unread), 0);
   if (msg.unreadSeen !== null && unread > msg.unreadSeen) {
     const room = msg.rooms.find((r) => r.unread && !openIds.has(r.id));
-    if (room?.last) notifyMessage(room);
+    if (room?.last) {
+      notifyMessage(room);
+      systemNotify(room.kind === "group" ? `${room.last.pseudo} · ${room.name}` : room.name, room.last.text);
+    }
   }
   msg.unreadSeen = unread;
 }
@@ -7863,6 +8170,7 @@ setInterval(async () => {
     if (!w.min) await (msg.tick % 5 === 0 ? reloadWin(w) : pullWin(w)).catch(() => {});
   }
   if (msg.tick % 3 === 0) await checkUnread().catch(() => {});
+  if (msg.tick % 9 === 0) await refreshSocialBadge().catch(() => {});
 }, 4000);
 
 // ---------- Les fenêtres de discussion ----------
@@ -7898,7 +8206,7 @@ function openChat(roomId, { min = false, focus = true } = {}) {
             <div class="plus-menu msg-attach-pop" role="menu" hidden>
               <button type="button" role="menuitem" data-attach="quiz"><strong>${icon("note")} Envoyer un quiz</strong></button>
               <button type="button" role="menuitem" data-attach="cards"><strong>${icon("cards")} Envoyer des flashcards</strong></button>
-              <button type="button" role="menuitem" data-attach="course"><strong>${icon("book")} Envoyer des cours</strong><small>un, plusieurs ou tous, avec leurs quiz et flashcards</small></button>
+              <button type="button" role="menuitem" data-attach="course"><strong>${icon("book")} Envoyer des matières</strong><small>une, plusieurs ou toutes, avec leurs quiz et flashcards</small></button>
               <button type="button" role="menuitem" data-attach="challenge"><strong>${icon("swords")} Lancer un défi</strong></button>
               <button type="button" role="menuitem" data-attach="live"><strong>${icon("timer")} Quiz en direct</strong><small>la même question pour tous, en même temps</small></button>
             </div>
@@ -7993,7 +8301,7 @@ function messageHtml(m, w) {
     `<a class="button ghost small" href="#/defis">Classement</a>`);
   if (["quiz", "cards", "course"].includes(m.kind) && !m.mine) actions.push(taken().has(m.id)
     ? `<button class="ghost small taken" type="button" data-msg-take="${m.id}" title="Déjà ajouté ; un clic pour l'ajouter encore (les différences te seront montrées)">${icon("check")} Ajouté</button>`
-    : `<button class="${m.kind === "quiz" ? "ghost" : "primary"} small" type="button" data-msg-take="${m.id}">Ajouter à mes cours</button>`);
+    : `<button class="${m.kind === "quiz" ? "ghost" : "primary"} small" type="button" data-msg-take="${m.id}">Ajouter à mes matières</button>`);
   if (group) actions.push(`<button class="icon msg-pin" type="button" data-msg-pin="${m.id}" title="Épingler en haut du groupe" aria-label="Épingler">${icon("pin")}</button>`);
   return line(`<div class="msg-card ${m.kind}"><span class="msg-kind">${MSG_KINDS[m.kind] || ""}</span><b>${escapeHtml(m.title || "")}</b>
     <small class="muted">${details}</small>${m.body ? `<p class="msg-note">« ${escapeHtml(m.body)} »</p>` : ""}
@@ -8006,7 +8314,7 @@ function renderTakeAll(w) {
   const waiting = Object.values(w.byId || {}).filter((m) => !m.mine && ["cards", "course", "quiz"].includes(m.kind) && !taken().has(m.id));
   box.hidden = waiting.length < 2;
   if (box.hidden) return;
-  box.innerHTML = `${icon("book")} <span><b>${plural(waiting.length, "partage reçu", "partages reçus")}</b> pas encore dans tes cours</span>
+  box.innerHTML = `${icon("book")} <span><b>${plural(waiting.length, "partage reçu", "partages reçus")}</b> pas encore dans tes matières</span>
     <button class="primary small" type="button" data-take-all>Tout ajouter</button>`;
 }
 
@@ -8192,14 +8500,14 @@ async function openShare(w, kind) {
   const courseOptions = courses.map((c) => `<option value="course:${c.id}:">${escapeHtml(c.name)}${c.files.length > 1 ? ` (${c.files.length} fichiers)` : ""}</option>`
     + (kind === "cards" && c.files.length > 1 ? c.files.map((f) => `<option value="course:${c.id}:${f.id}">   ${escapeHtml(c.name)} · ${escapeHtml(fileLabel(f))}</option>`).join("") : "")).join("");
   msg.share = { w, kind };
-  $("#share-title").textContent = { quiz: "Envoyer un quiz", cards: "Envoyer des flashcards", course: "Envoyer des cours",
+  $("#share-title").textContent = { quiz: "Envoyer un quiz", cards: "Envoyer des flashcards", course: "Envoyer des matières",
     challenge: "Lancer un défi", live: "Lancer un quiz en direct" }[kind];
   $("#share-go").textContent = kind === "live" ? "Créer la partie" : "Envoyer";
   const asChallenge = kind === "challenge" || kind === "live";
-  $("#share-source-label").textContent = kind === "quiz" ? "Quel quiz ?" : asChallenge ? "Sur quoi ?" : "Quel cours ?";
+  $("#share-source-label").textContent = kind === "quiz" ? "Quel quiz ?" : asChallenge ? "Sur quoi ?" : "Quelle matière ?";
   $("#share-source").innerHTML = kind === "quiz" ? quizOptions || `<option value="">Pas encore de quiz</option>`
-    : asChallenge ? `<optgroup label="Tout un cours">${courses.map((c) => `<option value="course:${c.id}:">${escapeHtml(c.name)}</option>`).join("")}</optgroup><optgroup label="Un quiz">${quizOptions}</optgroup>`
-      : courseOptions || `<option value="">Pas encore de cours</option>`;
+    : asChallenge ? `<optgroup label="Toute une matière">${courses.map((c) => `<option value="course:${c.id}:">${escapeHtml(c.name)}</option>`).join("")}</optgroup><optgroup label="Un quiz">${quizOptions}</optgroup>`
+      : courseOptions || `<option value="">Pas encore de matière</option>`;
   $("#share-challenge-opts").hidden = !asChallenge;
   // Des cours entiers : une liste à cocher, rangée par semestre, avec « Tout »
   const many = kind === "course";
@@ -8213,7 +8521,7 @@ async function openShare(w, kind) {
     $("#share-list").innerHTML = groups.map((g) => `${g.name ? `<p class="share-group">${escapeHtml(g.name)}</p>` : ""}${g.list.map((c) => `
       <label class="pick-row share-pick" style="--c:${subjectColor(c.id)}"><input type="checkbox" value="${c.id}"><span class="subject-dot" aria-hidden="true"></span>
         <b>${escapeHtml(c.name)}</b><small class="muted">${[c.quiz_count ? plural(c.quiz_count, "quiz", "quiz") : "", c.card_count ? plural(c.card_count, "carte", "cartes") : ""].filter(Boolean).join(" · ") || "vide"}</small></label>`).join("")}`).join("")
-      || `<p class="muted">Pas encore de cours.</p>`;
+      || `<p class="muted">Pas encore de matière.</p>`;
     $("#share-all").checked = false;
     syncShareMany();
   }
@@ -8227,17 +8535,17 @@ function syncShareMany() {
   const boxes = [...$("#share-list").querySelectorAll("input")], n = boxes.filter((b) => b.checked).length;
   $("#share-all").checked = n && n === boxes.length;
   $("#share-all").indeterminate = n > 0 && n < boxes.length;
-  if (msg.share?.kind === "course") $("#share-go").textContent = n > 1 ? `Envoyer ${n} cours` : "Envoyer";
+  if (msg.share?.kind === "course") $("#share-go").textContent = n > 1 ? `Envoyer ${n} matières` : "Envoyer";
 }
 $("#share-list").addEventListener("change", syncShareMany);
 $("#share-all").addEventListener("change", (e) => {
   $("#share-list").querySelectorAll("input").forEach((b) => { b.checked = e.target.checked; });
   syncShareMany();
 });
-// Plusieurs cours : un message par cours (chacun s'ajoute à part, ou tous d'un coup avec « Tout ajouter »)
+// Plusieurs matières : un message par matière (chacun s'ajoute à part, ou tous d'un coup avec « Tout ajouter »)
 async function shareCourses(w) {
   const ids = [...$("#share-list").querySelectorAll("input:checked")].map((b) => b.value);
-  if (!ids.length) return setStatus("#share-status", "Coche au moins un cours.", false);
+  if (!ids.length) return setStatus("#share-status", "Coche au moins une matière.", false);
   const text = $("#share-text").value.trim();
   let sent = 0;
   const empty = [];
@@ -8247,12 +8555,12 @@ async function shareCourses(w) {
       await api(`/api/online/rooms/${w.id}/messages`, jsonBody("POST", { kind: "course", course_id: id, text: i ? "" : text }));
       sent += 1;
     } catch {
-      empty.push($("#share-list").querySelector(`input[value="${id}"]`)?.closest("label")?.querySelector("b")?.textContent || "un cours");
+      empty.push($("#share-list").querySelector(`input[value="${id}"]`)?.closest("label")?.querySelector("b")?.textContent || "une matière");
     }
   }
   await pullWin(w);
   if (!empty.length) return $("#share-dialog").close();
-  setStatus("#share-status", `${plural(sent, "cours envoyé", "cours envoyés")}. Pas envoyé${empty.length > 1 ? "s" : ""} (rien dedans encore) : ${empty.join(", ")}.`, !sent);
+  setStatus("#share-status", `${plural(sent, "matière envoyée", "matières envoyées")}. Pas envoyé${empty.length > 1 ? "s" : ""} (rien dedans encore) : ${empty.join(", ")}.`, !sent);
 }
 $("#share-go").addEventListener("click", async () => {
   const [type, id, file = ""] = $("#share-source").value.split(":");
@@ -8287,8 +8595,8 @@ async function openTake(w, messageId) {
   const best = courses.find((c) => guess && (c.name.toLowerCase() === guess || guess.includes(c.name.toLowerCase())));
   msg.taking = m;
   msg.takingWin = w;
-  $("#take-title").textContent = `Ajouter « ${m?.title || "ce partage"} » à mes cours`;
-  $("#take-course").innerHTML = `<option value="">Un nouveau cours « ${escapeHtml(m?.meta?.course || m?.title || "Cours reçu")} »</option>`
+  $("#take-title").textContent = `Ajouter « ${m?.title || "ce partage"} » à mes matières`;
+  $("#take-course").innerHTML = `<option value="">Une nouvelle matière « ${escapeHtml(m?.meta?.course || m?.title || "Matière reçue")} »</option>`
     + courses.map((c) => `<option value="${c.id}" ${best?.id === c.id ? "selected" : ""}>${escapeHtml(c.name)}</option>`).join("");
   $("#take-status").hidden = true;
   $("#take-dialog").showModal();
@@ -8297,7 +8605,7 @@ $("#take-cancel").addEventListener("click", () => $("#take-dialog").close());
 $("#take-go").addEventListener("click", async () => {
   const m = msg.taking, course = $("#take-course").value;
   $("#take-dialog").close();
-  await takeMessages(msg.takingWin, [{ m, course_id: course, new_course: course ? "" : m?.meta?.course || m?.title || "Cours reçu" }]);
+  await takeMessages(msg.takingWin, [{ m, course_id: course, new_course: course ? "" : m?.meta?.course || m?.title || "Matière reçue" }]);
 });
 
 // Ce qu'on a déjà ajouté (sur cet ordinateur) : « Ajouté ✓ » et pas de « Tout ajouter » pour ça
@@ -8315,7 +8623,7 @@ async function takeAll(w) {
   const byName = new Map(courses.map((c) => [c.name.trim().toLowerCase(), c.id]));
   const items = Object.values(w.byId).filter((m) => !m.mine && ["cards", "course", "quiz"].includes(m.kind) && !taken().has(m.id))
     .map((m) => {
-      const name = (m.meta?.course || m.title || "Cours reçu").trim();
+      const name = (m.meta?.course || m.title || "Matière reçue").trim();
       const id = byName.get(name.toLowerCase());
       if (!id) byName.set(name.toLowerCase(), null);  // plusieurs partages du même cours : une seule nouvelle matière
       return { m, course_id: id || "", new_course: id ? "" : name };

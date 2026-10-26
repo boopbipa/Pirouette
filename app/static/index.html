@@ -26,7 +26,7 @@
     <a href="#/" class="brand"><span class="app-icon"><svg viewBox="0 0 100 100" aria-hidden="true"><use href="#app-icon"/></svg><span class="beta-badge">bêta</span></span><span class="brand-name">Pirouette</span></a>
     <nav class="nav-pill" aria-label="Menu">
       <a href="#/cours" data-nav="cours">Matières</a>
-      <a href="#/defis" data-nav="defis" hidden>Défis</a>
+      <a href="#/defis" data-nav="defis" hidden>Social<span class="nav-badge" id="social-badge" hidden></span></a>
       <a href="#/reglages" data-nav="reglages">Réglages</a>
       <button type="button" class="nav-feedback" id="feedback-btn" title="Une idée, un bug ? Écris-moi">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="M4 5h16v11H9l-5 4z"/></svg>Feedback</button>
@@ -84,12 +84,19 @@
         </div>
       </div>
       <p class="status" id="courses-status" hidden></p>
+      <!-- Dès qu'il y a de quoi réviser, et tant qu'aucun appareil n'est jumelé : réviser aussi sur son téléphone -->
+      <div class="phone-hint" id="phone-hint" hidden>
+        <span class="phone-hint-ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="3" width="10" height="18" rx="2.5"/><path d="M11 18h2"/></svg></span>
+        <span class="phone-hint-text"><b>Révise aussi sur ton téléphone</b><small>Tes quiz et tes flashcards te suivent, même sans Internet. Un code à scanner, c'est tout.</small></span>
+        <a class="primary small" href="#/reglages/appareils">Connecter mon téléphone</a>
+        <button class="icon" type="button" id="phone-hint-close" title="Plus tard" aria-label="Plus tard">✕</button>
+      </div>
       <!-- Sélections enregistrées (plusieurs cours, de matières différentes) : un clic pour réviser -->
       <div class="review-sets" id="review-sets" hidden></div>
       <div class="course-grid drop-zone" data-drop-folder="">
         <div id="course-list" class="contents"></div>
       </div>
-      <p class="empty-state muted" id="courses-empty" hidden>Pas encore de cours : le « + » en bas pour en ajouter un.</p>
+      <p class="empty-state muted" id="courses-empty" hidden>Pas encore de matière : le « + » en bas pour ajouter un cours.</p>
       <div id="folder-list"></div>
       <button class="add-folder-row" type="button" id="new-folder" hidden>+ Nouveau semestre</button>
       <!-- Un petit « + » en bas : au survol (ou au clic), ajouter un cours ou un semestre -->
@@ -105,15 +112,15 @@
         <div id="archived-list"></div>
       </div>
       <div id="orphans" hidden>
-        <div class="section-title"><h2>Anciens quiz (sans cours)</h2></div>
+        <div class="section-title"><h2>Anciens quiz (sans matière)</h2></div>
         <ul id="orphan-list" class="quiz-list"></ul>
       </div>
     </section>
 
-    <!-- Défis entre amis (en ligne) : un compte, des amis, 10 questions à faire chacun -->
+    <!-- Social : son compte, ses amis, les défis, les quiz en direct et les partages (en ligne) -->
     <section id="view-online" class="view" hidden>
-      <h1>Défis entre amis</h1>
-      <p class="muted" id="online-intro">Lance un défi tiré d'un de tes quiz ou de tout un cours (5 à 20 questions, avec ou sans chrono) : tes amis le font aussi, et vous comparez vos scores.
+      <h1>Social</h1>
+      <p class="muted" id="online-intro">Tes amis, tes défis et tes quiz en direct. Lance un défi tiré d'un de tes quiz ou de toute une matière (5 à 20 questions, avec ou sans chrono) : tes amis le font aussi, et vous comparez vos scores.
         Seuls ton pseudo, les questions du défi et les scores sont en ligne : tes cours restent sur ton ordinateur.</p>
       <div class="card" id="online-off" hidden>
         <h2>Bientôt disponible</h2>
@@ -150,12 +157,30 @@
           </span>
         </div>
         <p class="status" id="online-me-status" hidden></p>
+        <label class="toggle-row social-notify">
+          <input type="checkbox" id="notify-on">
+          <span><strong>Me prévenir</strong><small class="muted">Une notification de l'ordinateur quand on m'écrit, m'invite ou me défie,
+            si Pirouette est en arrière-plan.</small></span>
+        </label>
+        <!-- La carte « Amis » vient ici quand la page est ouverte (sinon : dans la bulle des messages) -->
+        <div id="social-friends-slot"></div>
+        <div class="card social-play">
+          <h2>Jouer et partager</h2>
+          <p class="muted small-text">Choisis une conversation (un ami ou un groupe), puis :</p>
+          <div class="online-new">
+            <select class="chip" id="social-room" aria-label="Conversation"></select>
+            <button class="primary small" type="button" data-social-act="live">Quiz en direct</button>
+            <button class="ghost small" type="button" data-social-act="course">Envoyer des matières</button>
+            <button class="ghost small" type="button" data-social-act="quiz">Envoyer un quiz</button>
+          </div>
+          <p class="status" id="social-play-status" hidden></p>
+        </div>
         <div class="card">
           <h2>Défis de la semaine</h2>
           <ul class="challenge-list" id="online-challenges"></ul>
           <div class="online-new">
             <span class="online-new-label">Nouveau défi :</span>
-            <select class="chip" id="online-quiz" aria-label="Cours ou quiz du défi"></select>
+            <select class="chip" id="online-quiz" aria-label="Matière ou quiz du défi"></select>
             <select class="chip" id="online-size" aria-label="Nombre de questions">
               <option value="5">5 questions</option><option value="10" selected>10 questions</option>
               <option value="15">15 questions</option><option value="20">20 questions</option>
@@ -321,7 +346,7 @@
           <div class="course-progress" id="course-progress-box">
             <h3>Par matière</h3>
             <div class="table-wrap"><table>
-              <thead><tr><th>Cours</th><th>Cartes sues</th><th>Du jour</th><th>À retravailler</th><th>Cartes (30 j)</th><th>Quiz (30 j)</th><th>Dernière révision</th></tr></thead>
+              <thead><tr><th>Matière</th><th>Cartes sues</th><th>Du jour</th><th>À retravailler</th><th>Cartes (30 j)</th><th>Quiz (30 j)</th><th>Dernière révision</th></tr></thead>
               <tbody id="course-progress"></tbody>
             </table></div>
           </div>
@@ -1404,7 +1429,7 @@
       <div class="field" id="share-one"><label for="share-source" id="share-source-label">Quoi ?</label><select id="share-source"></select></div>
       <!-- Cours entiers : on coche ceux à envoyer (un, plusieurs, ou tout) -->
       <div class="field share-many" id="share-many" hidden>
-        <div class="share-many-head"><span>Quels cours ?</span><label class="share-all"><input type="checkbox" id="share-all"> Tout</label></div>
+        <div class="share-many-head"><span>Quelles matières ?</span><label class="share-all"><input type="checkbox" id="share-all"> Tout</label></div>
         <div class="share-list" id="share-list"></div>
       </div>
       <div class="option-row" id="share-challenge-opts" hidden>
@@ -1437,7 +1462,7 @@
   <!-- Ajout de ce qu'on m'a envoyé : ce qui diffère de ce que j'ai déjà (garder le mien, prendre le sien, les deux, signaler) -->
   <dialog id="diff-dialog" class="report-dialog diff-dialog">
     <form method="dialog">
-      <h2>Déjà dans tes cours, mais différent</h2>
+      <h2>Déjà dans tes matières, mais différent</h2>
       <p class="muted" id="diff-intro"></p>
       <div class="diff-list" id="diff-list"></div>
       <p class="status" id="diff-status" hidden></p>
@@ -1578,6 +1603,12 @@
   </dialog>
 
   <!-- Cartons de bienvenue (premier lancement) et « Quoi de neuf » (après une mise à jour) -->
+  <!-- Accueil des nouveaux : plein écran, une action par étape (voir ONBOARD dans app.js) -->
+  <dialog id="onboard" class="onboard" aria-label="Bienvenue dans Pirouette">
+    <div class="ob-progress" id="ob-progress" aria-hidden="true"></div>
+    <div class="ob-stage" id="ob-stage"></div>
+  </dialog>
+
   <dialog id="welcome-dialog" class="welcome" aria-label="Présentation de Pirouette">
     <div class="welcome-art" id="welcome-art"></div>
     <div class="welcome-body" id="welcome-body"></div>
@@ -1593,8 +1624,8 @@
   <!-- Importer un paquet : à quel cours rattacher chaque cours du paquet -->
   <dialog id="pack-dialog" class="report-dialog pack-dialog">
     <h2>Importer des quiz et flashcards</h2>
-    <p class="muted small-text">Pour chaque cours du paquet, choisis où l'importer. Pirouette a retrouvé ceux qui portent le même nom ;
-      les autres peuvent être rattachés à un de tes cours, créés, ou ignorés. Les questions et cartes déjà présentes ne sont pas doublées.</p>
+    <p class="muted small-text">Pour chaque matière du paquet, choisis où l'importer. Pirouette a retrouvé ceux qui portent le même nom ;
+      les autres peuvent être rattachées à une de tes matières, créées, ou ignorées. Les questions et cartes déjà présentes ne sont pas doublées.</p>
     <ul class="pack-rows" id="pack-rows"></ul>
     <p class="error" id="pack-error" hidden></p>
     <div class="actions">
