@@ -5770,7 +5770,7 @@ const OB_STEPS = {
   friends: { label: "Retrouver tes amis" },
   phone: { label: "Ton téléphone" },
 };
-async function openOnboard() {
+async function openOnboard({ fromSettings = false } = {}) {
   const [profile, folders, stats, claude, online, sync] = await Promise.all([
     api("/api/profile").catch(() => ({})), api("/api/folders").catch(() => []), api("/api/stats").catch(() => ({})),
     api("/api/claude-app").catch(() => ({ supported: false })), api("/api/online").catch(() => ({})), api("/api/sync").catch(() => null)]);
@@ -5782,6 +5782,7 @@ async function openOnboard() {
   ob.steps = ["card", "name", "semester", "course", ...(claude.supported ? ["claude"] : []),
     ...(online.configured ? ["friends"] : []), ...(sync?.configured ? ["phone"] : [])];
   ob.i = -1;  // -1 : l'écran de bienvenue
+  $("#ob-close").hidden = !fromSettings;  // revu depuis les Réglages : on peut en sortir (la première fois, non)
   $("#onboard").showModal();
   drawOnboard();
 }
@@ -5795,18 +5796,13 @@ const obLater = `<button class="ob-later" type="button" data-ob="later">Plus tar
 function drawOnboard() {
   const stage = $("#ob-stage");
   $("#ob-progress").innerHTML = ob.i < 0 ? "" : ob.steps.map((k, j) => `<i class="${j < ob.i || ob.done.has(k) ? "on" : j === ob.i ? "now" : ""}"></i>`).join("");
-  if (ob.i < 0) {  // la bienvenue (le premier carton des maquettes) : la couleur de l'app à gauche, la liste à droite
-    const isDone = (k) => k !== "card" && ob.done.has(k);
-    const left = ob.steps.filter((k) => !isDone(k));
-    const now = left[0];
-    const name = ob.info.profile?.name;
+  if (ob.i < 0) {  // la bienvenue : la couleur de l'app à gauche, la liste à droite
     stage.innerHTML = `<div class="ob-welcome">
-      <div class="ob-hero"><div class="ob-icon">${APP_ICON_SVG}</div><h1>Bienvenue${name ? `, ${escapeHtml(name)}` : " dans Pirouette"}</h1>
-        <p>${left.length === ob.steps.length ? `${left.length} petites choses et Pirouette est prête. Compte 3 minutes.`
-          : left.length > 1 ? `${left.length} petites choses et Pirouette est prête. Le reste est déjà fait : tu peux le revoir en passant.`
-          : "Presque tout est prêt : revois chaque étape en passant, ou change ce que tu veux."}</p></div>
-      <div class="ob-list"><ol>${ob.steps.map((k) => `<li class="${isDone(k) ? "done" : k === now ? "now" : ""}"><i>${isDone(k) ? "✓" : ""}</i>
-        <span>${OB_STEPS[k].label}</span>${OB_STEPS[k].min && !isDone(k) ? `<small>${OB_STEPS[k].min}</small>` : ""}</li>`).join("")}</ol>
+      <div class="ob-hero"><div class="ob-icon">${APP_ICON_SVG}</div><h1>Bienvenue dans Pirouette</h1>
+        <p>Tes cours deviennent des quiz et des flashcards, et Pirouette t'aide à tout revoir avant les partiels.
+        Quelques petites choses et c'est prêt : compte trois minutes.</p></div>
+      <div class="ob-list"><ol>${ob.steps.map((k) => `<li class="${ob.done.has(k) && k !== "card" ? "done" : ""}"><i>${ob.done.has(k) && k !== "card" ? "✓" : ""}</i>
+        <span>${OB_STEPS[k].label}</span>${OB_STEPS[k].min ? `<small>${OB_STEPS[k].min}</small>` : ""}</li>`).join("")}</ol>
         <button class="primary ob-go" type="button" data-ob="start">Commencer</button></div></div>`;
     return;
   }
@@ -5998,7 +5994,8 @@ api("/api/settings").then(async (settings) => {
   }
   if (settings.news_seen !== settings.version && WHATS_NEW[settings.version]) return showWhatsNew(settings.version);
 }).catch(() => {});
-$("#welcome-replay").addEventListener("click", () => openOnboard());
+$("#welcome-replay").addEventListener("click", () => openOnboard({ fromSettings: true }));
+$("#ob-close").addEventListener("click", () => { clearInterval(ob.wait); $("#onboard").close(); });
 
 function quizKeys(e) {
   const typing = e.target.matches?.("textarea, input[type=text]");

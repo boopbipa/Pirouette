@@ -2812,18 +2812,6 @@ dialog.onboard::backdrop { background: var(--bg); }
 .tuto-ic svg { width: 100%; height: 100%; display: block; }
 .tuto-card h2 { margin: 0 0 4px; }
 .tuto-card p { margin: 0 0 14px; }
-/* Le premier carton, comme sur la maquette : volet couleur à gauche, liste sur fond clair à droite, l'étape en cours entourée */
-.ob-welcome { width: min(920px, 100%); min-height: 0; aspect-ratio: 16 / 10; }
-.ob-hero { padding: 44px 46px; }
-.ob-hero .ob-icon { width: 64px; height: 64px; }
-.ob-hero h1 { font-size: 36px; margin: 16px 0 10px; }
-.ob-list { background: var(--bg); padding: 36px 40px; }
-.ob-list ol { gap: 9px; margin-bottom: 18px; }
-.ob-list li { background: var(--surface); box-shadow: 0 0 0 1px var(--border); font-weight: 500; }
-.ob-list li.now { box-shadow: 0 0 0 1.5px var(--accent); font-weight: 600; }
-.ob-list li.done { font-weight: 500; }
-.ob-go { padding: 12px 28px; }
-@media (max-width: 760px) { .ob-welcome { aspect-ratio: auto; } }
 /* Une étape déjà faite : la coche, ce qui est en place, « Suivant » et « Le refaire » */
 .ob-done-ic { width: 54px; height: 54px; border-radius: 50%; display: grid; place-items: center; margin-bottom: 14px;
   background: var(--accent-soft); color: var(--accent-ink); font-size: 26px; font-weight: 700; }
@@ -2842,3 +2830,8 @@ dialog.onboard::backdrop { background: var(--bg); }
 #social-rooms .msg-room-item:hover { background: var(--sunken); }
 #social-rooms .msg-room-text { flex: 1; min-width: 0; display: grid; gap: 2px; }
 #social-rooms .badge { margin-left: auto; }
+/* Revu depuis les Réglages : on peut en sortir */
+.ob-close { position: fixed; top: 14px; right: 18px; z-index: 3; border: 0; border-radius: 999px; padding: 8px 14px; cursor: pointer;
+  font: inherit; font-size: 13.5px; color: var(--muted); background: var(--surface); box-shadow: var(--shadow); }
+.ob-close:hover { color: var(--text); }
+.ob-close[hidden] { display: none; }
