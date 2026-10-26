@@ -122,6 +122,27 @@ class DesktopApi:
         except Exception:
             pass
 
+    def set_icon(self, png_data_url: str | None = None) -> None:
+        """L'icône du Dock aux couleurs choisies dans Réglages (dessinée par la page, en PNG). Sans image : l'icône
+        d'origine. Seulement pendant que Pirouette est ouverte : l'icône du dossier Applications ne change pas (la
+        modifier abîmerait l'app aux yeux de macOS)."""
+        if sys.platform != "darwin":
+            return
+        try:
+            import base64
+
+            from AppKit import NSApplication, NSImage
+            from Foundation import NSData
+            from PyObjCTools import AppHelper
+
+            image = None
+            if png_data_url and png_data_url.startswith("data:image/png;base64,"):
+                raw = base64.b64decode(png_data_url.split(",", 1)[1])
+                image = NSImage.alloc().initWithData_(NSData.dataWithBytes_length_(raw, len(raw)))
+            AppHelper.callAfter(lambda: NSApplication.sharedApplication().setApplicationIconImage_(image))
+        except Exception:
+            pass
+
     def import_legacy_data(self) -> dict:
         """Récupère les cours d'une ancienne version (le dossier « data » à côté de run.sh)."""
         import webview

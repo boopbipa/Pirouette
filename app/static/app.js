@@ -64,6 +64,8 @@ const ICONS = {
   scissors: '<circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M20 4 8.1 15.9M14.5 14.5 20 20M8.1 8.1 12 12"/>',
   timer: '<circle cx="12" cy="13.5" r="7.5"/><path d="M12 10v3.5l2.2 2.2M10 2.5h4"/>',
   pin: '<path d="M12 16.5V22M9 4h6l-1 5 3.5 3.5v2h-11v-2L10 9z"/>',
+  check: '<path d="m5 12.5 4.5 4.5L19 7.5"/>',
+  alert: '<path d="M12 4 2.8 19.5h18.4z"/><path d="M12 10v4M12 17h.01"/>',
   chip: '<rect x="6" y="6" width="12" height="12" rx="2"/><path d="M9.5 2.5V6M14.5 2.5V6M9.5 18v3.5M14.5 18v3.5M2.5 9.5H6M2.5 14.5H6M18 9.5h3.5M18 14.5h3.5"/>',
 };
 const icon = (name) => svgIcon(ICONS[name]);
@@ -1316,10 +1318,34 @@ function openAppearance(saved) {
   setPickerColor(picker.saved);
 }
 
+// L'icône suit la couleur choisie : l'onglet du navigateur, et le Dock du Mac (pendant que Pirouette est ouverte)
+async function syncAppIcon(custom = picker.saved !== DEFAULT_ACCENT) {
+  $("#favicon")?.setAttribute("href", `/brand/icon.svg?v=${Date.now()}`);
+  const desktop = window.pywebview?.api?.set_icon;
+  if (!desktop) return;
+  if (!custom) return desktop(null);  // l'icône d'origine
+  const img = new Image();
+  img.src = `/brand/icon.svg?v=${Date.now()}`;
+  await img.decode().catch(() => null);
+  if (!img.naturalWidth) return;
+  const canvas = Object.assign(document.createElement("canvas"), { width: 512, height: 512 });
+  // Comme les icônes du Mac : un peu de marge autour du carré arrondi
+  canvas.getContext("2d").drawImage(img, 50, 50, 412, 412);
+  desktop(canvas.toDataURL("image/png"));
+}
+// Au lancement de l'app Mac : l'icône du Dock reprend la couleur choisie
+async function syncAppIconAtStart() {
+  const accent = (await api("/api/settings").catch(() => ({}))).appearance?.accent;
+  if (accent && accent !== DEFAULT_ACCENT) syncAppIcon(true);
+}
+if (window.pywebview?.api) syncAppIconAtStart();
+else window.addEventListener("pywebviewready", syncAppIconAtStart, { once: true });
+
 async function saveAppearance() {
   const palette = derivePalette(picker.current);
   const result = await api("/api/appearance", jsonBody("PUT", { palette }));
   $("#appearance-style").textContent = result.css;
+  syncAppIcon(picker.current !== DEFAULT_ACCENT);
   picker.saved = picker.current;
   $("#color-save").disabled = true;
   setStatus("#color-status", "Couleur appliquée à toute l'app.", true);
@@ -1328,6 +1354,7 @@ async function saveAppearance() {
 async function resetAppearance() {
   const result = await api("/api/appearance", jsonBody("PUT", { palette: null }));
   $("#appearance-style").textContent = result.css;
+  syncAppIcon(false);
   picker.saved = DEFAULT_ACCENT;
   setPickerColor(DEFAULT_ACCENT);
   setStatus("#color-status", "Couleur d'origine (terre cuite) rétablie.", true);
@@ -5199,6 +5226,12 @@ const WELCOME = [
 ];
 // Les nouveautés de chaque version (le carton « Quoi de neuf » ne s'affiche que si la version en a)
 const WHATS_NEW = {
+  "0.77.0": [
+    ["📚", "Envoie tous tes cours d'un coup", "Dans une conversation, « + » → « Envoyer des cours » : coche ceux que tu veux, ou « Tout »"],
+    ["✦", "« Tout ajouter »", "Tu as reçu plusieurs cours ? Un bouton les ajoute tous, chacun dans la matière du même nom"],
+    ["🔍", "Comparer avant d'ajouter", "Une carte ou une question que tu as déjà, avec une autre réponse : garde la tienne, prends la sienne, les deux, ou signale le problème"],
+    ["●", "L'icône à ta couleur", "La couleur choisie dans Réglages colore aussi l'icône du chat, dans l'app et dans le Dock"],
+  ],
   "0.76.0": [
     ["⚙", "« Cours » et « Réglages »", "À droite des onglets d'une matière : « Cours » pour tes fichiers, quiz et flashcards, « ⚙ Réglages » pour son nom, son semestre et ses partiels"],
     ["✎", "Le crayon du semestre", "Son nom, et la liste de ses matières : un clic t'emmène dans les réglages de la matière"],
@@ -7857,6 +7890,7 @@ function openChat(roomId, { min = false, focus = true } = {}) {
       </header>
       <div class="chat-body">
         <div class="msg-pinned" hidden></div>
+        <div class="msg-takeall" hidden></div>
         <div class="msg-list"></div>
         <form class="msg-compose">
           <div class="msg-attach-wrap">
@@ -7864,7 +7898,7 @@ function openChat(roomId, { min = false, focus = true } = {}) {
             <div class="plus-menu msg-attach-pop" role="menu" hidden>
               <button type="button" role="menuitem" data-attach="quiz"><strong>${icon("note")} Envoyer un quiz</strong></button>
               <button type="button" role="menuitem" data-attach="cards"><strong>${icon("cards")} Envoyer des flashcards</strong></button>
-              <button type="button" role="menuitem" data-attach="course"><strong>${icon("book")} Envoyer un cours entier</strong><small>ses quiz et ses flashcards</small></button>
+              <button type="button" role="menuitem" data-attach="course"><strong>${icon("book")} Envoyer des cours</strong><small>un, plusieurs ou tous, avec leurs quiz et flashcards</small></button>
               <button type="button" role="menuitem" data-attach="challenge"><strong>${icon("swords")} Lancer un défi</strong></button>
               <button type="button" role="menuitem" data-attach="live"><strong>${icon("timer")} Quiz en direct</strong><small>la même question pour tous, en même temps</small></button>
             </div>
@@ -7957,14 +7991,27 @@ function messageHtml(m, w) {
   if (m.kind === "live") actions.push(`<button class="primary small" type="button" data-live-join="${meta.game_id}">${m.mine ? "Ouvrir la partie" : "Rejoindre"}</button>`);
   if (m.kind === "challenge") actions.push(`<button class="primary small" type="button" data-msg-challenge="${meta.challenge_id}">Faire le défi</button>`,
     `<a class="button ghost small" href="#/defis">Classement</a>`);
-  if (["quiz", "cards", "course"].includes(m.kind) && !m.mine) actions.push(`<button class="${m.kind === "quiz" ? "ghost" : "primary"} small" type="button" data-msg-take="${m.id}">Ajouter à mes cours</button>`);
+  if (["quiz", "cards", "course"].includes(m.kind) && !m.mine) actions.push(taken().has(m.id)
+    ? `<button class="ghost small taken" type="button" data-msg-take="${m.id}" title="Déjà ajouté ; un clic pour l'ajouter encore (les différences te seront montrées)">${icon("check")} Ajouté</button>`
+    : `<button class="${m.kind === "quiz" ? "ghost" : "primary"} small" type="button" data-msg-take="${m.id}">Ajouter à mes cours</button>`);
   if (group) actions.push(`<button class="icon msg-pin" type="button" data-msg-pin="${m.id}" title="Épingler en haut du groupe" aria-label="Épingler">${icon("pin")}</button>`);
   return line(`<div class="msg-card ${m.kind}"><span class="msg-kind">${MSG_KINDS[m.kind] || ""}</span><b>${escapeHtml(m.title || "")}</b>
     <small class="muted">${details}</small>${m.body ? `<p class="msg-note">« ${escapeHtml(m.body)} »</p>` : ""}
     <span class="msg-actions">${actions.join("")}</span></div>`);
 }
 
+// « Tout ajouter » : en haut d'une conversation où l'on m'a envoyé au moins deux cours pas encore ajoutés
+function renderTakeAll(w) {
+  const box = w.el.querySelector(".msg-takeall");
+  const waiting = Object.values(w.byId || {}).filter((m) => !m.mine && ["cards", "course", "quiz"].includes(m.kind) && !taken().has(m.id));
+  box.hidden = waiting.length < 2;
+  if (box.hidden) return;
+  box.innerHTML = `${icon("book")} <span><b>${plural(waiting.length, "partage reçu", "partages reçus")}</b> pas encore dans tes cours</span>
+    <button class="primary small" type="button" data-take-all>Tout ajouter</button>`;
+}
+
 function renderPinned(w) {
+  renderTakeAll(w);
   const box = w.el.querySelector(".msg-pinned");
   const pin = w.room.kind === "group" && w.room.pinned ? w.byId[w.room.pinned] : null;
   box.hidden = !pin;
@@ -8026,6 +8073,7 @@ $("#chat-windows").addEventListener("click", async (e) => {
     const liveGame = e.target.closest("[data-live-join]")?.dataset.liveJoin;
     if (liveGame) { setMin(w, true); live.back = location.hash || "#/cours"; return go(`#/direct/${liveGame}`); }
     if (take) return openTake(w, take);
+    if (e.target.closest("[data-take-all]")) return takeAll(w);
     if (pin) { await api(`/api/online/rooms/${w.id}`, jsonBody("PUT", { pinned: pin })); w.room.pinned = pin; return renderPinned(w); }
     if (e.target.closest("[data-msg-unpin]")) { await api(`/api/online/rooms/${w.id}`, jsonBody("PUT", { unpin: true })); w.room.pinned = null; return renderPinned(w); }
     if (edit) {
@@ -8144,7 +8192,7 @@ async function openShare(w, kind) {
   const courseOptions = courses.map((c) => `<option value="course:${c.id}:">${escapeHtml(c.name)}${c.files.length > 1 ? ` (${c.files.length} fichiers)` : ""}</option>`
     + (kind === "cards" && c.files.length > 1 ? c.files.map((f) => `<option value="course:${c.id}:${f.id}">   ${escapeHtml(c.name)} · ${escapeHtml(fileLabel(f))}</option>`).join("") : "")).join("");
   msg.share = { w, kind };
-  $("#share-title").textContent = { quiz: "Envoyer un quiz", cards: "Envoyer des flashcards", course: "Envoyer un cours entier",
+  $("#share-title").textContent = { quiz: "Envoyer un quiz", cards: "Envoyer des flashcards", course: "Envoyer des cours",
     challenge: "Lancer un défi", live: "Lancer un quiz en direct" }[kind];
   $("#share-go").textContent = kind === "live" ? "Créer la partie" : "Envoyer";
   const asChallenge = kind === "challenge" || kind === "live";
@@ -8153,15 +8201,67 @@ async function openShare(w, kind) {
     : asChallenge ? `<optgroup label="Tout un cours">${courses.map((c) => `<option value="course:${c.id}:">${escapeHtml(c.name)}</option>`).join("")}</optgroup><optgroup label="Un quiz">${quizOptions}</optgroup>`
       : courseOptions || `<option value="">Pas encore de cours</option>`;
   $("#share-challenge-opts").hidden = !asChallenge;
+  // Des cours entiers : une liste à cocher, rangée par semestre, avec « Tout »
+  const many = kind === "course";
+  $("#share-one").hidden = many;
+  $("#share-many").hidden = !many;
+  if (many) {
+    const folders = await api("/api/folders").catch(() => []);
+    const groups = [...folders.filter((f) => !f.archived).map((f) => ({ name: f.name, list: courses.filter((c) => c.folder_id === f.id) })),
+      { name: folders.length ? "Hors semestre" : "", list: courses.filter((c) => !folders.some((f) => !f.archived && f.id === c.folder_id)) }]
+      .filter((g) => g.list.length);
+    $("#share-list").innerHTML = groups.map((g) => `${g.name ? `<p class="share-group">${escapeHtml(g.name)}</p>` : ""}${g.list.map((c) => `
+      <label class="pick-row share-pick" style="--c:${subjectColor(c.id)}"><input type="checkbox" value="${c.id}"><span class="subject-dot" aria-hidden="true"></span>
+        <b>${escapeHtml(c.name)}</b><small class="muted">${[c.quiz_count ? plural(c.quiz_count, "quiz", "quiz") : "", c.card_count ? plural(c.card_count, "carte", "cartes") : ""].filter(Boolean).join(" · ") || "vide"}</small></label>`).join("")}`).join("")
+      || `<p class="muted">Pas encore de cours.</p>`;
+    $("#share-all").checked = false;
+    syncShareMany();
+  }
   $("#share-time").hidden = kind === "live";  // en direct : 20 secondes par question, pas de chrono global
   $("#share-text").value = "";
   $("#share-status").hidden = true;
   $("#share-dialog").showModal();
 }
 $("#share-cancel").addEventListener("click", () => $("#share-dialog").close());
+function syncShareMany() {
+  const boxes = [...$("#share-list").querySelectorAll("input")], n = boxes.filter((b) => b.checked).length;
+  $("#share-all").checked = n && n === boxes.length;
+  $("#share-all").indeterminate = n > 0 && n < boxes.length;
+  if (msg.share?.kind === "course") $("#share-go").textContent = n > 1 ? `Envoyer ${n} cours` : "Envoyer";
+}
+$("#share-list").addEventListener("change", syncShareMany);
+$("#share-all").addEventListener("change", (e) => {
+  $("#share-list").querySelectorAll("input").forEach((b) => { b.checked = e.target.checked; });
+  syncShareMany();
+});
+// Plusieurs cours : un message par cours (chacun s'ajoute à part, ou tous d'un coup avec « Tout ajouter »)
+async function shareCourses(w) {
+  const ids = [...$("#share-list").querySelectorAll("input:checked")].map((b) => b.value);
+  if (!ids.length) return setStatus("#share-status", "Coche au moins un cours.", false);
+  const text = $("#share-text").value.trim();
+  let sent = 0;
+  const empty = [];
+  for (const [i, id] of ids.entries()) {
+    setStatus("#share-status", `Envoi… ${i + 1} / ${ids.length}`, true);
+    try {
+      await api(`/api/online/rooms/${w.id}/messages`, jsonBody("POST", { kind: "course", course_id: id, text: i ? "" : text }));
+      sent += 1;
+    } catch {
+      empty.push($("#share-list").querySelector(`input[value="${id}"]`)?.closest("label")?.querySelector("b")?.textContent || "un cours");
+    }
+  }
+  await pullWin(w);
+  if (!empty.length) return $("#share-dialog").close();
+  setStatus("#share-status", `${plural(sent, "cours envoyé", "cours envoyés")}. Pas envoyé${empty.length > 1 ? "s" : ""} (rien dedans encore) : ${empty.join(", ")}.`, !sent);
+}
 $("#share-go").addEventListener("click", async () => {
   const [type, id, file = ""] = $("#share-source").value.split(":");
   const { w, kind } = msg.share || {};
+  if (kind === "course" && w) {
+    $("#share-go").disabled = true;
+    try { await shareCourses(w); } finally { $("#share-go").disabled = false; }
+    return;
+  }
   if (!id || !w) return;
   const body = { kind, text: $("#share-text").value.trim(), ...(type === "quiz" ? { quiz_id: id } : { course_id: id, file_id: file }) };
   if (kind === "challenge") Object.assign(body, { size: Number($("#share-size").value), time_limit: Number($("#share-time").value) || null });
@@ -8186,6 +8286,7 @@ async function openTake(w, messageId) {
   const guess = (m?.meta?.course || m?.title || "").toLowerCase();
   const best = courses.find((c) => guess && (c.name.toLowerCase() === guess || guess.includes(c.name.toLowerCase())));
   msg.taking = m;
+  msg.takingWin = w;
   $("#take-title").textContent = `Ajouter « ${m?.title || "ce partage"} » à mes cours`;
   $("#take-course").innerHTML = `<option value="">Un nouveau cours « ${escapeHtml(m?.meta?.course || m?.title || "Cours reçu")} »</option>`
     + courses.map((c) => `<option value="${c.id}" ${best?.id === c.id ? "selected" : ""}>${escapeHtml(c.name)}</option>`).join("");
@@ -8194,18 +8295,118 @@ async function openTake(w, messageId) {
 }
 $("#take-cancel").addEventListener("click", () => $("#take-dialog").close());
 $("#take-go").addEventListener("click", async () => {
-  const m = msg.taking;
-  const course = $("#take-course").value;
-  try {
-    const done = await api(`/api/online/messages/${m.id}/import`, jsonBody("POST", course ? { course_id: course }
-      : { new_course: m?.meta?.course || m?.title || "Cours reçu" }));
-    $("#take-dialog").close();
-    const parts = [done.questions ? plural(done.questions, "question", "questions") : "", done.cards ? plural(done.cards, "flashcard", "flashcards") : ""].filter(Boolean);
-    notify(parts.length ? `Ajouté à « ${done.course_name} » : ${parts.join(" et ")}.` : `Rien de nouveau : tout était déjà dans « ${done.course_name} ».`);
-  } catch (err) {
-    setStatus("#take-status", err.message, false);
-  }
+  const m = msg.taking, course = $("#take-course").value;
+  $("#take-dialog").close();
+  await takeMessages(msg.takingWin, [{ m, course_id: course, new_course: course ? "" : m?.meta?.course || m?.title || "Cours reçu" }]);
 });
+
+// Ce qu'on a déjà ajouté (sur cet ordinateur) : « Ajouté ✓ » et pas de « Tout ajouter » pour ça
+function taken() {
+  try { return new Set(JSON.parse(localStorage.getItem("pirouette.taken") || "[]")); } catch { return new Set(); }
+}
+function markTaken(ids) {
+  const all = taken();
+  ids.forEach((id) => all.add(id));
+  try { localStorage.setItem("pirouette.taken", JSON.stringify([...all].slice(-2000))); } catch {}
+}
+// Tous les partages pas encore ajoutés : chacun dans la matière du même nom, sinon une nouvelle
+async function takeAll(w) {
+  const courses = await api("/api/courses").catch(() => []);
+  const byName = new Map(courses.map((c) => [c.name.trim().toLowerCase(), c.id]));
+  const items = Object.values(w.byId).filter((m) => !m.mine && ["cards", "course", "quiz"].includes(m.kind) && !taken().has(m.id))
+    .map((m) => {
+      const name = (m.meta?.course || m.title || "Cours reçu").trim();
+      const id = byName.get(name.toLowerCase());
+      if (!id) byName.set(name.toLowerCase(), null);  // plusieurs partages du même cours : une seule nouvelle matière
+      return { m, course_id: id || "", new_course: id ? "" : name };
+    });
+  await takeMessages(w, items);
+}
+// Ajouter : d'abord comparer avec ce que j'ai ; s'il y a des différences, je choisis (ou je signale) avant d'ajouter
+async function takeMessages(w, items) {
+  if (!items.length) return;
+  const created = new Map();  // nouvelle matière déjà créée pour ce nom (plusieurs partages du même cours)
+  const diffs = [];
+  try {
+    for (const item of items) {
+      if (!item.course_id) continue;  // nouvelle matière : rien à comparer
+      const d = await api(`/api/online/messages/${item.m.id}/compare`, jsonBody("POST", { course_id: item.course_id }));
+      d.conflicts.forEach((c) => diffs.push({ ...c, item }));
+    }
+  } catch (err) {
+    return notify(err.message);
+  }
+  const choices = diffs.length ? await chooseDiffs(w, diffs) : new Map();
+  if (!choices) return;  // annulé
+  const totals = { questions: 0, cards: 0, replaced: 0 }, names = new Set();
+  try {
+    for (const item of items) {
+      const target = item.course_id || created.get(item.new_course);
+      const body = target ? { course_id: target } : { new_course: item.new_course };
+      body.choices = Object.fromEntries(diffs.filter((d) => d.item === item).map((d) => [d.ref, choices.get(d) || "mine"]));
+      const done = await api(`/api/online/messages/${item.m.id}/import`, jsonBody("POST", body));
+      if (!target) created.set(item.new_course, done.course_id);
+      totals.questions += done.questions; totals.cards += done.cards; totals.replaced += done.replaced || 0;
+      names.add(done.course_name);
+      markTaken([item.m.id]);
+    }
+  } catch (err) {
+    notify(err.message);
+  }
+  if (w) reloadWin(w).then(() => renderTakeAll(w)).catch(() => {});
+  const parts = [totals.questions ? plural(totals.questions, "question", "questions") : "", totals.cards ? plural(totals.cards, "flashcard", "flashcards") : "",
+    totals.replaced ? `${plural(totals.replaced, "réponse remplacée", "réponses remplacées")}` : ""].filter(Boolean);
+  const where = names.size > 1 ? plural(names.size, "matière", "matières") : `« ${[...names][0] || ""} »`;
+  notify(parts.length ? `Ajouté dans ${where} : ${parts.join(", ")}.` : `Rien de nouveau : tout était déjà dans ${where}.`);
+  if (location.hash === "#/cours") loadCourses().catch(() => {});  // la liste des matières montre les nouvelles
+}
+// Les différences : pour chacune, garder le mien, prendre le sien, ou les deux ; ou signaler (un message à l'envoyeur)
+function chooseDiffs(w, diffs) {
+  const dialog = $("#diff-dialog");
+  $("#diff-intro").textContent = `${plural(diffs.length, "question ou carte existe", "questions ou cartes existent")} déjà chez toi avec une autre réponse. `
+    + "Choisis ce que tu gardes ; s'il y a une erreur, signale-la, le message part dans la conversation.";
+  const ask = (d) => `${d.kind === "card" ? "Carte" : "Question"} « ${d.front} » : j'ai « ${d.mine} », toi « ${d.theirs} ». Laquelle est juste ?`;
+  $("#diff-list").innerHTML = diffs.map((d, i) => `<div class="diff-row" data-diff="${i}">
+      <p class="diff-front"><span class="msg-kind">${d.kind === "card" ? "Carte" : "Question"}</span> ${escapeHtml(d.front)}</p>
+      <div class="diff-sides">
+        <label class="diff-side"><input type="radio" name="diff-${i}" value="mine" checked><span><small>Chez toi</small>${escapeHtml(d.mine || "—")}</span></label>
+        <label class="diff-side"><input type="radio" name="diff-${i}" value="theirs"><span><small>Reçu${d.item.m.pseudo ? ` de ${escapeHtml(d.item.m.pseudo)}` : ""}</small>${escapeHtml(d.theirs || "—")}</span></label>
+      </div>
+      <div class="diff-more"><label><input type="checkbox" data-both="${i}"> Garder les deux</label>
+        ${w ? `<button class="link-button" type="button" data-report="${i}">${icon("alert")} Signaler un problème</button>` : ""}</div>
+    </div>`).join("");
+  $("#diff-status").hidden = true;
+  dialog.showModal();
+  return new Promise((resolve) => {
+    const onClick = async (e) => {
+      const report = e.target.closest("[data-report]");
+      if (!report) return;
+      const d = diffs[Number(report.dataset.report)];
+      try {
+        await api(`/api/online/rooms/${w.id}/messages`, jsonBody("POST", { text: ask(d) }));
+        report.outerHTML = `<span class="diff-reported">${icon("check")} Signalé dans la conversation</span>`;
+        pullWin(w).catch(() => {});
+      } catch (err) {
+        setStatus("#diff-status", err.message, false);
+      }
+    };
+    let done = false;
+    const finish = (ok) => {
+      if (done) return;
+      done = true;
+      $("#diff-list").removeEventListener("click", onClick);
+      $("#diff-go").onclick = $("#diff-cancel").onclick = null;
+      const picked = ok ? new Map(diffs.map((d, i) => [d, $(`#diff-list [data-both="${i}"]`).checked ? "both"
+        : $(`#diff-list input[name="diff-${i}"]:checked`).value])) : null;
+      if (dialog.open) dialog.close();
+      resolve(picked);
+    };
+    $("#diff-list").addEventListener("click", onClick);
+    $("#diff-go").onclick = () => finish(true);
+    $("#diff-cancel").onclick = () => finish(false);
+    dialog.addEventListener("close", () => finish(false), { once: true });  // la croix, Échap : comme Annuler
+  });
+}
 
 // ---------- Clair ou sombre : automatique (comme l'ordinateur), ou choisi ----------
 function applyTheme(theme) {

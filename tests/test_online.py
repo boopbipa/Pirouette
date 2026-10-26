@@ -336,6 +336,19 @@ def test_send_and_import_a_quiz_and_cards(tmp_path, fake, monkeypatch):
     for _ in range(2):
         cards = api.post(f"/api/online/messages/{sent_cards['id']}/import", json={"course_id": done["course_id"]}).json()
     assert cards["cards"] == 0 and len(stores["bob"].get_doc(done["course_id"], "cards")["cards"]) == 1
+    # Le même quiz une seconde fois : rien en double
+    again = api.post(f"/api/online/messages/{sent_quiz['id']}/import", json={"course_id": done["course_id"]}).json()
+    assert again["questions"] == 0 and len(stores["bob"].list_quizzes(done["course_id"])) == 1
+    # Bob a changé sa carte : la comparaison montre la différence ; il prend la version d'Alice
+    deck = stores["bob"].get_doc(done["course_id"], "cards")
+    deck["cards"][0]["back"] = "Le surmoi"
+    stores["bob"].save_doc(done["course_id"], "cards", deck)
+    diff = api.post(f"/api/online/messages/{sent_cards['id']}/compare", json={"course_id": done["course_id"]}).json()
+    assert diff["new_cards"] == 0 and diff["conflicts"] == [
+        {"ref": "c:0", "kind": "card", "front": "Le moi ?", "mine": "Le surmoi", "theirs": "Instance"}]
+    taken = api.post(f"/api/online/messages/{sent_cards['id']}/import",
+                     json={"course_id": done["course_id"], "choices": {"c:0": "theirs"}}).json()
+    assert taken["replaced"] == 1 and stores["bob"].get_doc(done["course_id"], "cards")["cards"][0]["back"] == "Instance"
     result = api.post(f"/api/online/rooms/{room['id']}/messages",
                       json={"kind": "result", "title": "Freud", "score": 1, "total": 1, "seconds": 30}).json()
     assert result["meta"] == {"score": 1, "total": 1, "seconds": 30}

@@ -2675,3 +2675,39 @@ input, textarea, [contenteditable] { -webkit-user-select: text; user-select: tex
 .fs-go { display: inline-flex; align-items: center; gap: 5px; font-size: 13px; color: var(--muted); transition: color .15s; }
 .fs-go .ico { width: 14px; height: 14px; }
 .folder-subject:hover .fs-go { color: var(--c, var(--accent-ink)); }
+
+/* Envoyer des cours : une liste à cocher, rangée par semestre, avec « Tout » */
+.share-many-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; font-weight: 600; }
+.share-all { display: inline-flex; align-items: center; gap: 6px; font-weight: 500; color: var(--muted); cursor: pointer; }
+.share-list { max-height: 44vh; overflow: auto; display: grid; gap: 4px; padding: 2px; }
+.share-group { margin: 8px 2px 2px; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
+.share-pick { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 10px; cursor: pointer; }
+.share-pick:hover { background: var(--sunken); }
+.share-pick .subject-dot { background: var(--c); }
+.share-pick b { flex: 1; min-width: 0; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.share-pick small { flex: none; }
+/* « Tout ajouter » en haut de la conversation */
+.msg-takeall { display: flex; align-items: center; gap: 8px; margin: 8px 10px 0; padding: 9px 12px; border-radius: 12px; font-size: 13px;
+  background: var(--accent-soft); color: var(--text); }
+.msg-takeall[hidden] { display: none; }
+.msg-takeall span { flex: 1; min-width: 0; }
+.msg-takeall .ico { width: 16px; height: 16px; color: var(--accent-ink); flex: none; }
+.msg-actions .taken .ico { width: 14px; height: 14px; }
+/* Ajouter ce qu'on m'a envoyé : ce qui diffère de ce que j'ai déjà */
+.diff-dialog { width: min(620px, calc(100vw - 32px)); }
+.diff-list { display: grid; gap: 10px; max-height: 56vh; overflow: auto; margin-top: 10px; }
+.diff-row { padding: 12px 14px; border: 1px solid var(--border); border-radius: 14px; }
+.diff-front { margin: 0 0 8px; font-weight: 600; }
+.diff-front .msg-kind { margin-right: 6px; }
+.diff-sides { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.diff-side { display: flex; gap: 8px; align-items: flex-start; padding: 9px 11px; border-radius: 10px; background: var(--sunken); cursor: pointer;
+  border: 1.5px solid transparent; }
+.diff-side:has(input:checked) { border-color: var(--accent); background: var(--accent-soft); }
+.diff-side input { margin-top: 3px; }
+.diff-side small { display: block; font-size: 11.5px; color: var(--muted); font-weight: 600; margin-bottom: 2px; }
+.diff-more { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 8px; font-size: 13px; color: var(--muted); }
+.diff-more label { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
+.diff-more .ico, .diff-reported .ico { width: 14px; height: 14px; vertical-align: -2px; }
+.diff-reported { color: var(--accent-ink); }
+@media (max-width: 560px) { .diff-sides { grid-template-columns: 1fr; } }
+.diff-more .link-button { display: inline-flex; align-items: center; gap: 5px; }

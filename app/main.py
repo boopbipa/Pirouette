@@ -80,15 +80,50 @@ async def not_found(request: Request, exc: NotFound) -> JSONResponse:
 PALETTE_KEYS = ("accent", "ink", "soft", "d_accent", "d_ink", "d_soft")
 
 
+ICON_COLORS = {"top": "#D36C38", "bottom": "#AE4A22", "eye": "#B9532A"}  # l'icône d'origine (terre cuite)
+
+
+def icon_colors(accent: str | None) -> dict:
+    """Les couleurs de l'icône (le fond en dégradé et les yeux du chat) pour une couleur d'accent : même teinte,
+    le haut un peu plus clair, le bas un peu plus foncé, comme l'icône d'origine autour de sa terre cuite."""
+    import colorsys
+    if not accent or not re.fullmatch(r"#[0-9a-fA-F]{6}", accent):
+        return dict(ICON_COLORS)
+    r, g, b = (int(accent[i:i + 2], 16) / 255 for i in (1, 3, 5))
+    h, s, v = colorsys.rgb_to_hsv(r, g, b)
+
+    def hexa(s2: float, v2: float) -> str:
+        return "#" + "".join(f"{round(c * 255):02X}" for c in colorsys.hsv_to_rgb(h, min(1, s2), min(1, v2)))
+    return {"top": hexa(s * .95, v * 1.17), "bottom": hexa(s * 1.04, v * .96), "eye": accent.upper()}
+
+
+def icon_svg(accent: str | None) -> str:
+    """L'icône de l'app, aux couleurs choisies dans Réglages (onglet du navigateur, Dock du Mac)."""
+    svg = (ROOT / "static" / "brand" / "icon.svg").read_text(encoding="utf-8")
+    colors = icon_colors(accent)
+    for key, original in ICON_COLORS.items():
+        svg = svg.replace(original, colors[key])
+    return svg
+
+
 def appearance_css(palette: dict | None) -> str:
-    """Variables CSS de la couleur d'accent choisie (modes clair et sombre). Même calcul que paletteCss() côté page."""
+    """Variables CSS de la couleur d'accent choisie (modes clair et sombre). Même calcul que paletteCss() côté page.
+    Les couleurs de l'icône (--logo-*) suivent aussi."""
     if not palette:
         return ""
     p = palette
-    return (f":root{{--accent:{p['accent']};--accent-ink:{p['ink']};--accent-soft:{p['soft']}}}"
+    logo = icon_colors(p.get("accent"))
+    return (f":root{{--logo-top:{logo['top']};--logo-bottom:{logo['bottom']};--logo-eye:{logo['eye']}}}"
+            f":root{{--accent:{p['accent']};--accent-ink:{p['ink']};--accent-soft:{p['soft']}}}"
             f"@media (prefers-color-scheme: dark){{:root:not([data-theme=light]){{--accent:{p['d_accent']};"
             f"--accent-ink:{p['d_ink']};--accent-soft:{p['d_soft']}}}}}"
             f":root[data-theme=dark]{{--accent:{p['d_accent']};--accent-ink:{p['d_ink']};--accent-soft:{p['d_soft']}}}")
+
+
+@app.get("/brand/icon.svg")
+async def brand_icon() -> Response:
+    accent = (store.get_settings().get("appearance") or {}).get("accent")
+    return Response(icon_svg(accent), media_type="image/svg+xml", headers={"Cache-Control": "no-cache"})
 
 
 @app.get("/")
@@ -2711,6 +2746,64 @@ class MessageIn(BaseModel):
 class ImportIn(BaseModel):
     course_id: str = ""            # un de mes cours…
     new_course: str = ""           # …ou un nouveau cours, de ce nom
+    # Les différences avec ce que j'ai déjà (voir /compare) : par repère (« c:… » carte, « q:… » question),
+    # « mine » (garder le mien, par défaut), « theirs » (prendre le sien à la place) ou « both » (garder les deux)
+    choices: dict[str, str] = {}
+
+
+def _norm(text) -> str:
+    """Pour comparer deux textes : sans majuscules, accents, ponctuation ni espaces en trop."""
+    import unicodedata
+    text = unicodedata.normalize("NFD", str(text or "").lower())
+    text = "".join(ch for ch in text if unicodedata.category(ch) != "Mn")
+    return " ".join("".join(ch if ch.isalnum() else " " for ch in text).split())
+
+
+def _received(message: dict) -> tuple[list[dict], list[dict]]:
+    """Les quiz et les cartes d'un message reçu."""
+    payload = message.get("payload") or {}
+    if message.get("kind") not in ("quiz", "cards", "course") or not payload:
+        raise HTTPException(400, "Rien à ajouter dans ce message.")
+    quizzes = [payload] if message["kind"] == "quiz" else payload.get("quizzes") or []
+    return quizzes, payload.get("cards") or []
+
+
+def _compare(course_id: str, quizzes: list[dict], cards: list[dict]) -> dict:
+    """Ce qui est nouveau, déjà là à l'identique, ou déjà là mais différent (même question, autre réponse)."""
+    mine_cards = {_norm(c.get("front")): c for c in (store.get_doc(course_id, "cards") or {}).get("cards", [])} if course_id else {}
+    mine_questions = {}
+    if course_id:
+        for summary in store.list_quizzes(course_id):
+            quiz = store.get_quiz(summary["id"])
+            for index, q in enumerate(quiz.get("questions", [])):
+                mine_questions.setdefault(_norm(q.get("question")), (quiz, index, q))
+    result = {"new_cards": 0, "same_cards": 0, "new_questions": 0, "same_questions": 0, "conflicts": []}
+    for i, card in enumerate(cards):
+        mine = mine_cards.get(_norm(card.get("front")))
+        if not _norm(card.get("front")):
+            continue
+        if not mine:
+            result["new_cards"] += 1
+        elif _norm(mine.get("back")) == _norm(card.get("back")):
+            result["same_cards"] += 1
+        else:
+            result["conflicts"].append({"ref": f"c:{i}", "kind": "card", "front": mine.get("front"),
+                                        "mine": mine.get("back", ""), "theirs": card.get("back", "")})
+    for qi, quiz in enumerate(quizzes):
+        for i, q in enumerate(quiz.get("questions") or []):
+            key = _norm(q.get("question"))
+            if not key:
+                continue
+            found = mine_questions.get(key)
+            if not found:
+                result["new_questions"] += 1
+            elif _norm(found[2].get("answer")) == _norm(q.get("answer")):
+                result["same_questions"] += 1
+            else:
+                result["conflicts"].append({"ref": f"q:{qi}:{i}", "kind": "question", "front": found[2].get("question"),
+                                            "mine": found[2].get("answer", ""), "theirs": q.get("answer", ""),
+                                            "quiz": found[0].get("title", "")})
+    return result
 
 
 _SHARED_QUESTION = ("type", "kind", "question", "choices", "answer", "explanation", "source", "key_terms")
@@ -2880,21 +2973,52 @@ async def online_message(message_id: str) -> dict:
     return await _online_call(_online().payload(message_id))
 
 
+@app.post("/api/online/messages/{message_id}/compare")
+async def online_compare(message_id: str, body: ImportIn) -> dict:
+    """Avant d'ajouter : ce qui est nouveau, déjà là, ou différent de ce que j'ai (pour choisir, ou signaler)."""
+    message = await _online_call(_online().payload(message_id))
+    quizzes, cards = _received(message)
+    return _compare(body.course_id, quizzes, cards)
+
+
 @app.post("/api/online/messages/{message_id}/import")
 async def online_import(message_id: str, body: ImportIn) -> dict:
-    """Ajoute à mes cours un quiz, des flashcards ou un cours reçus (sans doublon de cartes)."""
+    """Ajoute à mes cours un quiz, des flashcards ou un cours reçus : seulement ce qui est nouveau ; pour ce qui
+    diffère de ce que j'ai déjà, selon `choices` (garder le mien par défaut, prendre le sien, ou garder les deux)."""
     message = await _online_call(_online().payload(message_id))
     payload = message.get("payload") or {}
-    if message["kind"] not in ("quiz", "cards", "course") or not payload:
-        raise HTTPException(400, "Rien à ajouter dans ce message.")
+    quizzes, cards = _received(message)
     if body.course_id:
         course = store.get_course(body.course_id)
     else:
         course = store.create_course(" ".join(body.new_course.split())[:120] or payload.get("course_name") or message.get("title") or "Cours reçu")
-    quizzes = [payload] if message["kind"] == "quiz" else payload.get("quizzes") or []
-    added_q = 0
-    for quiz in quizzes:
-        questions = [q for q in quiz.get("questions") or [] if q.get("question")]
+    choice = lambda ref: body.choices.get(ref, "mine")  # noqa: E731
+    # Mes questions et mes cartes, pour ne rien ajouter deux fois et appliquer les choix
+    mine_questions = {}
+    for summary in store.list_quizzes(course["id"]):
+        quiz = store.get_quiz(summary["id"])
+        for index, q in enumerate(quiz.get("questions", [])):
+            mine_questions.setdefault(_norm(q.get("question")), (quiz["id"], index))
+    added_q = replaced = 0
+    for qi, quiz in enumerate(quizzes):
+        questions = []
+        for i, q in enumerate(quiz.get("questions") or []):
+            key = _norm(q.get("question"))
+            if not key:
+                continue
+            found = mine_questions.get(key)
+            if found and choice(f"q:{qi}:{i}") == "theirs":
+                mine = store.get_quiz(found[0])
+                old = mine["questions"][found[1]]
+                if _norm(old.get("answer")) != _norm(q.get("answer")):
+                    mine["questions"][found[1]] = {**old, **{k: q[k] for k in ("answer", "choices", "explanation") if k in q}}
+                    store.save_quiz(mine)
+                    replaced += 1
+                continue
+            if found and choice(f"q:{qi}:{i}") != "both":
+                continue  # déjà là (à l'identique, ou je garde la mienne)
+            mine_questions.setdefault(key, None)
+            questions.append(q)
         if not questions:
             continue
         store.save_quiz({"course_id": course["id"], "course_name": course["name"], "course_version": course["version"],
@@ -2903,21 +3027,30 @@ async def online_import(message_id: str, body: ImportIn) -> dict:
                          "questions": questions})
         added_q += len(questions)
     added_c = 0
-    cards = payload.get("cards") or []
     if cards:
         deck = store.get_doc(course["id"], "cards") or {"course_id": course["id"], "course_name": course["name"], "cards": []}
-        known = {str(c.get("front", "")).strip().lower() for c in deck["cards"]}
-        for card in cards:
+        known = {_norm(c.get("front")): c for c in deck["cards"]}
+        for i, card in enumerate(cards):
             front = str(card.get("front", "")).strip()
-            if not front or front.lower() in known:
+            key = _norm(front)
+            if not key:
                 continue
-            known.add(front.lower())
+            mine = known.get(key)
+            if mine is not None:
+                how = choice(f"c:{i}")
+                if how == "theirs" and _norm(mine.get("back")) != _norm(card.get("back")):
+                    mine["back"] = str(card.get("back", ""))  # le suivi de révision de la carte est gardé
+                    replaced += 1
+                if how != "both":
+                    continue
+            known[key] = card
             deck["cards"].append({"id": uuid.uuid4().hex[:8], "front": front, "back": str(card.get("back", "")),
                                   "source": card.get("source", ""), "scope": card.get("scope") or [], "status": "new",
                                   "reviews": 0, "last_reviewed": None, "created_at": datetime.now().isoformat(timespec="seconds")})
             added_c += 1
         store.save_doc(course["id"], "cards", deck)
-    return {"course_id": course["id"], "course_name": course["name"], "questions": added_q, "cards": added_c}
+    return {"course_id": course["id"], "course_name": course["name"], "questions": added_q, "cards": added_c,
+            "replaced": replaced}
 
 
 @app.post("/api/quit")

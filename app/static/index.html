@@ -7,7 +7,7 @@
   <meta name="description" content="Tes cours deviennent des quiz et des flashcards.">
   <meta name="theme-color" content="#FAF8F3">
   <meta name="apple-mobile-web-app-title" content="Pirouette">
-  <link rel="icon" href="/static/brand/icon.svg" type="image/svg+xml">
+  <link rel="icon" href="/brand/icon.svg" type="image/svg+xml" id="favicon">
   <link rel="apple-touch-icon" href="/static/brand/apple-touch-icon.png">
   <link rel="manifest" href="/manifest.webmanifest">
   <link rel="stylesheet" href="/static/style.css">
@@ -16,9 +16,9 @@
 </head>
 <body>
   <svg width="0" height="0" style="position:absolute" aria-hidden="true">
-    <defs><linearGradient id="pbg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#D36C38"/><stop offset="1" stop-color="#AE4A22"/></linearGradient><linearGradient id="phl" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".18"/><stop offset=".45" stop-color="#fff" stop-opacity="0"/></linearGradient><clipPath id="pcl"><rect width="100" height="100" rx="22.5"/></clipPath></defs>
+    <defs><linearGradient id="pbg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" style="stop-color:var(--logo-top, #D36C38)"/><stop offset="1" style="stop-color:var(--logo-bottom, #AE4A22)"/></linearGradient><linearGradient id="phl" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".18"/><stop offset=".45" stop-color="#fff" stop-opacity="0"/></linearGradient><clipPath id="pcl"><rect width="100" height="100" rx="22.5"/></clipPath></defs>
     <!-- L'icône de l'app : le chat qui fait la sieste -->
-    <symbol id="app-icon" viewBox="0 0 100 100"><g clip-path="url(#pcl)"><rect width="100" height="100" fill="url(#pbg)"/><g transform="translate(-62 -16) scale(1.62)"><path d="M14 78 Q14 46 40 40 L44 26 Q45 23.5 47 25.5 L54 33 Q60 32 66 33.5 L74 26 Q76 24 77 26.5 L79 40 Q90 50 90 66 Q90 78 80 78 Z" fill="#FFF6EE"/><path d="M56 55 q4.0 4.0 8 0" fill="none" stroke="#B9532A" stroke-width="3" stroke-linecap="round"/><path d="M70 55 q4.0 4.0 8 0" fill="none" stroke="#B9532A" stroke-width="3" stroke-linecap="round"/><path d="M64.8 60 Q67 59.2 69.2 60 Q69 61.9 67 62.7 Q65 61.9 64.8 60 Z" fill="#E9A48C"/></g><rect width="100" height="100" fill="url(#phl)"/></g></symbol>
+    <symbol id="app-icon" viewBox="0 0 100 100"><g clip-path="url(#pcl)"><rect width="100" height="100" fill="url(#pbg)"/><g transform="translate(-62 -16) scale(1.62)"><path d="M14 78 Q14 46 40 40 L44 26 Q45 23.5 47 25.5 L54 33 Q60 32 66 33.5 L74 26 Q76 24 77 26.5 L79 40 Q90 50 90 66 Q90 78 80 78 Z" fill="#FFF6EE"/><path d="M56 55 q4.0 4.0 8 0" fill="none" style="stroke:var(--logo-eye, #B9532A)" stroke-width="3" stroke-linecap="round"/><path d="M70 55 q4.0 4.0 8 0" fill="none" style="stroke:var(--logo-eye, #B9532A)" stroke-width="3" stroke-linecap="round"/><path d="M64.8 60 Q67 59.2 69.2 60 Q69 61.9 67 62.7 Q65 61.9 64.8 60 Z" fill="#E9A48C"/></g><rect width="100" height="100" fill="url(#phl)"/></g></symbol>
     <symbol id="logo" viewBox="0 0 100 100"><path fill="currentColor" d="M17 47 C15 36 15 22 18.5 11.5 C19.5 10 21 10 22.5 11 C29 15.5 36 21 41.5 26.5 C47 25.2 53 25.2 58.5 26.5 C64 21 71 15.5 77.5 11 C79 10 80.5 10 81.5 11.5 C85 22 85 36 83 47 C87 55 87.5 63 84 71 C78 83 65 89 50 89 C35 89 22 83 16 71 C12.5 63 13 55 17 47 Z"/></symbol>
     <symbol id="chat-cat" viewBox="0 0 100 100"><path fill="currentColor" d="M50 10 A38 38 0 1 1 30.5 80.6 L15 88 C13 89 11.6 87.7 12.5 85.7 L18.5 72.5 A38 38 0 0 1 50 10 Z"/></symbol>
   </svg>
@@ -1401,7 +1401,12 @@
   <dialog id="share-dialog" class="report-dialog">
     <form id="share-form" method="dialog">
       <h2 id="share-title">Envoyer un quiz</h2>
-      <div class="field"><label for="share-source" id="share-source-label">Quoi ?</label><select id="share-source"></select></div>
+      <div class="field" id="share-one"><label for="share-source" id="share-source-label">Quoi ?</label><select id="share-source"></select></div>
+      <!-- Cours entiers : on coche ceux à envoyer (un, plusieurs, ou tout) -->
+      <div class="field share-many" id="share-many" hidden>
+        <div class="share-many-head"><span>Quels cours ?</span><label class="share-all"><input type="checkbox" id="share-all"> Tout</label></div>
+        <div class="share-list" id="share-list"></div>
+      </div>
       <div class="option-row" id="share-challenge-opts" hidden>
         <select id="share-size" class="chip" aria-label="Nombre de questions"><option value="5">5 questions</option><option value="10" selected>10 questions</option><option value="15">15 questions</option><option value="20">20 questions</option></select>
         <select id="share-time" class="chip" aria-label="Chrono"><option value="">Sans chrono</option><option value="120">2 min</option><option value="300">5 min</option><option value="600">10 min</option><option value="900">15 min</option></select>
@@ -1425,6 +1430,20 @@
       <div class="actions">
         <button class="primary" type="button" id="take-go">Ajouter</button>
         <button class="ghost" type="button" id="take-cancel">Annuler</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Ajout de ce qu'on m'a envoyé : ce qui diffère de ce que j'ai déjà (garder le mien, prendre le sien, les deux, signaler) -->
+  <dialog id="diff-dialog" class="report-dialog diff-dialog">
+    <form method="dialog">
+      <h2>Déjà dans tes cours, mais différent</h2>
+      <p class="muted" id="diff-intro"></p>
+      <div class="diff-list" id="diff-list"></div>
+      <p class="status" id="diff-status" hidden></p>
+      <div class="actions">
+        <button class="primary" type="button" id="diff-go">Ajouter</button>
+        <button class="ghost" type="button" id="diff-cancel">Annuler</button>
       </div>
     </form>
   </dialog>
