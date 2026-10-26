@@ -2829,3 +2829,16 @@ dialog.onboard::backdrop { background: var(--bg); }
   background: var(--accent-soft); color: var(--accent-ink); font-size: 26px; font-weight: 700; }
 .ob-card > p.ob-done { color: var(--text); }
 .ob-card > p.ob-done b { color: var(--accent-ink); }
+
+/* Social : un onglet par fonction */
+.social-tabs { margin: 4px 0 18px; }
+.social-tabs a { display: inline-flex; align-items: center; }
+.social-tabs a .nav-badge { margin-left: 6px; }
+#online-main .social-off { display: none !important; }
+.social-msg-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 8px; }
+.social-msg-head h2 { margin: 0; }
+#social-rooms { list-style: none; margin: 0; padding: 0; }
+#social-rooms .msg-room-item { width: 100%; border: none; background: transparent; font: inherit; color: inherit; text-align: left; cursor: pointer; padding: 11px 12px; }
+#social-rooms .msg-room-item:hover { background: var(--sunken); }
+#social-rooms .msg-room-text { flex: 1; min-width: 0; display: grid; gap: 2px; }
+#social-rooms .badge { margin-left: auto; }

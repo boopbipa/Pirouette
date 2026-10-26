@@ -120,8 +120,7 @@
     <!-- Social : son compte, ses amis, les défis, les quiz en direct et les partages (en ligne) -->
     <section id="view-online" class="view" hidden>
       <h1>Social</h1>
-      <p class="muted" id="online-intro">Tes amis, tes défis et tes quiz en direct. Lance un défi tiré d'un de tes quiz ou de toute une matière (5 à 20 questions, avec ou sans chrono) : tes amis le font aussi, et vous comparez vos scores.
-        Seuls ton pseudo, les questions du défi et les scores sont en ligne : tes cours restent sur ton ordinateur.</p>
+      <p class="muted" id="online-intro">Tes amis, tes messages, tes défis et tes quiz en direct. Seuls ton pseudo, ce que tu envoies et les scores sont en ligne : tes cours restent sur ton ordinateur.</p>
       <div class="card" id="online-off" hidden>
         <h2>Bientôt disponible</h2>
         <p class="muted">Les défis en ligne ne sont pas encore ouverts dans cette version de Pirouette.</p>
@@ -144,7 +143,19 @@
         <p class="status" id="online-pseudo-status" hidden></p>
       </form>
       <div id="online-main" hidden>
-        <div class="card online-me">
+        <!-- Les onglets de Social : une fonction à la fois (pastilles : invitations, messages non lus, défis à faire) -->
+        <nav class="filters scope-tabs social-tabs" aria-label="Social">
+          <a data-social-tab="amis">Amis<span class="nav-badge" data-social-badge="amis" hidden></span></a>
+          <a data-social-tab="messages">Messages<span class="nav-badge" data-social-badge="messages" hidden></span></a>
+          <a data-social-tab="defis">Défis<span class="nav-badge" data-social-badge="defis" hidden></span></a>
+          <a data-social-tab="jouer">Quiz en direct</a>
+          <a data-social-tab="compte">Mon compte</a>
+        </nav>
+        <div class="card" data-social-pane="messages">
+          <div class="social-msg-head"><h2>Conversations</h2><button class="ghost small" type="button" id="social-new-chat">+ Nouvelle conversation</button></div>
+          <ul class="msg-rooms" id="social-rooms"></ul>
+        </div>
+        <div class="card online-me" data-social-pane="compte">
           <div>
             <strong id="online-hello"></strong>
             <small class="muted">Ton code ami : <b class="friend-code" id="online-code-me"></b>
@@ -157,15 +168,15 @@
           </span>
         </div>
         <p class="status" id="online-me-status" hidden></p>
-        <label class="toggle-row social-notify">
+        <label class="toggle-row social-notify" data-social-pane="compte">
           <input type="checkbox" id="notify-on">
           <span><strong>Me prévenir</strong><small class="muted">Une notification de l'ordinateur quand on m'écrit, m'invite ou me défie,
             si Pirouette est en arrière-plan.</small></span>
         </label>
         <!-- La carte « Amis » vient ici quand la page est ouverte (sinon : dans la bulle des messages) -->
-        <div id="social-friends-slot"></div>
-        <div class="card social-play">
-          <h2>Jouer et partager</h2>
+        <div id="social-friends-slot" data-social-pane="amis"></div>
+        <div class="card social-play" data-social-pane="jouer">
+          <h2>Quiz en direct et partages</h2>
           <p class="muted small-text">Choisis une conversation (un ami ou un groupe), puis :</p>
           <div class="online-new">
             <select class="chip" id="social-room" aria-label="Conversation"></select>
@@ -175,7 +186,7 @@
           </div>
           <p class="status" id="social-play-status" hidden></p>
         </div>
-        <div class="card">
+        <div class="card" data-social-pane="defis">
           <h2>Défis de la semaine</h2>
           <ul class="challenge-list" id="online-challenges"></ul>
           <div class="online-new">

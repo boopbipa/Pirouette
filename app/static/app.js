@@ -5249,6 +5249,9 @@ const WELCOME = [
 ];
 // Les nouveautés de chaque version (le carton « Quoi de neuf » ne s'affiche que si la version en a)
 const WHATS_NEW = {
+  "0.78.3": [
+    ["👥", "Social en onglets", "Amis · Messages · Défis · Quiz en direct · Mon compte, avec une pastille sur ce qui t'attend"],
+  ],
   "0.78.2": [
     ["▶", "Le tutoriel en entier", "En le revoyant, chaque étape est là : celles déjà faites le disent, avec « Suivant » (ou les refaire)"],
   ],
@@ -7707,9 +7710,32 @@ async function openOnline() {
   $("#notify-on").checked = notifyWanted();
   renderOnlineQuizzes();
   renderSocialRooms();
+  showSocialTab();
   await Promise.all([renderChallenges(), renderFriends()]);
   refreshSocialBadge();
 }
+
+// Les onglets de Social : le dernier ouvert (gardé sur cet ordinateur), sinon Amis
+function showSocialTab(tab) {
+  try { tab = tab || localStorage.getItem("pirouette.socialTab") || "amis"; } catch { tab = tab || "amis"; }
+  try { localStorage.setItem("pirouette.socialTab", tab); } catch {}
+  document.querySelectorAll("[data-social-tab]").forEach((a) => {
+    a.classList.toggle("active", a.dataset.socialTab === tab);
+    a.toggleAttribute("aria-current", a.dataset.socialTab === tab);
+  });
+  document.querySelectorAll("[data-social-pane]").forEach((el) => el.classList.toggle("social-off", el.dataset.socialPane !== tab));
+  if (tab === "messages") renderSocialRooms();
+  if (tab === "amis" && !$("#social-friends-slot").contains($("#online-friends-card"))) {
+    $("#social-friends-slot").append($("#online-friends-card"));  // la bulle des messages l'avait reprise
+    renderFriends();
+  }
+}
+document.querySelectorAll("[data-social-tab]").forEach((a) => a.addEventListener("click", () => showSocialTab(a.dataset.socialTab)));
+$("#social-new-chat").addEventListener("click", () => openRoomDialog());
+$("#social-rooms").addEventListener("click", (e) => {
+  const id = e.target.closest("[data-open-chat]")?.dataset.openChat;
+  if (id) { msg.ready = true; openChat(id); }
+});
 
 // ---------- Social : jouer et partager depuis la page, la pastille du menu, les notifications ----------
 async function renderSocialRooms() {
@@ -7718,6 +7744,11 @@ async function renderSocialRooms() {
   $("#social-room").innerHTML = rooms.length ? rooms.map((r) => `<option value="${r.id}">${escapeHtml(r.name)}${r.kind === "group" ? " (groupe)" : ""}</option>`).join("")
     : `<option value="">Pas encore de conversation : ajoute un ami, puis écris-lui</option>`;
   document.querySelectorAll("[data-social-act]").forEach((b) => { b.disabled = !rooms.length; });
+  $("#social-rooms").innerHTML = rooms.length ? rooms.map((r) => `<li><button class="msg-room-item" type="button" data-open-chat="${r.id}">${avatar(r.name)}
+      <span class="msg-room-text"><b>${escapeHtml(r.name)}${r.kind === "group" ? ` <small class="muted">· ${r.members.length}</small>` : ""}</b>
+        <small class="muted">${r.last ? `${r.kind === "group" && !r.last.mine ? `${escapeHtml(r.last.pseudo)} : ` : r.last.mine ? "Toi : " : ""}${escapeHtml(r.last.text)}` : "Pas encore de message"}</small></span>
+      ${r.unread ? `<span class="badge">${r.unread}</span>` : ""}</button></li>`).join("")
+    : `<li class="muted small-text msg-none">Pas encore de conversation : « + Nouvelle conversation » pour écrire à un ami ou créer un groupe.</li>`;
 }
 document.addEventListener("click", async (e) => {
   const kind = e.target.closest("[data-social-act]")?.dataset.socialAct;
@@ -7752,6 +7783,13 @@ async function refreshSocialBadge() {
   const n = invites.length + todo.length;
   $("#social-badge").hidden = !n;
   $("#social-badge").textContent = n > 99 ? "99+" : String(n);
+  const tabBadge = (tab, k) => {
+    const b = document.querySelector(`[data-social-badge="${tab}"]`);
+    if (b) { b.hidden = !k; b.textContent = String(k); }
+  };
+  tabBadge("amis", invites.length);
+  tabBadge("defis", todo.length);
+  tabBadge("messages", (msg.rooms || []).reduce((n, r) => n + (r.unread || 0), 0));
   $("#social-badge").title = [invites.length ? plural(invites.length, "invitation", "invitations") : "", todo.length ? plural(todo.length, "défi à faire", "défis à faire") : ""].filter(Boolean).join(" · ");
   // Du nouveau depuis la dernière fois : un petit mot, et une notification si Pirouette est en arrière-plan
   const seen = msg.socialSeen;
