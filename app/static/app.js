@@ -5249,6 +5249,9 @@ const WELCOME = [
 ];
 // Les nouveautés de chaque version (le carton « Quoi de neuf » ne s'affiche que si la version en a)
 const WHATS_NEW = {
+  "0.78.2": [
+    ["▶", "Le tutoriel en entier", "En le revoyant, chaque étape est là : celles déjà faites le disent, avec « Suivant » (ou les refaire)"],
+  ],
   "0.78.1": [
     ["▶", "Revoir le tutoriel", "Réglages → Tutoriel : la présentation du début, en plein écran, quand tu veux"],
     ["≡", "Réglages plus stables", "La colonne de gauche ne saute plus quand on passe d'une rubrique à l'autre (Mises à jour…)"],
@@ -5768,9 +5771,11 @@ async function openOnboard() {
   const [profile, folders, stats, claude, online, sync] = await Promise.all([
     api("/api/profile").catch(() => ({})), api("/api/folders").catch(() => []), api("/api/stats").catch(() => ({})),
     api("/api/claude-app").catch(() => ({ supported: false })), api("/api/online").catch(() => ({})), api("/api/sync").catch(() => null)]);
-  ob.info = { profile, folders, stats, claude, online, sync };
+  const devices = sync?.connected ? await api("/api/sync/devices").catch(() => []) : [];
+  ob.info = { profile, folders, stats, claude, online, sync, devices };
   ob.done = new Set([profile.name && "name", folders.length && "semester", stats.courses && "course",
-    claude.installed && "claude", online.connected && online.profile && "friends"].filter(Boolean));
+    claude.installed && "claude", online.connected && online.profile && "friends", devices.length && "phone"].filter(Boolean));
+  ob.redo = new Set();  // les étapes déjà faites qu'on a choisi de refaire
   ob.steps = ["card", "name", "semester", "course", ...(claude.supported ? ["claude"] : []),
     ...(online.configured ? ["friends"] : []), ...(sync?.configured ? ["phone"] : [])];
   ob.i = -1;  // -1 : l'écran de bienvenue
@@ -5780,21 +5785,25 @@ async function openOnboard() {
 $("#onboard").addEventListener("cancel", (e) => e.preventDefault());  // Échap ne ferme pas : « Plus tard » étape par étape
 function obNext(markDone = true) {
   if (markDone && ob.i >= 0) ob.done.add(ob.steps[ob.i]);
-  ob.i += 1;
-  while (ob.i < ob.steps.length && ob.done.has(ob.steps[ob.i]) && ob.steps[ob.i] !== "card") ob.i += 1;  // déjà fait : passé
+  ob.i += 1;  // rien n'est sauté : une étape déjà faite le dit, avec « Suivant »
   drawOnboard();
 }
 const obLater = `<button class="ob-later" type="button" data-ob="later">Plus tard</button>`;
 function drawOnboard() {
   const stage = $("#ob-stage");
   $("#ob-progress").innerHTML = ob.i < 0 ? "" : ob.steps.map((k, j) => `<i class="${j < ob.i || ob.done.has(k) ? "on" : j === ob.i ? "now" : ""}"></i>`).join("");
-  if (ob.i < 0) {  // la bienvenue : la couleur de l'app à gauche, la liste à droite
+  if (ob.i < 0) {  // la bienvenue (le premier carton des maquettes) : la couleur de l'app à gauche, la liste à droite
+    const isDone = (k) => k !== "card" && ob.done.has(k);
+    const left = ob.steps.filter((k) => !isDone(k));
+    const now = left[0];
+    const name = ob.info.profile?.name;
     stage.innerHTML = `<div class="ob-welcome">
-      <div class="ob-hero"><div class="ob-icon">${APP_ICON_SVG}</div><h1>Bienvenue dans Pirouette</h1>
-        <p>Tes cours deviennent des quiz et des flashcards, et Pirouette t'aide à tout revoir avant les partiels.
-        Quelques petites choses et c'est prêt : compte trois minutes.</p></div>
-      <div class="ob-list"><ol>${ob.steps.map((k) => `<li class="${ob.done.has(k) && k !== "card" ? "done" : ""}"><i>${ob.done.has(k) && k !== "card" ? "✓" : ""}</i>
-        <span>${OB_STEPS[k].label}</span>${OB_STEPS[k].min ? `<small>${OB_STEPS[k].min}</small>` : ""}</li>`).join("")}</ol>
+      <div class="ob-hero"><div class="ob-icon">${APP_ICON_SVG}</div><h1>Bienvenue${name ? `, ${escapeHtml(name)}` : " dans Pirouette"}</h1>
+        <p>${left.length === ob.steps.length ? `${left.length} petites choses et Pirouette est prête. Compte 3 minutes.`
+          : left.length > 1 ? `${left.length} petites choses et Pirouette est prête. Le reste est déjà fait : tu peux le revoir en passant.`
+          : "Presque tout est prêt : revois chaque étape en passant, ou change ce que tu veux."}</p></div>
+      <div class="ob-list"><ol>${ob.steps.map((k) => `<li class="${isDone(k) ? "done" : k === now ? "now" : ""}"><i>${isDone(k) ? "✓" : ""}</i>
+        <span>${OB_STEPS[k].label}</span>${OB_STEPS[k].min && !isDone(k) ? `<small>${OB_STEPS[k].min}</small>` : ""}</li>`).join("")}</ol>
         <button class="primary ob-go" type="button" data-ob="start">Commencer</button></div></div>`;
     return;
   }
@@ -5806,6 +5815,24 @@ function drawOnboard() {
   }
   const step = ob.steps[ob.i];
   const info = ob.info;
+  // Déjà fait : on le dit, avec « Suivant » ; « Le refaire » montre l'étape comme la première fois
+  if (step !== "card" && ob.done.has(step) && !ob.redo.has(step)) {
+    const folder = info.folders?.at(-1);
+    const what = {
+      name: [`Tu t'appelles <b>${escapeHtml(info.profile?.name || "")}</b>.`, "Changer de prénom"],
+      semester: [`${info.folders?.length > 1 ? `Tes semestres : <b>${info.folders.map((f) => escapeHtml(f.name)).join(", ")}</b>` : `Ton semestre : <b>${escapeHtml(folder?.name || "")}</b>`}`
+        + `${folder?.exam_week ? `, ${examLabel(folder.exam_week).toLowerCase()}` : ""}.`, "En créer un autre"],
+      course: [`Tu as déjà <b>${plural(info.stats?.courses || 0, "matière", "matières")}</b>.`, "Ajouter un cours"],
+      claude: ["L'app Claude est <b>branchée</b> à Pirouette.", "Rebrancher"],
+      friends: [`Tu es connecté·e en tant que <b>${escapeHtml(info.online?.profile?.pseudo || "")}</b>.`, "Voir l'étape"],
+      phone: [`<b>${plural(info.devices?.length || 0, "appareil jumelé", "appareils jumelés")}</b> : tes quiz et tes cartes y sont déjà.`, "Ajouter un appareil"],
+    }[step];
+    stage.innerHTML = obCard(`<span class="ob-done-ic" aria-hidden="true">✓</span><h2>${OB_STEPS[step].label}</h2>
+      <p class="ob-done">C'est déjà fait. ${what[0]}</p>
+      <button class="primary" type="button" data-ob="next">Suivant</button>
+      <button class="ob-later" type="button" data-ob="redo">${what[1]}</button>`, false);
+    return;
+  }
   if (step === "card") {
     stage.innerHTML = obCard(`<h2>Essaie : retourne la carte</h2><p>Clique dessus (ou Espace). C'est comme ça qu'on révise ses flashcards.</p>
       <button class="ob-flash" type="button" data-ob="flip" aria-label="Retourner la carte"><span class="ob-face front">Combien d'observations suffisent pour invalider une loi&nbsp;?</span>
@@ -5869,6 +5896,7 @@ $("#ob-stage").addEventListener("click", async (e) => {
   const act = e.target.closest("[data-ob]")?.dataset.ob;
   if (!act) return;
   if (act === "start") return obNext(false);
+  if (act === "redo") { ob.redo.add(ob.steps[ob.i]); return drawOnboard(); }
   if (act === "later" || act === "next") return obNext(act === "next");
   if (act === "finish") return finishOnboard();
   if (act === "flip") {
