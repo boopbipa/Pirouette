@@ -511,12 +511,19 @@
         <p class="status" id="settings-name-status" hidden></p>
       </form>
 
+      <div class="card tuto-card" id="tuto-card">
+        <div class="tuto-ic" aria-hidden="true"><svg viewBox="0 0 100 100"><use href="#app-icon"/></svg></div>
+        <div><h2>Le tutoriel</h2>
+          <p class="muted small-text">La présentation du début, en plein écran : une carte à retourner, puis les étapes (semestre, premier cours,
+            Claude, amis, téléphone). Ce qui est déjà fait est coché et passé.</p>
+          <button class="primary" type="button" id="welcome-replay">Revoir le tutoriel</button></div>
+      </div>
+
       <div class="card" id="version-card">
         <h2>Version</h2>
         <div class="inline-row version-row">
           <span>Pirouette <b id="app-version"></b></span>
           <button class="ghost small" type="button" id="update-check">Vérifier les mises à jour</button>
-          <button class="ghost small" type="button" id="welcome-replay">Revoir la présentation</button>
         </div>
         <p class="status" id="update-status" hidden></p>
       </div>

@@ -827,6 +827,8 @@ const PREFS = [
     icon: '<rect x="3" y="7" width="18" height="11" rx="2"/><path d="M7 11h.01M11 11h.01M15 11h.01M8 15h8"/>' },
   { id: "donnees", label: "Sauvegarde", desc: "Tes sauvegardes, et récupérer tes anciens cours.", cards: ["data-card"],
     icon: '<path d="M12 4v10M8 10l4 4 4-4M5 19h14"/>' },
+  { id: "tutoriel", label: "Tutoriel", desc: "Revoir la présentation de Pirouette, pas à pas.", cards: ["tuto-card"],
+    icon: '<circle cx="12" cy="12" r="8.5"/><path d="M10 8.5v7l5.5-3.5z"/>' },
   { id: "apropos", label: "Mises à jour", desc: "La version de Pirouette et ses nouveautés.", cards: ["version-card"],
     icon: '<circle cx="12" cy="12" r="8"/><path d="M12 11v5M12 8h.01"/>' },
 ];
@@ -865,7 +867,7 @@ $("#prefs-side").addEventListener("click", (e) => {
   history.replaceState(null, "", `#/reglages/${item.dataset.pref}`);
   showPref(item.dataset.pref);
   // Toujours depuis le haut : la colonne et le titre restent à la même place d'une rubrique à l'autre
-  window.scrollTo({ top: 0 });
+  pageScroll().scrollTo({ top: 0 });
 });
 
 async function openSettings() {
@@ -5247,6 +5249,10 @@ const WELCOME = [
 ];
 // Les nouveautés de chaque version (le carton « Quoi de neuf » ne s'affiche que si la version en a)
 const WHATS_NEW = {
+  "0.78.1": [
+    ["▶", "Revoir le tutoriel", "Réglages → Tutoriel : la présentation du début, en plein écran, quand tu veux"],
+    ["≡", "Réglages plus stables", "La colonne de gauche ne saute plus quand on passe d'une rubrique à l'autre (Mises à jour…)"],
+  ],
   "0.78.0": [
     ["👥", "« Social »", "Le menu Défis devient Social : tes amis, tes défis, les quiz en direct et les partages au même endroit, avec une pastille quand on t'invite ou te défie"],
     ["🔔", "Me prévenir", "Une notification de l'ordinateur quand on t'écrit, t'invite ou te défie (Social → Me prévenir)"],

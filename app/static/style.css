@@ -1961,7 +1961,7 @@ body.focus .feedback.ok, body.focus .feedback.ko { background: color-mix(in srgb
 #view-settings { max-width: 1000px; }
 .prefs-title { font-size: 26px; }
 .prefs-layout { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 26px; align-items: start; }
-.prefs-col { position: sticky; top: 80px; }
+.prefs-col { position: sticky; top: 32px; }  /* = sa place en haut de page : elle ne bouge plus d'une rubrique à l'autre */
 .prefs-col .prefs-title { margin-top: 0; }
 .prefs-side { display: grid; gap: 2px; }
 .pref-item { display: flex; align-items: center; gap: 10px; width: 100%; padding: 7px 10px; border-radius: 999px; border: 0; background: none;
@@ -2805,3 +2805,10 @@ dialog.onboard::backdrop { background: var(--bg); }
 @keyframes ob-away { to { opacity: 0; transform: translateX(120px) rotate(12deg); height: 0; margin: 0; } }
 @media (max-width: 760px) { .ob-welcome { grid-template-columns: 1fr; } .ob-hero, .ob-list { padding: 30px; } }
 @media (prefers-reduced-motion: reduce) { .ob-welcome, .ob-card, .ob-rarity span { animation: none; } }
+
+/* Réglages → Tutoriel */
+.tuto-card { display: flex; gap: 20px; align-items: center; }
+.tuto-ic { flex: none; width: 76px; height: 76px; filter: drop-shadow(0 10px 16px rgba(60, 30, 10, .25)); }
+.tuto-ic svg { width: 100%; height: 100%; display: block; }
+.tuto-card h2 { margin: 0 0 4px; }
+.tuto-card p { margin: 0 0 14px; }
