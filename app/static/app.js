@@ -233,6 +233,27 @@ async function api(url, options = {}) {
   if (url.startsWith("/api/courses")) noteColors(data);
   return data;
 }
+// Zone où déposer des fichiers. Le compteur évite le clignotement : « dragleave » part aussi quand on passe
+// d'un enfant à l'autre de la zone. `glow` : l'élément qui s'éclaire (la zone elle-même par défaut).
+function dropTarget(zone, onFiles, glow = zone) {
+  let depth = 0;
+  const hasFiles = (e) => [...(e.dataTransfer?.types || [])].includes("Files");
+  zone.addEventListener("dragenter", (e) => { if (!hasFiles(e)) return; e.preventDefault(); depth += 1; glow.classList.add("over"); });
+  zone.addEventListener("dragover", (e) => { if (!hasFiles(e)) return; e.preventDefault(); e.dataTransfer.dropEffect = "copy"; });
+  zone.addEventListener("dragleave", () => { depth = Math.max(0, depth - 1); if (!depth) glow.classList.remove("over"); });
+  zone.addEventListener("drop", (e) => {
+    if (!hasFiles(e)) return;
+    e.preventDefault();
+    e.stopPropagation();
+    depth = 0;
+    glow.classList.remove("over");
+    if (e.dataTransfer.files.length) onFiles(e.dataTransfer.files);
+  });
+}
+// Un fichier lâché à côté d'une zone ne doit pas ouvrir le PDF à la place de Pirouette.
+["dragover", "drop"].forEach((ev) => window.addEventListener(ev, (e) => {
+  if ([...(e.dataTransfer?.types || [])].includes("Files")) e.preventDefault();
+}));
 const jsonBody = (method, data) => ({ method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) });
 
 // ---------- Accueil ----------
@@ -1687,10 +1708,10 @@ function addNewCourseFiles(fileList) {
 $("#new-course-btn").addEventListener("click", () => openNewCourse());
 $("#new-course-cancel").addEventListener("click", () => $("#new-course-dialog").close());
 $("#new-course-files").addEventListener("change", (e) => { addNewCourseFiles(e.target.files); e.target.value = ""; });
+// Toute la fenêtre « Ajouter un cours » accepte le fichier (pas seulement le cadre), sans clignoter quand on
+// passe sur le texte du cadre.
 const courseDrop = $("#new-course-drop");
-["dragenter", "dragover"].forEach((ev) => courseDrop.addEventListener(ev, (e) => { e.preventDefault(); courseDrop.classList.add("over"); }));
-["dragleave", "drop"].forEach((ev) => courseDrop.addEventListener(ev, (e) => { e.preventDefault(); courseDrop.classList.remove("over"); }));
-courseDrop.addEventListener("drop", (e) => addNewCourseFiles(e.dataTransfer.files));
+dropTarget($("#new-course-dialog"), (files) => addNewCourseFiles(files), courseDrop);
 
 $("#new-course-form").addEventListener("submit", async (e) => {
   e.preventDefault();
@@ -2571,18 +2592,8 @@ $("#delete-course").addEventListener("click", async () => {
 });
 
 // ---------- Dépôt des fichiers ----------
-const dropzone = $("#dropzone");
-["dragenter", "dragover"].forEach((ev) =>
-  dropzone.addEventListener(ev, (e) => { e.preventDefault(); dropzone.classList.add("over"); }));
-["dragleave", "drop"].forEach((ev) =>
-  dropzone.addEventListener(ev, (e) => { e.preventDefault(); dropzone.classList.remove("over"); }));
-dropzone.addEventListener("drop", (e) => uploadFiles(e.dataTransfer.files));
-const startDrop = $("#start-drop");
-["dragenter", "dragover"].forEach((ev) =>
-  startDrop.addEventListener(ev, (e) => { e.preventDefault(); startDrop.classList.add("over"); }));
-["dragleave", "drop"].forEach((ev) =>
-  startDrop.addEventListener(ev, (e) => { e.preventDefault(); startDrop.classList.remove("over"); }));
-startDrop.addEventListener("drop", (e) => uploadFiles(e.dataTransfer.files));
+dropTarget($("#dropzone"), uploadFiles);
+dropTarget($("#start-drop"), uploadFiles);
 $("#file-input").addEventListener("change", (e) => { uploadFiles(e.target.files); e.target.value = ""; });
 // Glisser un fichier sur « + Ajouter un cours »
 ["dragenter", "dragover"].forEach((ev) => $("#course-tabs").addEventListener(ev, (e) => {
@@ -2597,6 +2608,69 @@ $("#file-input").addEventListener("change", (e) => { uploadFiles(e.target.files)
   if (ev === "drop") uploadFiles(e.dataTransfer.files);
 }));
 
+// Envoi des fichiers avec suivi : l'envoi (en %), puis la lecture page par page, reçue en NDJSON au fil de l'eau.
+function sendFiles(url, form, onProgress) {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    let seen = 0, result = null, failure = null;
+    const read = () => {
+      const text = xhr.responseText;
+      const end = text.lastIndexOf("\n") + 1;
+      for (const line of text.slice(seen, end).split("\n")) {
+        if (!line.trim()) continue;
+        const event = JSON.parse(line);
+        if (event.type === "progress") onProgress({ phase: "read", ...event });
+        else if (event.type === "done") result = event.result;
+        else if (event.type === "error") failure = event.message;
+      }
+      seen = end;
+    };
+    xhr.open("POST", `${url}?stream=1`);
+    xhr.upload.onprogress = (e) => e.lengthComputable && onProgress({ phase: "send", loaded: e.loaded, total: e.total });
+    xhr.upload.onload = () => onProgress({ phase: "wait" });
+    xhr.onprogress = read;
+    xhr.onerror = () => reject(new Error("L'envoi du fichier a échoué."));
+    xhr.onload = () => {
+      if (xhr.status >= 400) {
+        let detail = "";
+        try { detail = JSON.parse(xhr.responseText).detail; } catch { /* réponse vide */ }
+        return reject(new Error(detail || `Erreur ${xhr.status}`));
+      }
+      read();
+      if (failure || !result) return reject(new Error(failure || "Lecture interrompue."));
+      noteColors(result);
+      resolve(result);
+    };
+    xhr.send(form);
+  });
+}
+
+// Barre de chargement de l'import : texte au-dessus, barre pleine largeur (indéterminée tant qu'on ne sait pas).
+function uploadProgress(status, files) {
+  const many = files.length > 1;
+  const mb = (n) => `${(n / 1048576).toFixed(n < 10485760 ? 1 : 0).replace(".", ",")} Mo`;
+  status.className = "status upload-progress";
+  status.innerHTML = `<span class="up-label"></span><span class="up-track"><span class="up-fill"></span></span>`;
+  const label = status.querySelector(".up-label"), fill = status.querySelector(".up-fill"), track = status.querySelector(".up-track");
+  const show = (text, ratio) => {
+    label.textContent = text;
+    track.classList.toggle("busy", ratio == null);
+    if (ratio != null) fill.style.width = `${Math.round(ratio * 100)}%`;
+  };
+  show(many ? `Envoi de ${files.length} fichiers…` : `Envoi de ${files[0].name}…`, null);
+  return (p) => {
+    if (p.phase === "send") {
+      // L'envoi compte pour les 15 premiers %, la lecture pour le reste.
+      show(`Envoi… ${mb(p.loaded)} sur ${mb(p.total)}`, 0.15 * p.loaded / p.total);
+    } else if (p.phase === "wait") {
+      show("Ouverture du document…", 0.15);
+    } else {
+      const done = (p.index + p.page / p.pages) / p.count;
+      show(`Lecture${many ? ` de ${p.file} (${p.index + 1}/${p.count})` : ""} : page ${p.page} sur ${p.pages}`, 0.15 + 0.85 * done);
+    }
+  };
+}
+
 async function uploadFiles(fileList) {
   const files = [...fileList];  // copie : la liste du champ est vidée juste après l'appel
   if (!files.length) return;
@@ -2606,10 +2680,13 @@ async function uploadFiles(fileList) {
   for (const file of files) form.append("files", file);
   const status = $("#upload-status");
   status.hidden = false;
-  status.className = "status";
-  status.textContent = "Lecture du cours…";
+  // Matière vide : le grand cadre laisse la place à la barre
+  $("#start-drop").hidden = true;
+  $("#course-tree").hidden = false;
+  const onProgress = uploadProgress(status, files);
   try {
-    const { results, course } = await api(`/api/courses/${state.course.id}/files`, { method: "POST", body: form });
+    const { results, course } = await sendFiles(`/api/courses/${state.course.id}/files`, form, onProgress);
+    status.textContent = "Enregistrement…";
     await refreshCourse();
     const kinds = Object.values(results);
     const updatedCount = kinds.filter((r) => r === "updated").length, addedCount = kinds.length - updatedCount;
@@ -2630,6 +2707,8 @@ async function uploadFiles(fileList) {
     }
     await refreshCourse();
   } catch (err) {
+    $("#start-drop").hidden = state.course.files.length > 0;
+    $("#course-tree").hidden = !state.course.files.length;
     status.textContent = err.message;
     status.className = "status ko";
   }

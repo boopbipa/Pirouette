@@ -33,17 +33,18 @@ class ConversionError(ValueError):
     """Un fichier Pages / Keynote n'a pas pu être converti ; le message explique quoi faire."""
 
 
-def extract_text(filename: str, data: bytes) -> str:
+def extract_text(filename: str, data: bytes, on_page=None) -> str:
+    """`on_page(page, pages)` : appelé après chaque page lue d'un PDF (barre de progression d'un gros manuel)."""
     ext = Path(filename).suffix.lower()
     if ext == ".pdf":
-        text = _extract_pdf(data)
+        text = _extract_pdf(data, on_page)
     elif ext == ".docx":
         text = _extract_docx(data)
     elif ext == ".pptx":
         text = _extract_pptx(data)
     elif ext in IWORK:
         converted_ext, converted = _convert_iwork(ext, data)
-        return extract_text(f"converti{converted_ext}", converted)
+        return extract_text(f"converti{converted_ext}", converted, on_page)
     elif ext in {".txt", ".md", ".markdown"}:
         text = data.decode("utf-8", errors="replace")
     else:
@@ -131,15 +132,18 @@ def _app_location(bundle_id: str) -> str | bool | None:
     return url.path() if url else None
 
 
-def _extract_pdf(data: bytes) -> str:
+def _extract_pdf(data: bytes, on_page=None) -> str:
     from pypdf import PdfReader
 
     reader = PdfReader(io.BytesIO(data))
     pages = []
+    total = len(reader.pages)
     for i, page in enumerate(reader.pages, start=1):
         content = page.extract_text() or ""
         if content.strip():
             pages.append(f"[Page {i}]\n{content}")
+        if on_page:
+            on_page(i, total)
     return "\n\n".join(pages)
 
 

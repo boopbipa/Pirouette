@@ -621,16 +621,50 @@ async def delete_course(course_id: str) -> dict:
 
 
 @app.post("/api/courses/{course_id}/files")
-async def upload_files(course_id: str, files: list[UploadFile] = File(...)) -> dict:
+async def upload_files(course_id: str, files: list[UploadFile] = File(...), stream: bool = False):
+    """`stream` : la réponse suit la lecture en NDJSON (page lue sur pages, par fichier), puis le résultat."""
     store.get_course(course_id)
+    if not stream:
+        return await _import_files(course_id, files)
+    loop = asyncio.get_running_loop()
+    queue: asyncio.Queue = asyncio.Queue()
+
+    def on_page(name: str, index: int, count: int, page: int, pages: int) -> None:
+        # Appelé depuis le fil de lecture : au plus une centaine d'étapes par fichier, pour ne pas noyer la page.
+        if page == pages or page % max(1, pages // 100) == 0:
+            loop.call_soon_threadsafe(queue.put_nowait, {"type": "progress", "file": name, "index": index,
+                                                          "count": count, "page": page, "pages": pages})
+
+    async def run() -> None:
+        try:
+            await queue.put({"type": "done", "result": await _import_files(course_id, files, on_page)})
+        except HTTPException as exc:
+            await queue.put({"type": "error", "message": exc.detail})
+        except Exception as exc:
+            await queue.put({"type": "error", "message": f"Erreur inattendue : {exc}"})
+
+    async def events():
+        task = asyncio.create_task(run())
+        while True:
+            event = await queue.get()
+            yield json.dumps(event, ensure_ascii=False) + "\n"
+            if event["type"] in {"done", "error"}:
+                break
+        await task
+
+    return StreamingResponse(events(), media_type="application/x-ndjson")
+
+
+async def _import_files(course_id: str, files: list[UploadFile], on_page=None) -> dict:
     extracted = []
     # On lit tout avant d'enregistrer : un fichier illisible n'entraîne pas d'import partiel.
-    for upload in files:
+    for index, upload in enumerate(files):
         name = upload.filename or "fichier"
         data = await upload.read()
+        progress = (lambda page, pages, name=name, index=index: on_page(name, index, len(files), page, pages)) if on_page else None
         try:
-            # Dans un fil à part : la conversion d'un fichier Pages / Keynote peut prendre plusieurs secondes.
-            text = await run_in_threadpool(extract_text, name, data)
+            # Dans un fil à part : la lecture d'un gros PDF ou la conversion d'un fichier Pages / Keynote prend du temps.
+            text = await run_in_threadpool(extract_text, name, data, progress)
         except (UnsupportedFileError, ConversionError) as exc:
             raise HTTPException(400, str(exc)) from exc
         except Exception as exc:  # fichier corrompu, PDF protégé…
@@ -645,8 +679,9 @@ async def upload_files(course_id: str, files: list[UploadFile] = File(...)) -> d
     for name, data, text in extracted:
         before = known.get(Path(name).name.lower())
         whole = before is None or before.get("chapters_by") in UNSPLIT
-        results[name] = store.add_file(course_id, name, data, text, [] if whole else detect_chapters(text), EXTRACT_VERSION,
-                                       chapters_by=(before or {}).get("chapters_by", "none") if whole else "auto")
+        results[name] = await run_in_threadpool(
+            store.add_file, course_id, name, data, text, [] if whole else detect_chapters(text), EXTRACT_VERSION,
+            chapters_by=(before or {}).get("chapters_by", "none") if whole else "auto")
     return {"results": results, "course": store.get_course(course_id)}
 
 
