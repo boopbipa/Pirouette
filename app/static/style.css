@@ -1236,10 +1236,25 @@ main { padding-bottom: 120px; }
 .tree-source > .status { margin: 10px 0 0; }
 
 /* Du nouveau dans le cours (nouvelle version d'un fichier) */
-.news-card { margin-top: 18px; border-left: 4px solid var(--accent); }
-.news-card h2 { margin: 0 0 4px; }
-.news-list { list-style: none; margin: 12px 0; padding: 0; display: grid; gap: 6px; }
-.news-list li { display: flex; flex-direction: column; gap: 2px; }
+/* Nouvelle version d'un cours : même famille que « … est prêt » et le survol des semestres — un fond à peine teinté
+   de la couleur de l'app, un halo doux en haut, une icône en tuile ; les chapitres changés en lignes */
+.news-card { position: relative; isolation: isolate; overflow: hidden; margin-top: 18px; border: 0;
+  background: color-mix(in srgb, var(--accent) 5%, var(--surface));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 12%, transparent), 0 14px 30px -22px color-mix(in srgb, var(--accent) 55%, transparent); }
+.news-card::before { content: ""; position: absolute; inset: 0; z-index: -1; pointer-events: none;
+  background: radial-gradient(circle 280px at 40px 0, color-mix(in srgb, var(--accent) 14%, transparent), transparent 70%); }
+.news-head { display: flex; align-items: center; gap: 14px; }
+.news-ic { flex: none; width: 40px; height: 40px; border-radius: 12px; background: var(--accent); color: #FFF6EE; display: grid; place-items: center; }
+.news-ic svg { width: 21px; height: 21px; }
+.news-card h2 { margin: 0 0 2px; font-size: 18px; }
+.news-card #news-text { margin: 0; }
+.news-list { list-style: none; margin: 16px 0 14px; padding: 0; display: grid; gap: 6px; }
+.news-list li { display: flex; align-items: center; gap: 12px; padding: 10px 14px; border-radius: 12px; background: var(--surface);
+  box-shadow: 0 0 0 1px var(--border); }
+.news-list li strong { flex: 1; min-width: 0; font-weight: 600; font-size: 14.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.news-list li small { flex: none; padding: 3px 9px; border-radius: 99px; font-size: 12px; font-weight: 600; color: var(--accent-ink);
+  background: color-mix(in srgb, var(--accent) 12%, transparent); }
+.news-card .actions { align-items: center; }
 
 /* Réviser : quatre modes, une seule partie visible */
 .mode-tiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin: 4px 0 16px; }
@@ -2897,9 +2912,24 @@ dialog.onboard::backdrop { background: var(--bg); }
 .primary:not(:disabled) { transition: filter .2s, box-shadow .25s, transform .1s; }
 .primary:not(:disabled):hover {
   box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 16%, transparent), 0 10px 24px -10px color-mix(in srgb, var(--accent) 70%, transparent); }
-.go-btn.primary:not(:disabled), #create-btn:not(:disabled), #prepare-go:not(:disabled), #new-course-create:not(:disabled), .folder-revise {
+.go-btn.primary:not(:disabled), #create-btn:not(:disabled), #prepare-go:not(:disabled), #new-course-create:not(:disabled), .folder-revise, #news-copy {
   box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 11%, transparent), 0 8px 20px -12px color-mix(in srgb, var(--accent) 60%, transparent); }
 .go-btn.primary:not(:disabled):hover, .go-banner:hover .go-btn.primary, #create-btn:not(:disabled):hover, #prepare-go:not(:disabled):hover,
-#new-course-create:not(:disabled):hover, .folder-revise:hover {
+#new-course-create:not(:disabled):hover, .folder-revise:hover, #news-copy:hover {
   box-shadow: 0 0 0 6px color-mix(in srgb, var(--accent) 18%, transparent), 0 12px 28px -10px color-mix(in srgb, var(--accent) 75%, transparent); }
 body.focus .primary:not(:disabled):hover { box-shadow: 0 0 0 4px rgba(255, 255, 255, .14); }
+
+/* Tutoriel : nouvelle version d'un cours (même nom → remplace l'ancien) */
+.ob-update { display: flex; align-items: center; justify-content: center; gap: 16px; margin: 20px 0 16px; }
+.ob-file { display: flex; flex-direction: column; align-items: center; gap: 2px; width: 120px; padding: 18px 10px 14px; border-radius: 14px;
+  font-weight: 650; background: var(--surface); box-shadow: 0 0 0 1px var(--border), var(--shadow); }
+.ob-file small { font-weight: 500; color: var(--muted); font-size: 12px; }
+.ob-file.old { opacity: .5; transform: rotate(-3deg) scale(.94); }
+.ob-file.new { background: color-mix(in srgb, var(--accent) 7%, var(--surface));
+  box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--accent) 40%, transparent), 0 14px 28px -16px color-mix(in srgb, var(--accent) 70%, transparent);
+  animation: ob-new 2.6s ease-in-out infinite; }
+.ob-file.new small { color: var(--accent-ink); }
+.ob-arrow { font-size: 22px; color: var(--accent); font-weight: 700; }
+.ob-small { font-size: 14px; color: var(--muted); }
+@keyframes ob-new { 50% { transform: translateY(-3px); } }
+@media (prefers-reduced-motion: reduce) { .ob-file.new { animation: none; } }

@@ -1933,8 +1933,10 @@ async function renderNews(course) {
     units.length ? plural(units.length, "chapitre changé", "chapitres changés") : "",
     course.outdated ? `${plural(course.outdated, "question ou carte", "questions ou cartes")} à revoir` : "",
   ].filter(Boolean).join(", ") + ".";
-  $("#news-list").innerHTML = units.map((u) => `<li><strong>${escapeHtml(u.title)}</strong>
-    <small class="muted">≈ ${u.chars.toLocaleString("fr-FR")} caractères nouveaux</small></li>`).join("");
+  // Titres tels qu'écrits dans le cours : sans les marques de gras (**…**) ni de titre (#)
+  const clean = (title) => title.replace(/\*\*|__|^#+\s*/g, "").trim();
+  $("#news-list").innerHTML = units.map((u) => `<li title="${escapeHtml(clean(u.title))}"><strong>${escapeHtml(clean(u.title))}</strong>
+    <small>+ ${u.chars.toLocaleString("fr-FR")} caractères</small></li>`).join("");
   $("#outdated-open").hidden = !course.outdated;
   $("#news-dismiss").hidden = !units.length;
 }
@@ -5961,10 +5963,13 @@ const OB_STEPS = {
   name: { label: "Ton prénom" },
   semester: { label: "Ton semestre et tes partiels", min: "1 min" },
   course: { label: "Ton premier cours", min: "1 min" },
+  update: { label: "Quand ton cours change", min: "10 s" },
   claude: { label: "Brancher Claude" },
   friends: { label: "Retrouver tes amis" },
   phone: { label: "Ton téléphone" },
 };
+// Étapes à montrer à chaque fois (rien à « avoir déjà fait ») : l'essai d'une carte, les nouvelles versions d'un cours
+const OB_INFO = new Set(["card", "update"]);
 async function openOnboard({ fromSettings = false } = {}) {
   const [profile, folders, stats, claude, online, sync] = await Promise.all([
     api("/api/profile").catch(() => ({})), api("/api/folders").catch(() => []), api("/api/stats").catch(() => ({})),
@@ -5974,7 +5979,7 @@ async function openOnboard({ fromSettings = false } = {}) {
   ob.done = new Set([profile.name && "name", folders.length && "semester", stats.courses && "course",
     claude.installed && "claude", online.connected && online.profile && "friends", devices.length && "phone"].filter(Boolean));
   ob.redo = new Set();  // les étapes déjà faites qu'on a choisi de refaire
-  ob.steps = ["card", "name", "semester", "course", ...(claude.supported ? ["claude"] : []),
+  ob.steps = ["card", "name", "semester", "course", "update", ...(claude.supported ? ["claude"] : []),
     ...(online.configured ? ["friends"] : []), ...(sync?.configured ? ["phone"] : [])];
   ob.i = -1;  // -1 : l'écran de bienvenue
   $("#ob-close").hidden = !fromSettings;  // revu depuis les Réglages : on peut en sortir (la première fois, non)
@@ -5995,7 +6000,7 @@ function drawOnboard() {
     stage.innerHTML = obScreen(`<div class="ob-hero"><div class="ob-icon">${APP_ICON_SVG}</div><h1>Bienvenue dans Pirouette</h1>
         <p>Tes cours deviennent des quiz et des flashcards, et Pirouette t'aide à tout revoir avant les partiels.
         Quelques petites choses et c'est prêt : compte trois minutes.</p></div>
-      <div class="ob-list"><ol>${ob.steps.map((k) => `<li class="${ob.done.has(k) && k !== "card" ? "done" : ""}"><i>${ob.done.has(k) && k !== "card" ? "✓" : ""}</i>
+      <div class="ob-list"><ol>${ob.steps.map((k) => `<li class="${ob.done.has(k) && !OB_INFO.has(k) ? "done" : ""}"><i>${ob.done.has(k) && !OB_INFO.has(k) ? "✓" : ""}</i>
         <span>${OB_STEPS[k].label}</span>${OB_STEPS[k].min ? `<small>${OB_STEPS[k].min}</small>` : ""}</li>`).join("")}</ol></div>`,
       `<button class="primary" type="button" data-ob="start">Commencer</button>`, "", "ob-welcome");
     return;
@@ -6009,7 +6014,7 @@ function drawOnboard() {
   const step = ob.steps[ob.i];
   const info = ob.info;
   // Déjà fait : on le dit, avec « Suivant » ; « Le refaire » montre l'étape comme la première fois
-  if (step !== "card" && ob.done.has(step) && !ob.redo.has(step)) {
+  if (!OB_INFO.has(step) && ob.done.has(step) && !ob.redo.has(step)) {
     const folder = info.folders?.at(-1);
     const what = {
       name: [`Tu t'appelles <b>${escapeHtml(info.profile?.name || "")}</b>.`, "Changer de prénom"],
@@ -6053,6 +6058,16 @@ function drawOnboard() {
     stage.innerHTML = obScreen(`<h2>Dépose ton premier cours</h2><p>Un PDF, un Word, un PowerPoint, un Pages… Pirouette le découpe en chapitres et le range dans sa matière.</p>
       <button class="ob-drop" type="button" data-ob="course"><b>Glisse ton cours ici</b><small>ou clique pour le choisir</small></button>`,
       `<button class="primary" type="button" data-ob="course">Choisir mon cours</button>`, later);
+    return;
+  }
+  if (step === "update") {  // une nouvelle version du même fichier remplace l'ancienne, rien n'est perdu
+    stage.innerHTML = obScreen(`<h2>Ton cours change ? Redépose-le</h2>
+      <p>Le prof a mis en ligne une nouvelle version ? Dépose le fichier <b>sous le même nom</b>, dans la même matière : il remplace l'ancien.</p>
+      <div class="ob-update" aria-hidden="true">
+        <span class="ob-file old">CM1.pdf<small>version 1</small></span><span class="ob-arrow">→</span>
+        <span class="ob-file new">CM1.pdf<small>version 2</small></span></div>
+      <p class="ob-small">Tes quiz, tes cartes et ta progression restent. Pirouette repère ce qui a changé ; Claude ajoute des questions sur les nouveautés et corrige celles qui sont dépassées.</p>`,
+      `<button class="primary" type="button" data-ob="next">Compris</button>`, later);
     return;
   }
   if (step === "claude") {
