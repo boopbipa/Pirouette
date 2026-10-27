@@ -70,10 +70,10 @@ async def run(course_text: str, system: str, schema: dict, prompt: str, model: s
 
 
 async def generate_cards(course_text: str, n_cards: int, language: str, model: str | None = None,
-                         on_progress=None, avoid=(), definition_rule=None, focus="") -> list[dict]:
+                         on_progress=None, avoid=(), definition_rule=None, focus="", notes="") -> list[dict]:
     return await run(course_text, CARDS_SYSTEM, CARDS_SCHEMA,
                      build_cards_prompt(course_text, n_cards, language, avoid=avoid, definition_rule=definition_rule,
-                                        focus=focus),
+                                        focus=focus, notes=notes),
                      model, on_progress, "Claude lit le cours et prépare les cartes…")
 
 

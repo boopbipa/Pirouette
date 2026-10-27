@@ -1809,6 +1809,7 @@ async function openCourse(id, tab, { keepScroll = false } = {}) {
   $("#course-files-tab").toggleAttribute("aria-current", !toSettings);
   $("#course-settings-tab").toggleAttribute("aria-current", toSettings);
   renderFolderPick(course);
+  fillNotes(course);
   renderTiles(course);
   // Cours tout neuf, sans fichier ni carte : on invite d'abord à importer le cours.
   const empty = !course.files.length && !course.quizzes.length && !course.cards.total;
@@ -2669,7 +2670,9 @@ function uploadProgress(status, files) {
       show("Ouverture du document…", 0.15);
     } else {
       const done = (p.index + p.page / p.pages) / p.count;
-      show(`Lecture${many ? ` de ${p.file} (${p.index + 1}/${p.count})` : ""} : page ${p.page} sur ${p.pages}`, 0.15 + 0.85 * done);
+      // Un scan passe par la reconnaissance de texte de l'ordinateur : plus lent, on le dit.
+      const what = p.kind === "ocr" ? "Scan : reconnaissance du texte" : "Lecture";
+      show(`${what}${many ? ` de ${p.file} (${p.index + 1}/${p.count})` : ""} : page ${p.page} sur ${p.pages}`, 0.15 + 0.85 * done);
     }
   };
 }
@@ -2950,6 +2953,27 @@ function updateProviderUi() {
 
 // Demande pour l'app Claude. Elle donne l'identifiant du cours et les clés des chapitres : Claude n'a pas à lister
 // les cours ni à lire tout le cours, ce qui économise beaucoup de tokens (donc du forfait).
+// Consignes de l'étudiant pour la matière (« ignore l'introduction »…) : un champ, recopié partout où il apparaît
+// (page de création, Options de création, Réglages de la matière) et enregistré avec la matière.
+const notesLine = (course = state.course) => course?.claude_notes?.trim()
+  ? `\nConsignes de l'étudiant, à respecter : « ${course.claude_notes.trim()} »` : "";
+function fillNotes(course = state.course) {
+  document.querySelectorAll(".claude-notes").forEach((box) => {
+    if (document.activeElement !== box) box.value = course?.claude_notes || "";
+  });
+}
+let notesTimer;
+document.querySelectorAll(".claude-notes").forEach((box) => box.addEventListener("input", () => {
+  const course = state.course;
+  if (!course) return;
+  course.claude_notes = box.value;
+  fillNotes(course);
+  renderAppRequest();
+  if (state.prepareEngine === "app") $("#prepare-request").textContent = prepareRequest();
+  clearTimeout(notesTimer);
+  notesTimer = setTimeout(() => api(`/api/courses/${course.id}/notes`, jsonBody("PUT", { notes: box.value })).catch((err) => notify(err.message)), 500);
+}));
+
 function appRequest() {
   const course = state.course;
   const units = chapterUnits(course);
@@ -2970,7 +2994,7 @@ function appRequest() {
   if (state.createKind !== "quiz") {
     const howMany = coverCards() ? "des flashcards qui couvrent tout le texte (une par définition et par notion importante, de 10 à 50 selon la longueur)"
       : `${$("#cards-count").value || 20} flashcards`;
-    return `Pirouette : ajoute ${howMany} sur ${where}${theme}.\n${ids}\n`
+    return `Pirouette : ajoute ${howMany} sur ${where}${theme}.${notesLine(course)}\n${ids}\n`
       + `Va droit au but : ne liste pas les cours, ${read}, puis enregistre les cartes (pirouette_ajouter_cartes). `
       + `Avant d'enregistrer, relis chaque recto seul : s'il ne dit pas clairement ce qu'on attend, fais-en une vraie question avec son contexte. ${brief}`;
   }
@@ -2982,7 +3006,7 @@ function appRequest() {
       + " : chaque définition et chaque notion importante a sa question, du début à la fin (de 10 à 40 questions selon la longueur)"
     : each ? `un quiz de ${n} questions par cours` : `un quiz de ${n} questions`;
   return `Pirouette : crée ${size} sur ${where}${theme}`
-    + (types.length ? ` (${types.join(", ")})` : "") + `.\n${ids}\n`
+    + (types.length ? ` (${types.join(", ")})` : "") + `.${notesLine(course)}\n${ids}\n`
     + `Va droit au but : ne liste pas les cours, ${read}, puis enregistre ${each
       ? "un quiz par cours (pirouette_creer_quiz, avec les clés de ce cours dans « chapitres »)" : "le quiz (pirouette_creer_quiz)"}. ${brief}`;
 }
@@ -3048,6 +3072,7 @@ async function openCreate(id, kind) {
   if (!state.keepSelection) excludedSet().clear();  // par défaut : tout le cours
   state.keepSelection = false;
   state.createKind = kind;
+  fillNotes(course);
   const isQuiz = kind === "quiz";
   $("#create-title").textContent = isQuiz ? "Nouveau quiz" : "Ajouter des flashcards";
   setCrumbs(courseCrumbs(course, isQuiz ? "quiz" : "cartes", isQuiz ? "Nouveau quiz" : "Ajouter des cartes"));
@@ -7546,6 +7571,7 @@ function openPrepare(course = state.course) {
   $("#prepare-text").textContent = `Pirouette peut tout créer maintenant pour cette matière${which} :`;
   showError("#prepare-error", "");
   $("#prepare-status").hidden = true;
+  fillNotes(course);
   setPrepareLocal();
   if (!$("#prepare-panel").open) $("#prepare-panel").showModal();
 }
@@ -7583,7 +7609,7 @@ function prepareRequest() {
   const unsplit = unsplitFiles(course);
   if (unsplit.length) {
     const ready = units.filter((u) => !unsplit.some((f) => f.id === u.file));
-    return `Pirouette : découpe le cours « ${course.name} » en chapitres, puis prépare-le chapitre par chapitre.\n`
+    return `Pirouette : découpe le cours « ${course.name} » en chapitres, puis prépare-le chapitre par chapitre.${notesLine(course)}\n`
       + `Cours : ${course.id} · à découper : ${unsplit.map((f) => `${f.id} (${f.name})`).join(", ")}`
       + (ready.length ? ` · déjà découpés : ${ready.map((u) => `${u.key} (${u.title})`).join(", ")}` : "") + "\n"
       + `Va droit au but : ne liste pas les cours. D'abord, pour chaque fichier à découper : lis-le en entier (pirouette_lire `
@@ -7592,7 +7618,7 @@ function prepareRequest() {
       + `chaque chapitre. Ensuite, pour chaque chapitre, l'un après l'autre (inutile de relire un texte que tu as déjà) : `
       + `crée ${todo}, avec la clé du chapitre dans « chapitres ». Réponds ensuite par un résumé court.`;
   }
-  return `Pirouette : prépare le cours « ${course.name} » chapitre par chapitre.\n`
+  return `Pirouette : prépare le cours « ${course.name} » chapitre par chapitre.${notesLine(course)}\n`
     + `Cours : ${course.id} · chapitres : ${units.map((u) => `${u.key} (${u.title})`).join(", ")}\n`
     + `Va droit au but : ne liste pas les cours. Pour chaque chapitre, l'un après l'autre : lis-le (pirouette_lire avec sa clé), `
     + `puis crée ${todo}, avec la clé du chapitre dans « chapitres ». Réponds ensuite par un résumé court.`;

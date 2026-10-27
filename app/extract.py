@@ -16,6 +16,7 @@ from .iwork import IWorkError, _wrap_runs, extract_iwork_text, extract_legacy_xm
 # plus ancienne sont relus depuis l'original à l'ouverture du cours.
 EXTRACT_VERSION = 2
 
+SCAN_CHARS_PER_PAGE = 30  # moins de texte que ça par page en moyenne : le PDF est un scan
 SUPPORTED_EXTENSIONS = {".pdf", ".docx", ".pptx", ".pages", ".key", ".txt", ".md", ".markdown"}
 
 # Fichiers Apple (format fermé) : on demande à l'app correspondante de les convertir en Word / PowerPoint.
@@ -34,7 +35,8 @@ class ConversionError(ValueError):
 
 
 def extract_text(filename: str, data: bytes, on_page=None) -> str:
-    """`on_page(page, pages)` : appelé après chaque page lue d'un PDF (barre de progression d'un gros manuel)."""
+    """`on_page(page, pages[, "ocr"])` : appelé après chaque page lue d'un PDF (barre de progression d'un gros
+    manuel) ; « ocr » quand les pages d'un scan passent par la reconnaissance de texte."""
     ext = Path(filename).suffix.lower()
     if ext == ".pdf":
         text = _extract_pdf(data, on_page)
@@ -144,7 +146,18 @@ def _extract_pdf(data: bytes, on_page=None) -> str:
             pages.append(f"[Page {i}]\n{content}")
         if on_page:
             on_page(i, total)
-    return "\n\n".join(pages)
+    text = "\n\n".join(pages)
+    # Presque pas de texte : un scan (pages en images). La reconnaissance de texte de l'ordinateur le lit.
+    if len(re.sub(r"\s+|\[Page \d+\]", "", text)) < SCAN_CHARS_PER_PAGE * max(total, 1):
+        from . import ocr
+
+        try:
+            scanned = ocr.ocr_pdf(data, (lambda page, pages: on_page(page, pages, "ocr")) if on_page else None)
+        except ocr.OcrUnavailable:
+            return text
+        if len(scanned) > len(text):
+            return scanned
+    return text
 
 
 def _extract_docx(data: bytes) -> str:

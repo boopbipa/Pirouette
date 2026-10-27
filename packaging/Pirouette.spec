@@ -16,12 +16,16 @@ a = Analysis(
     datas=[(str(ROOT / "app" / "static"), "app/static"),
            *([(str(ROOT / "app" / "online_config.json"), "app")] if (ROOT / "app" / "online_config.json").exists() else []),
            *collect_data_files("docx"), *collect_data_files("pptx"),
-           *collect_data_files("pypdfium2"), *collect_data_files("pypdfium2_raw")],
+           *collect_data_files("pypdfium2"), *collect_data_files("pypdfium2_raw"),
+           *(collect_data_files("winrt") if sys.platform == "win32" else [])],
     # pdfium (rendu des pages de PDF en image, pour montrer les figures à Claude) : bibliothèque native.
     binaries=collect_dynamic_libs("pypdfium2_raw"),
     # uvicorn charge sa boucle et son protocole HTTP par leur nom : on les inclut explicitement.
     hiddenimports=[*collect_submodules("app"), *collect_submodules("uvicorn"), "python_multipart",
-                   *collect_submodules("pypdfium2"), "pypdfium2_raw"],
+                   *collect_submodules("pypdfium2"), "pypdfium2_raw",
+                   # PDF scannés : la reconnaissance de texte du système (importée à la demande, dans app/ocr.py)
+                   *(["Vision", "Foundation", "objc"] if sys.platform == "darwin" else []),
+                   *([*collect_submodules("winrt")] if sys.platform == "win32" else [])],
     excludes=["tkinter", "pytest", "playwright", "IPython"],
     noarchive=False,
 )

@@ -310,6 +310,10 @@ class Pirouette:
         chunk = text[(partie - 1) * PART_CHARS:partie * PART_CHARS]
         more = f"\n\n[Partie {partie}/{parts} — la suite avec partie={partie + 1}]" if partie < parts else ""
         head = f"Cours « {course['name']} »" + (f", partie {partie}/{parts}" if parts > 1 else "") + " :\n\n"
+        # Consignes de l'étudiant pour cette matière (réglage dans Pirouette) : Claude les voit à chaque lecture.
+        notes = course.get("claude_notes", "").strip()
+        if notes:
+            head = f"Consignes de l'étudiant pour cette matière, à respecter dans les quiz et cartes : « {notes} »\n\n" + head
         return head + chunk + more
 
     def pirouette_decouper(self, cours: str, fichier: str, chapitres: list) -> str:

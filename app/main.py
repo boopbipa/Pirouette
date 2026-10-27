@@ -533,6 +533,16 @@ async def rename_course(course_id: str, body: CourseIn) -> dict:
     return store.rename_course(course_id, body.name)
 
 
+class NotesIn(BaseModel):
+    notes: str = ""
+
+
+@app.put("/api/courses/{course_id}/notes")
+async def set_course_notes(course_id: str, body: NotesIn) -> dict:
+    """Consignes pour Claude : ajoutées à chaque création de quiz ou de cartes de cette matière."""
+    return {"notes": store.set_course_notes(course_id, body.notes).get("claude_notes", "")}
+
+
 class MoveIn(BaseModel):
     folder_id: str | None = None  # None : sortir le cours de son dossier
 
@@ -620,6 +630,14 @@ async def delete_course(course_id: str) -> dict:
     return {"deleted": course_id}
 
 
+@app.get("/api/ocr")
+async def ocr_status() -> dict:
+    """Lecture des PDF scannés possible sur cet ordinateur ?"""
+    from . import ocr
+
+    return await run_in_threadpool(ocr.status)
+
+
 @app.post("/api/courses/{course_id}/files")
 async def upload_files(course_id: str, files: list[UploadFile] = File(...), stream: bool = False):
     """`stream` : la réponse suit la lecture en NDJSON (page lue sur pages, par fichier), puis le résultat."""
@@ -629,11 +647,12 @@ async def upload_files(course_id: str, files: list[UploadFile] = File(...), stre
     loop = asyncio.get_running_loop()
     queue: asyncio.Queue = asyncio.Queue()
 
-    def on_page(name: str, index: int, count: int, page: int, pages: int) -> None:
+    def on_page(name: str, index: int, count: int, page: int, pages: int, kind: str = "text") -> None:
         # Appelé depuis le fil de lecture : au plus une centaine d'étapes par fichier, pour ne pas noyer la page.
-        if page == pages or page % max(1, pages // 100) == 0:
-            loop.call_soon_threadsafe(queue.put_nowait, {"type": "progress", "file": name, "index": index,
-                                                          "count": count, "page": page, "pages": pages})
+        # Un scan (« ocr ») avance lentement : chaque page compte.
+        if kind == "ocr" or page == pages or page % max(1, pages // 100) == 0:
+            loop.call_soon_threadsafe(queue.put_nowait, {"type": "progress", "file": name, "index": index, "count": count,
+                                                          "page": page, "pages": pages, "kind": kind})
 
     async def run() -> None:
         try:
@@ -661,7 +680,8 @@ async def _import_files(course_id: str, files: list[UploadFile], on_page=None) -
     for index, upload in enumerate(files):
         name = upload.filename or "fichier"
         data = await upload.read()
-        progress = (lambda page, pages, name=name, index=index: on_page(name, index, len(files), page, pages)) if on_page else None
+        progress = (lambda page, pages, kind="text", name=name, index=index:
+                    on_page(name, index, len(files), page, pages, kind)) if on_page else None
         try:
             # Dans un fil à part : la lecture d'un gros PDF ou la conversion d'un fichier Pages / Keynote prend du temps.
             text = await run_in_threadpool(extract_text, name, data, progress)
@@ -670,7 +690,8 @@ async def _import_files(course_id: str, files: list[UploadFile], on_page=None) -
         except Exception as exc:  # fichier corrompu, PDF protégé…
             raise HTTPException(400, f"Lecture impossible de {name} : {exc}") from exc
         if not text:
-            raise HTTPException(400, f"Aucun texte trouvé dans {name}. Un PDF scanné (images) doit d'abord passer par un OCR.")
+            raise HTTPException(400, SCAN_MESSAGE.format(name=name) if name.lower().endswith(".pdf")
+                                else f"Aucun texte trouvé dans {name}.")
         extracted.append((name, data, text))
     # Un nouveau fichier reste d'un seul bloc : Pirouette propose de le découper (l'utilisateur choisit). Une nouvelle
     # version garde le choix d'avant : pas de chapitres s'il n'y en avait pas, sinon le repérage automatique.
@@ -684,6 +705,9 @@ async def _import_files(course_id: str, files: list[UploadFile], on_page=None) -
             chapters_by=(before or {}).get("chapters_by", "none") if whole else "auto")
     return {"results": results, "course": store.get_course(course_id)}
 
+
+SCAN_MESSAGE = ("« {name} » est un scan : ses pages sont des images, sans texte à lire. "
+                "Passe-le dans un outil de reconnaissance de texte (OCR), puis réimporte-le.")
 
 # Fichier pas découpé : « none » = pas encore décidé (Pirouette propose de découper), « whole » = gardé en un seul bloc
 UNSPLIT = ("none", "whole")
@@ -1174,6 +1198,7 @@ def _quiz_job(course_id: str, provider: str, model: str, num_questions: int, dif
         course_share=COURSE_SHARES.get(course_share, COURSE_SHARES["equilibre"]),
         definition_rule=store.get_settings().get("definition_rule"),
         focus=focus,
+        notes=course.get("claude_notes", ""),
     )
     options = replace(options, num_questions=max(options.num_questions, len(mine)))
 
@@ -1346,7 +1371,8 @@ def _cards_job(course_id: str, provider: str, model: str, language: str, count: 
             avoid = [c["front"] for c in [*existing, *new]] + rejected
             parts = await PROVIDERS[provider].generate_cards(
                 ai_text, missing, language, model, on_progress, avoid=avoid,
-                definition_rule=store.get_settings().get("definition_rule"), focus=focus)
+                definition_rule=store.get_settings().get("definition_rule"), focus=focus,
+                notes=course.get("claude_notes", ""))
             before = len(rejected)
             added = normalize_cards(parts, missing, [*existing, *new], grounding, rejected)
             outside = len(rejected) - before

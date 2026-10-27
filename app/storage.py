@@ -25,6 +25,7 @@ from pathlib import Path
 from . import srs
 
 
+MAX_NOTES = 1000  # consignes pour Claude d'une matière
 
 def file_of(course: dict, item: dict) -> str | None:
     """Le cours (fichier) d'où vient un quiz ou une carte, dans une matière à plusieurs fichiers : d'après le fichier
@@ -508,6 +509,13 @@ class Store:
     def rename_course(self, course_id: str, name: str) -> dict:
         course = self.get_course(course_id)
         course["name"] = name.strip() or course["name"]
+        self._save_course(course)
+        return course
+
+    def set_course_notes(self, course_id: str, notes: str) -> dict:
+        """Consignes de l'étudiant pour Claude sur cette matière (« ignore l'introduction », « à partir du 12 mars »…)."""
+        course = self.get_course(course_id)
+        course["claude_notes"] = notes.strip()[:MAX_NOTES]
         self._save_course(course)
         return course
 

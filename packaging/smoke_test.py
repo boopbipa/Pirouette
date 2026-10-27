@@ -60,6 +60,45 @@ def office_files() -> list[tuple[str, bytes]]:
     return [("cours.docx", doc_bytes.getvalue()), ("cours.pptx", deck_bytes.getvalue())]
 
 
+def scan_pdf(text: str) -> bytes:
+    """Un PDF scanné : une page qui n'est qu'une image du texte (aucun texte à extraire)."""
+    from PIL import Image, ImageDraw, ImageFont
+
+    font = None
+    for path in ("/System/Library/Fonts/Supplemental/Arial.ttf", "/Library/Fonts/Arial.ttf", r"C:\Windows\Fonts\arial.ttf"):
+        if Path(path).exists():
+            font = ImageFont.truetype(path, 44)
+            break
+    page = Image.new("RGB", (1700, 2200), "white")
+    draw = ImageDraw.Draw(page)
+    for i, line in enumerate(text.split("\n")):
+        draw.text((140, 200 + i * 80), line, fill="black", font=font or ImageFont.load_default(size=44))
+    out = io.BytesIO()
+    page.save(out, "PDF", resolution=200)
+    return out.getvalue()
+
+
+def scanned_pdf(base: str, course_id: str) -> None:
+    """Un PDF scanné est lu par la reconnaissance de texte du système (Vision sur Mac, Windows.Media.Ocr)."""
+    status = json.loads(request(base + "/api/ocr")[1])
+    print(f"Reconnaissance de texte : {status}")
+    data, content_type = multipart([("scan.pdf", scan_pdf("La photosynthese a lieu dans le chloroplaste.\n"
+                                                          "Le cycle de Calvin fixe le carbone."))])
+    try:
+        _, body = request(f"{base}/api/courses/{course_id}/files", "POST", data, {"Content-Type": content_type})
+    except urllib.error.HTTPError as exc:
+        detail = json.loads(exc.read())["detail"]
+        # Windows des machines de GitHub : parfois sans langue de reconnaissance installée (le module, lui, doit être là).
+        if sys.platform == "win32" and not status["available"] and "Aucune langue" in status["reason"]:
+            print(f"PDF scanné non lu ici (pas de langue OCR sur cette machine) : {detail}")
+            return
+        raise AssertionError(f"PDF scanné non lu : {detail} ; {status}") from exc
+    files = json.loads(body)["course"]["files"]
+    entry = next(f for f in files if f["name"] == "scan.pdf")
+    assert entry["chars"] > 30, entry
+    print(f"PDF scanné lu par la reconnaissance de texte : {entry['chars']} caractères")
+
+
 def request(url: str, method: str = "GET", data: bytes | None = None, headers: dict | None = None):
     req = urllib.request.Request(url, data=data, method=method, headers=headers or {})
     with urllib.request.urlopen(req, timeout=30) as response:
@@ -126,6 +165,7 @@ def main(binary: str) -> None:
                 assert exc.code == 400 and ("installée" in detail or "convertir" in detail), detail
                 print(f"Fichier Pages sans l'app Pages : {detail}")
 
+            scanned_pdf(base, course_id)
             print(f"OK : interface servie, PDF/Word/PowerPoint lus ({chars}), données dans {data_dir}")
         finally:
             proc.terminate()

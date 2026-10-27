@@ -129,9 +129,9 @@ def _split_big(chunk: str, n_items: int) -> list[tuple[str, int]]:
 
 
 async def generate_cards(course_text: str, n_cards: int, language: str, model: str | None = None,
-                         on_progress=None, avoid=(), definition_rule=None, focus="") -> list[dict]:
+                         on_progress=None, avoid=(), definition_rule=None, focus="", notes="") -> list[dict]:
     return await run(course_text, CARDS_SYSTEM, CARDS_SCHEMA,
-                     lambda chunk, n, part: build_cards_prompt(chunk, n, language, part, avoid, definition_rule, focus),
+                     lambda chunk, n, part: build_cards_prompt(chunk, n, language, part, avoid, definition_rule, focus, notes),
                      total_items=n_cards, model=model, on_progress=on_progress, unit="cartes")
 
 

@@ -971,6 +971,8 @@
             <select id="course-folder" class="chip set-select" data-icon="folder"></select></div>
           <div class="set-row"><span class="set-label">Partiels</span><span class="set-value" id="set-exam"></span>
             <button class="ghost small" type="button" id="course-exam">Choisir la date</button></div>
+          <div class="set-row set-notes"><label class="set-label" for="course-notes">Consignes pour Claude<small>Ajoutées à chaque création de quiz et de flashcards de cette matière.</small></label>
+            <textarea id="course-notes" class="claude-notes" rows="2" maxlength="1000" placeholder="ex. ignore l&#39;introduction de chaque chapitre ; seulement les cours à partir du 12 mars ; pas de questions sur les dates"></textarea></div>
           <div class="set-row"><span class="set-label">Quiz et flashcards</span><span class="set-value muted">D'un paquet .zip, d'un tableau ou d'un .txt</span>
             <button class="ghost small" type="button" id="course-import">Importer</button>
             <button class="ghost small" type="button" id="course-export" hidden>Exporter</button></div>
@@ -1049,6 +1051,10 @@
         <div class="field">
           <label for="focus">Un thème précis</label>
           <input type="text" id="focus" maxlength="200" placeholder="ex. les systèmes nerveux et leurs fonctions">
+        </div>
+        <div class="field">
+          <label for="create-notes">Consignes pour Claude <span class="muted small-text">(gardées pour la matière)</span></label>
+          <textarea id="create-notes" class="claude-notes" rows="2" maxlength="1000" placeholder="ex. ignore l&#39;introduction de chaque chapitre ; seulement les cours à partir du 12 mars ; pas de questions sur les dates"></textarea>
         </div>
         <div class="field" id="manual-field">
           <label for="manual">Tes questions</label>
@@ -1606,6 +1612,10 @@
       <select id="prepare-nq" class="chip" aria-label="Questions par quiz"><option value="0" selected>tout le chapitre</option><option value="5">5 questions</option><option value="10">10 questions</option><option value="15">15 questions</option><option value="20">20 questions</option><option value="30">30 questions</option></select></div>
     <div class="option-row"><label><input type="checkbox" id="prepare-cards" checked> Des flashcards par chapitre</label>
       <select id="prepare-nc" class="chip" aria-label="Cartes par chapitre"><option value="0" selected>tout le chapitre</option><option value="5">5 cartes</option><option value="10">10 cartes</option><option value="15">15 cartes</option><option value="20">20 cartes</option><option value="30">30 cartes</option><option value="40">40 cartes</option></select></div>
+    <div class="field prepare-notes">
+      <label for="prepare-notes">Consignes pour Claude <span class="muted small-text">(facultatif, gardées pour la matière)</span></label>
+      <textarea id="prepare-notes" class="claude-notes" rows="2" maxlength="1000" placeholder="ex. ignore l&#39;introduction de chaque chapitre ; seulement les cours à partir du 12 mars ; pas de questions sur les dates"></textarea>
+    </div>
     <p class="heat-note" id="prepare-local-note">Tout se crée en arrière-plan, chapitre après chapitre : tu peux commencer à réviser dès que le premier
       est prêt. Ton Mac peut chauffer un peu pendant ce temps : évite d'ouvrir d'autres apps gourmandes.</p>
     <div class="app-request" id="prepare-app" hidden>

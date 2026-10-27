@@ -56,7 +56,7 @@ Règles :
 
 
 def build_cards_prompt(course_text: str, n_cards: int, language: str, part: str = "", avoid=(),
-                       definition_rule: str | None = None, focus: str = "") -> str:
+                       definition_rule: str | None = None, focus: str = "", notes: str = "") -> str:
     scope = f" ({part})" if part else ""
     avoid_block = ""
     if avoid:
@@ -68,12 +68,16 @@ def build_cards_prompt(course_text: str, n_cards: int, language: str, part: str 
 {course_text}
 </cours>
 
-Crée exactement {n_cards} flashcards sur ce cours, en {language}.{_focus_cards(focus)}{_definitions_cards(course_text, definition_rule)}{avoid_block}"""
+Crée exactement {n_cards} flashcards sur ce cours, en {language}.{_focus_cards(focus)}{_notes_cards(notes)}{_definitions_cards(course_text, definition_rule)}{avoid_block}"""
 
 
 def _focus_cards(focus: str) -> str:
     return (f"\nThème imposé : toutes les cartes portent sur « {focus} », avec ce que le cours en dit ;"
             " aucune carte sur le reste du cours.") if focus else ""
+
+
+def _notes_cards(notes: str) -> str:
+    return f"\nConsignes de l'étudiant, à respecter : « {notes.strip()} »" if notes.strip() else ""
 
 
 def _definitions_cards(course_text: str, rule: str | None) -> str:

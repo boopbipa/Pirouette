@@ -114,6 +114,7 @@ class QuizOptions:
     course_share: float = COURSE_SHARES["equilibre"]  # part minimale de questions de cours (définitions…)
     definition_rule: str | None = None  # comment repérer les définitions (Réglages → Tes définitions)
     focus: str = ""  # thème précis demandé par l'étudiant (« les systèmes nerveux et leurs fonctions »)
+    notes: str = ""  # consignes de l'étudiant pour cette matière (« ignore l'introduction »…)
     cover: bool = False  # couvrir tout le texte (banque de questions), plutôt qu'un petit quiz
 
 
@@ -156,7 +157,7 @@ Génère un quiz de exactement {n_questions} questions sur ce cours.
 - Niveau : {options.difficulty} — {difficulty}
 - Langue des questions, réponses et explications : {options.language}.
 - "title" : un titre court décrivant le thème du cours.
-{_focus_block(options.focus)}{_cover_block(options.cover)}{_kind_block(n_questions, options)}{_definitions_prompt(course_text, options.definition_rule)}{_avoid_block(options.avoid)}"""
+{_focus_block(options.focus)}{notes_block(options.notes)}{_cover_block(options.cover)}{_kind_block(n_questions, options)}{_definitions_prompt(course_text, options.definition_rule)}{_avoid_block(options.avoid)}"""
 
 
 def _focus_block(focus: str) -> str:
@@ -165,6 +166,13 @@ def _focus_block(focus: str) -> str:
     return (f"- Thème imposé : toutes les questions portent sur « {focus} », en s'appuyant uniquement sur ce que le"
             " cours en dit. Aucune question sur le reste du cours. Si le cours en dit peu, varie les angles (définition,"
             " rôle, composition, différence, conséquence) plutôt que de sortir du thème.\n")
+
+
+def notes_block(notes: str) -> str:
+    """Consignes de l'étudiant (réglage de la matière) : elles passent avant les autres consignes de forme."""
+    if not notes.strip():
+        return ""
+    return f"- Consignes de l'étudiant, à respecter : « {notes.strip()} »\n"
 
 
 def _cover_block(cover: bool) -> str:
