@@ -601,6 +601,13 @@ $("#course-tabs").addEventListener("pointermove", (e) => {
   row.style.setProperty("--gy", `${((e.clientY - box.top) / box.height) * 100}%`);
 });
 $("#view-courses").addEventListener("pointermove", (e) => {
+  // En-tête d'un semestre : le halo du semestre suit la souris
+  const head = e.target.closest(".folder-head");
+  if (head && e.pointerType !== "touch") {
+    const folder = head.parentElement, box = folder.getBoundingClientRect();
+    folder.style.setProperty("--gx", `${e.clientX - box.left}px`);
+    folder.style.setProperty("--gy", `${e.clientY - box.top}px`);
+  }
   const card = e.target.closest(".course-card");
   if (!card || e.pointerType === "touch") return;
   const box = card.getBoundingClientRect();
@@ -743,6 +750,86 @@ document.addEventListener("pointercancel", endDrag);
 window.addEventListener("blur", endDrag);  // la fenêtre perd la main en plein glisser : on lâche proprement
 // Pas de glisser natif des liens (il prendrait le dessus sur le nôtre).
 $("#view-courses").addEventListener("dragstart", (e) => { if (e.target.closest?.("[data-course-card]")) e.preventDefault(); });
+
+// Un fichier glissé depuis le Finder sur la page des matières : la matière survolée s'éclaire et le prend ; lâché
+// ailleurs, il ouvre « Ajouter un cours » (dans le semestre survolé). Rien ne tourne en fond : le navigateur ne
+// prévient que pendant qu'on glisse. Le rangement des matières (à la souris, sans glisser-déposer) n'est pas touché.
+const fileDrag = { depth: 0, card: null, springTimer: null, spring: null };
+const draggingFiles = (e) => [...(e.dataTransfer?.types || [])].includes("Files");
+function fileDragTarget(e) {
+  const card = e.target.closest?.("[data-course-card]");
+  if (card) return { card, label: `Ajouter à « ${card.querySelector("strong")?.textContent || "cette matière"} »` };
+  const folder = e.target.closest?.("[data-drop-folder]");
+  const name = folder?.closest("details")?.querySelector("summary > strong")?.textContent?.trim();
+  return { card: null, folder: folder?.dataset.dropFolder || "",
+           label: name ? `Nouvelle matière dans « ${name} »` : "Nouvelle matière avec ce cours" };
+}
+function showFileDrag(target) {
+  const view = $("#view-courses");
+  view.classList.add("file-drag");
+  if (fileDrag.card !== target.card) {
+    fileDrag.card?.classList.remove("file-over");
+    target.card?.classList.add("file-over");
+    fileDrag.card = target.card;
+  }
+  const pill = $("#file-drop-pill");
+  pill.hidden = false;
+  pill.classList.toggle("on-card", Boolean(target.card));
+  pill.querySelector("span").textContent = target.label;
+  if (target.card) pill.style.setProperty("--c", target.card.style.getPropertyValue("--c"));
+}
+function endFileDrag() {
+  fileDrag.depth = 0;
+  fileDrag.card?.classList.remove("file-over");
+  fileDrag.card = null;
+  clearTimeout(fileDrag.springTimer);
+  fileDrag.spring = null;
+  $("#view-courses").classList.remove("file-drag");
+  $("#file-drop-pill").hidden = true;
+}
+$("#view-courses").addEventListener("dragenter", (e) => {
+  if (!draggingFiles(e)) return;
+  e.preventDefault();
+  fileDrag.depth += 1;
+});
+$("#view-courses").addEventListener("dragover", (e) => {
+  if (!draggingFiles(e)) return;
+  e.preventDefault();
+  e.dataTransfer.dropEffect = "copy";
+  showFileDrag(fileDragTarget(e));
+  // Semestre replié : il s'ouvre si l'on reste un instant au-dessus (comme les dossiers du Finder)
+  const closed = e.target.closest?.("details:not([open])");
+  if (closed !== fileDrag.spring) {
+    clearTimeout(fileDrag.springTimer);
+    fileDrag.spring = closed;
+    if (closed) fileDrag.springTimer = setTimeout(() => { closed.open = true; }, 600);
+  }
+});
+$("#view-courses").addEventListener("dragleave", (e) => {
+  if (!draggingFiles(e)) return;
+  fileDrag.depth = Math.max(0, fileDrag.depth - 1);
+  if (!fileDrag.depth) endFileDrag();
+});
+$("#view-courses").addEventListener("drop", async (e) => {
+  if (!draggingFiles(e)) return;
+  e.preventDefault();
+  e.stopPropagation();
+  const target = fileDragTarget(e);
+  const files = [...e.dataTransfer.files];  // copie : la liste n'existe plus après l'événement
+  endFileDrag();
+  if (!files.length) return;
+  if (!target.card) {
+    await openNewCourse({ folder: target.folder });
+    return addNewCourseFiles(files);
+  }
+  const id = target.card.dataset.courseCard;
+  history.pushState(null, "", `#/cours/${id}/fichiers`);
+  document.querySelectorAll("[data-nav]").forEach((a) => a.classList.toggle("on", a.dataset.nav === "cours"));
+  await openCourse(id, "fichiers");
+  await uploadFiles(files);
+});
+window.addEventListener("dragend", endFileDrag);
+window.addEventListener("drop", () => { if (fileDrag.depth) endFileDrag(); });
 
 // Le crayon d'un semestre : son nom, et la liste de ses matières ; un clic sur une matière ouvre ses réglages
 function openFolderDialog(folder) {

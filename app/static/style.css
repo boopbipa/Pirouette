@@ -630,14 +630,22 @@ label.button { cursor: pointer; display: inline-block; border-radius: 999px; pad
 label.button:hover { border-color: var(--text); }
 
 /* Dossiers de cours */
-.folder { margin-top: 18px; }
+/* Le semestre déborde un peu de chaque côté (même place qu'avant) : au survol de son en-tête, tout le semestre
+   (en-tête et matières) prend un fond à peine teinté, avec le halo orange qui suit la souris (--gx, --gy) */
+.folder { position: relative; isolation: isolate; margin: 18px -12px 0; padding: 0 12px 6px; border-radius: 20px;
+          transition: background .25s; }
+.folder::before { content: ""; position: absolute; inset: 0; z-index: -1; border-radius: inherit; pointer-events: none;
+  opacity: 0; transition: opacity .25s;
+  background: radial-gradient(circle 260px at var(--gx, 50%) var(--gy, 30px), color-mix(in srgb, var(--accent) 16%, transparent), transparent 70%); }
+.folder:has(> .folder-head:hover) { background: color-mix(in srgb, var(--accent) 5%, var(--surface)); }
+.folder:has(> .folder-head:hover)::before { opacity: 1; }
+@media (hover: none) { .folder:has(> .folder-head:hover) { background: none; } .folder::before { display: none; } }
 .folder-head { display: flex; align-items: center; gap: 10px; padding: 10px 12px; margin: 0 -12px 10px;
                border-radius: 12px; cursor: pointer; list-style: none; }
 .folder-head::-webkit-details-marker { display: none; }
 .folder-head::before { content: ""; width: 7px; height: 7px; margin: 0 4px 0 2px; flex: none;
                        border: solid var(--muted); border-width: 0 2px 2px 0; transform: rotate(-45deg); transition: transform .15s; }
 .folder[open] > .folder-head::before { transform: rotate(45deg); }
-.folder-head:hover { background: var(--sunken); }
 .folder-head strong { font: 600 18px/1.3 var(--display); }
 .folder-ico { width: 20px; height: 20px; color: var(--accent-ink); flex: none; }
 /* Les icônes du semestre restent visibles, discrètes ; au survol de la ligne, elles ressortent */
@@ -2863,3 +2871,35 @@ dialog.onboard::backdrop { background: var(--bg); }
 .set-row.set-notes textarea { flex: 2 1 320px; min-height: 64px; resize: vertical; }
 .prepare-notes { margin: 14px 0 4px; }
 .prepare-notes textarea, #create-notes { width: 100%; resize: vertical; }
+
+/* Un fichier glissé sur la page des matières : les tuiles attendent, celle survolée s'éclaire et grandit */
+#view-courses.file-drag .course-card { transition: transform .18s ease, box-shadow .18s ease, opacity .18s ease; }
+#view-courses.file-drag .course-card:not(.file-over) { opacity: .6; }
+#view-courses.file-drag .course-card.file-over {
+  opacity: 1; transform: scale(1.04);
+  box-shadow: 0 0 0 2px var(--c, var(--accent)), 0 14px 34px -14px color-mix(in srgb, var(--c, var(--accent)) 70%, transparent);
+  background: color-mix(in srgb, var(--c, var(--accent)) 9%, var(--surface));
+}
+#view-courses.file-drag .course-card * { pointer-events: none; }  /* pas de clignotement en passant sur le texte */
+.file-drop-pill {
+  position: fixed; left: 50%; bottom: 32px; z-index: 50; transform: translateX(-50%);
+  display: flex; align-items: center; gap: 10px; padding: 12px 20px; border-radius: 99px;
+  background: var(--text); color: var(--bg); font-weight: 600; font-size: 15px; pointer-events: none;
+  box-shadow: 0 12px 30px -10px rgba(0, 0, 0, .45); animation: pill-in .18s ease-out;
+  transition: background .18s;
+}
+.file-drop-pill.on-card { background: var(--c, var(--accent)); color: #fff; }
+.file-drop-pill svg { width: 18px; height: 18px; }
+@keyframes pill-in { from { opacity: 0; transform: translate(-50%, 10px); } }
+
+/* Halo des boutons d'action (la couleur de l'app) : au survol de tous les boutons principaux ; en permanence,
+   plus doux, sur ceux qui lancent quelque chose d'important (réviser, créer, tout préparer) */
+.primary:not(:disabled) { transition: filter .2s, box-shadow .25s, transform .1s; }
+.primary:not(:disabled):hover {
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 16%, transparent), 0 10px 24px -10px color-mix(in srgb, var(--accent) 70%, transparent); }
+.go-btn.primary:not(:disabled), #create-btn:not(:disabled), #prepare-go:not(:disabled), #new-course-create:not(:disabled), .folder-revise {
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 11%, transparent), 0 8px 20px -12px color-mix(in srgb, var(--accent) 60%, transparent); }
+.go-btn.primary:not(:disabled):hover, .go-banner:hover .go-btn.primary, #create-btn:not(:disabled):hover, #prepare-go:not(:disabled):hover,
+#new-course-create:not(:disabled):hover, .folder-revise:hover {
+  box-shadow: 0 0 0 6px color-mix(in srgb, var(--accent) 18%, transparent), 0 12px 28px -10px color-mix(in srgb, var(--accent) 75%, transparent); }
+body.focus .primary:not(:disabled):hover { box-shadow: 0 0 0 4px rgba(255, 255, 255, .14); }
