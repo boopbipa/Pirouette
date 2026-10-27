@@ -486,17 +486,19 @@ function todayRing(done, left) {
   return { pct, text: left ? `${pct}%` : "✓", title: left ? `Révision du jour : ${pct} % fait` : "Révision du jour faite" };
 }
 
-// Une matière : une seule ligne utile (ce qui est à revoir) et un anneau de maîtrise. Un clic : réviser ;
+// Une matière : une seule ligne utile (ce qui est à revoir) et un anneau de maîtrise. Un clic : réviser (vide :
+// la page où l'on importe son premier cours) ;
 // le crayon : la gérer (ses cours, chapitres, quiz et flashcards).
 function courseCard(c) {
   const p = state.courseProgress?.[c.id];
   const day = p?.day;  // comme le grand rond de la matière : ses cartes et ses questions du jour
   const ring = day ? todayRing(day.done.cards + (mixQuestions() ? day.done.questions : 0), day.left.cards + (mixQuestions() ? day.left.questions : 0))
     : todayRing(0, p?.today || 0);
-  const status = !c.files.length && !c.card_count && !c.quiz_count ? "Vide : ajoute un cours"
+  const empty = !c.files.length && !c.card_count && !c.quiz_count;
+  const status = empty ? "Vide : ajoute un cours"
     : p?.today ? `<b>${p.today}</b> à revoir` : p?.cards ? "À jour" : c.quiz_count ? plural(c.quiz_count, "quiz", "quiz") : "Rien à réviser encore";
   return `
-    <a class="course-card" href="#/reviser/cours/${c.id}" draggable="false" data-course-card="${c.id}" style="--c:${subjectColor(c.id)}">
+    <a class="course-card" href="${empty ? `#/cours/${c.id}` : `#/reviser/cours/${c.id}`}" draggable="false" data-course-card="${c.id}" style="--c:${subjectColor(c.id)}">
       <span class="subject-dot" aria-hidden="true"></span>
       <span class="course-main">
         <strong>${escapeHtml(c.name)}</strong>
@@ -1810,7 +1812,8 @@ async function openCourse(id, tab, { keepScroll = false } = {}) {
   renderTiles(course);
   // Cours tout neuf, sans fichier ni carte : on invite d'abord à importer le cours.
   const empty = !course.files.length && !course.quizzes.length && !course.cards.total;
-  $("#start-drop").hidden = !empty;
+  // Import en cours : la barre de chargement (au-dessus) prend la place du grand cadre, même si la page se réaffiche.
+  $("#start-drop").hidden = !empty || state.uploading === course.id;
   $("#course-tree").hidden = empty;
   // Les onglets de la matière restent là : on revient en un clic à Aujourd'hui, Quiz, Cartes ou Suivi
   document.querySelectorAll("[data-course-tab]").forEach((a) => {
@@ -2681,11 +2684,12 @@ async function uploadFiles(fileList) {
   const status = $("#upload-status");
   status.hidden = false;
   // Matière vide : le grand cadre laisse la place à la barre
+  state.uploading = state.course.id;
   $("#start-drop").hidden = true;
-  $("#course-tree").hidden = false;
   const onProgress = uploadProgress(status, files);
   try {
     const { results, course } = await sendFiles(`/api/courses/${state.course.id}/files`, form, onProgress);
+    state.uploading = null;
     status.textContent = "Enregistrement…";
     await refreshCourse();
     const kinds = Object.values(results);
@@ -2707,8 +2711,8 @@ async function uploadFiles(fileList) {
     }
     await refreshCourse();
   } catch (err) {
+    state.uploading = null;
     $("#start-drop").hidden = state.course.files.length > 0;
-    $("#course-tree").hidden = !state.course.files.length;
     status.textContent = err.message;
     status.className = "status ko";
   }

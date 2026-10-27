@@ -860,6 +860,8 @@
         <span class="muted">Glisse le fichier ici, ou clique. PDF, Word, PowerPoint, Pages, Keynote, texte.</span>
         <span class="primary small fake-button">Choisir un fichier</span>
       </label>
+      <!-- Hors de l'arbre : visible aussi sur une matière vide (barre de chargement, erreur de lecture) -->
+      <p id="upload-status" class="status" hidden></p>
       <p class="status" id="course-status" hidden></p>
       <!-- Un cours tout juste ajouté (ni quiz ni flashcards) : un seul bouton, Claude découpe puis crée tout -->
       <div class="ready-card" id="ready-card" hidden>
@@ -896,7 +898,6 @@
         </div>
         <input type="file" id="file-input" multiple accept=".pdf,.docx,.pptx,.pages,.key,.txt,.md,.markdown" hidden>
         <input type="file" id="replace-input" accept=".pdf,.docx,.pptx,.pages,.key,.txt,.md,.markdown" hidden>
-        <p id="upload-status" class="status" hidden></p>
         <p id="chapters-status" class="status" hidden></p>
 
         <!-- Chapitres, quiz et flashcards se replient d'un coup (beaucoup de cours = une longue page) -->
