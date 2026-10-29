@@ -221,6 +221,24 @@ button:disabled { opacity: .4; cursor: not-allowed; }
 .pill { background: var(--accent-soft); color: var(--accent-ink); padding: 4px 12px; border-radius: 999px; font-weight: 600; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .progress { height: 4px; background: var(--border); border-radius: 999px; margin: 14px 0; overflow: hidden; }
 #progress-bar { height: 100%; background: var(--accent); transition: width .3s; }
+/* Quiz : une barre « liquide » — plus épaisse, dégradé chaud, reflet qui passe, petit rebond quand elle avance */
+.quiz-progress { position: relative; height: 10px; margin: 14px 0 8px; background: color-mix(in srgb, var(--text) 8%, transparent);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, .08); }
+.quiz-progress #progress-bar { position: relative; overflow: hidden; border-radius: inherit;
+  background: linear-gradient(90deg, color-mix(in srgb, var(--accent) 65%, #F4B994), var(--accent));
+  box-shadow: 0 0 12px -2px color-mix(in srgb, var(--accent) 70%, transparent); transition: width .7s cubic-bezier(.3, 1.4, .5, 1); }
+.quiz-progress #progress-bar::after { content: ""; position: absolute; inset: 0; transform: translateX(-100%);
+  background: linear-gradient(100deg, transparent 30%, rgba(255, 255, 255, .45) 50%, transparent 70%); animation: bar-shine 2.8s ease-in-out infinite; }
+@keyframes bar-shine { 60%, 100% { transform: translateX(100%); } }
+.quiz-trail { display: flex; flex-wrap: wrap; gap: 4px; margin: 0 0 14px; }
+.quiz-trail[hidden] { display: none; }
+.quiz-trail i { width: 12px; height: 12px; border-radius: 4px; background: color-mix(in srgb, var(--text) 9%, transparent); transition: background .3s, transform .3s, box-shadow .3s; }
+.quiz-trail i.ok { background: color-mix(in srgb, var(--right) 80%, transparent); }
+.quiz-trail i.ko { background: color-mix(in srgb, var(--wrong) 75%, transparent); }
+.quiz-trail i.now { background: transparent; box-shadow: inset 0 0 0 2px var(--accent); transform: scale(1.12); }
+.quiz-trail i.pop { animation: dot-pop .35s cubic-bezier(.3, 1.6, .5, 1); }
+@keyframes dot-pop { 50% { transform: scale(1.45); } }
+@media (prefers-reduced-motion: reduce) { .quiz-progress #progress-bar::after, .quiz-trail i.pop { animation: none; } }
 .tag { font-size: 12px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
 .question-card h2 { font: 500 23px/1.35 var(--display); margin-top: 6px; }
 
@@ -636,10 +654,14 @@ label.button:hover { border-color: var(--text); }
           transition: background .25s; }
 .folder::before { content: ""; position: absolute; inset: 0; z-index: -1; border-radius: inherit; pointer-events: none;
   opacity: 0; transition: opacity .25s;
-  background: radial-gradient(circle 260px at var(--gx, 50%) var(--gy, 30px), color-mix(in srgb, var(--accent) 16%, transparent), transparent 70%); }
-.folder:has(> .folder-head:hover) { background: color-mix(in srgb, var(--accent) 5%, var(--surface)); }
+  background: radial-gradient(circle 260px at var(--gx, 50%) var(--gy, 30px), color-mix(in srgb, var(--accent) 22%, transparent), transparent 70%); }
+/* Plus net, surtout en mode clair : teinte plus marquée, ombre chaude dessous, nom du semestre en orange */
+.folder { transition: background .25s, box-shadow .25s; }
+.folder:has(> .folder-head:hover) { background: color-mix(in srgb, var(--accent) 11%, var(--bg));
+  box-shadow: 0 18px 36px -22px color-mix(in srgb, var(--accent) 80%, transparent); }
 .folder:has(> .folder-head:hover)::before { opacity: 1; }
-@media (hover: none) { .folder:has(> .folder-head:hover) { background: none; } .folder::before { display: none; } }
+.folder:has(> .folder-head:hover) > .folder-head strong { color: var(--accent-ink); transition: color .25s; }
+@media (hover: none) { .folder:has(> .folder-head:hover) { background: none; box-shadow: none; } .folder::before { display: none; } }
 .folder-head { display: flex; align-items: center; gap: 10px; padding: 10px 12px; margin: 0 -12px 10px;
                border-radius: 12px; cursor: pointer; list-style: none; }
 .folder-head::-webkit-details-marker { display: none; }
@@ -2760,9 +2782,10 @@ dialog.onboard { position: fixed; inset: 0; width: 100vw; height: 100vh; max-wid
   background: var(--bg); color: var(--text); overflow: auto; }
 dialog.onboard::backdrop { background: var(--bg); }
 .ob-progress { position: fixed; top: 22px; left: 50%; transform: translateX(-50%); display: flex; gap: 6px; width: min(520px, calc(100vw - 48px)); z-index: 2; }
-.ob-progress i { flex: 1; height: 4px; border-radius: 3px; background: color-mix(in srgb, var(--text) 10%, transparent); transition: background .3s; }
-.ob-progress i.on { background: var(--accent); }
-.ob-progress i.now { background: color-mix(in srgb, var(--accent) 45%, transparent); }
+.ob-progress[hidden] { display: none; }
+.ob-progress i { position: relative; flex: 1; height: 6px; border-radius: 99px; overflow: hidden; background: color-mix(in srgb, var(--text) 10%, transparent); }
+.ob-progress i::after { content: ""; position: absolute; inset: 0 auto 0 0; width: var(--f, 0%); border-radius: inherit; background: var(--accent);
+  transition: width .6s cubic-bezier(.2, .8, .2, 1); }
 .ob-stage { min-height: 100vh; display: grid; place-items: center; padding: 70px 24px 40px; }
 /* La bienvenue : la couleur de l'app à gauche, ce qu'on va faire à droite */
 .ob-welcome { width: min(940px, 100%); min-height: min(560px, calc(100vh - 120px)); display: grid; grid-template-columns: 1fr 1fr; border-radius: 28px;
@@ -2938,3 +2961,59 @@ body.focus .primary:not(:disabled):hover { box-shadow: 0 0 0 4px rgba(255, 255, 
    pour retourner une carte le faisait apparaître ; le survol et le retournement suffisent à montrer où l'on est */
 .course-card:focus-visible, .flashcard:focus-visible, .flashcard.tcg:focus-visible, .fcard:focus-visible, .gcard:focus-visible,
 .ob-flash:focus-visible, .choice:focus-visible, .today-bar:focus-visible { outline: none; }
+
+/* Tuto, la bienvenue : l'icône, une phrase, trois cartes en éventail, les étapes en chemin de pictos */
+.ob-box.ob-card .ob-hello-ic { width: 72px; height: 72px; margin: 0 auto 6px; animation: ob-breathe 3.2s ease-in-out infinite; }
+.ob-hello { font: 700 30px/1.15 var(--display); letter-spacing: -.02em; margin: 6px 0 8px; }
+@keyframes ob-breathe { 50% { transform: scale(1.05); } }
+.ob-fan { position: relative; width: 260px; height: 118px; margin: 18px auto 8px; }
+.ob-fan span { position: absolute; left: 50%; top: 6px; width: 82px; height: 108px; margin-left: -41px; padding: 8px; border-radius: 12px;
+  display: grid; place-items: center; text-align: center; font-size: 10.5px; font-weight: 600; line-height: 1.25; color: #1D1D1F;
+  background: linear-gradient(155deg, #fff, #F1EFEA 55%, #E7E4DE); box-shadow: 0 14px 26px -14px rgba(60, 35, 20, .6), inset 0 0 0 .5px rgba(0, 0, 0, .07);
+  animation: ob-fan 4.5s cubic-bezier(.3, .7, .3, 1) infinite; }
+.ob-fan span:nth-child(1) { --x: -70px; --r: -14deg; }
+.ob-fan span:nth-child(2) { --x: 0px; --r: 0deg; --y: -6px; z-index: 2; }
+.ob-fan span:nth-child(3) { --x: 70px; --r: 14deg; }
+@keyframes ob-fan { 0%, 12% { transform: none; } 30%, 82% { transform: translate(var(--x), var(--y, 4px)) rotate(var(--r)); } 100% { transform: none; } }
+.ob-path { list-style: none; display: flex; align-items: center; justify-content: center; margin: 14px 0 0; padding: 0; }
+.ob-path li { width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; font-size: 16px; background: var(--bg);
+  box-shadow: 0 0 0 1px var(--border); }
+.ob-path li.done { background: color-mix(in srgb, var(--accent) 14%, var(--surface)); box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--accent) 45%, transparent); }
+.ob-path i { width: 14px; height: 2px; background: var(--border); }
+@media (prefers-reduced-motion: reduce) { .ob-fan span, .ob-hello-ic { animation: none; } .ob-fan span { transform: translate(var(--x), var(--y, 4px)) rotate(var(--r)); } }
+
+/* Séance plein écran (nuit / jour) : la barre liquide reste dans les tons de la séance */
+body.focus .quiz-progress { height: 8px; background: rgba(255, 255, 255, .1); box-shadow: none; }
+body.focus .quiz-progress #progress-bar { background: linear-gradient(90deg, rgba(245, 245, 247, .55), #F5F5F7); box-shadow: 0 0 14px -2px rgba(255, 255, 255, .45); }
+body.focus .quiz-trail i { background: rgba(255, 255, 255, .12); }
+body.focus .quiz-trail i.ok { background: color-mix(in srgb, var(--right) 85%, transparent); }
+body.focus .quiz-trail i.ko { background: color-mix(in srgb, var(--wrong) 80%, transparent); }
+body.focus .quiz-trail i.now { background: transparent; box-shadow: inset 0 0 0 2px #F5F5F7; }
+body.focus.day .quiz-progress { background: rgba(0, 0, 0, .08); }
+body.focus.day .quiz-progress #progress-bar { background: linear-gradient(90deg, rgba(29, 29, 31, .5), #1D1D1F); box-shadow: none; }
+body.focus.day .quiz-trail i { background: rgba(0, 0, 0, .08); }
+body.focus.day .quiz-trail i.now { box-shadow: inset 0 0 0 2px #1D1D1F; }
+body.focus.day .quiz-trail i.ok { background: color-mix(in srgb, var(--right) 85%, transparent); }
+body.focus.day .quiz-trail i.ko { background: color-mix(in srgb, var(--wrong) 80%, transparent); }
+
+/* Barre du haut : une seule pastille blanche qui glisse d'un onglet à l'autre en s'étirant comme une goutte
+   (« liquid glass ») ; l'onglet actif n'a plus son propre fond */
+.nav-pill { position: relative; isolation: isolate; }
+.nav-glider { position: absolute; top: 5px; bottom: 5px; left: 0; width: 0; z-index: -1; border-radius: 999px; opacity: 0;
+  background: var(--surface); box-shadow: 0 1px 3px rgba(0, 0, 0, .12), inset 0 .5px 0 rgba(255, 255, 255, .8); pointer-events: none; }
+.nav-pill.glide .nav-glider { opacity: 1; }
+.nav-pill.glide a.on { background: transparent; box-shadow: none; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .nav-glider { box-shadow: 0 1px 3px rgba(0, 0, 0, .4), inset 0 .5px 0 rgba(255, 255, 255, .12); } }
+:root[data-theme="dark"] .nav-glider { box-shadow: 0 1px 3px rgba(0, 0, 0, .4), inset 0 .5px 0 rgba(255, 255, 255, .12); }
+
+/* La voix : le haut-parleur de la séance (barré quand la lecture est coupée) */
+.voice-toggle svg { width: 19px; height: 19px; }
+.voice-toggle .wave { display: none; }
+.voice-toggle.on { color: var(--accent-ink); }
+.voice-toggle.on .wave { display: inline; }
+.voice-toggle.on .mute { display: none; }
+body.focus .voice-toggle { color: rgba(245, 245, 247, .7); }
+body.focus .voice-toggle.on { color: #F5F5F7; }
+body.focus.day .voice-toggle { color: rgba(29, 29, 31, .6); }
+body.focus.day .voice-toggle.on { color: #1D1D1F; }
+#voice-rate { accent-color: var(--accent); width: 180px; }

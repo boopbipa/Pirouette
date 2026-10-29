@@ -126,6 +126,7 @@ function show(view) {
 // #/cours/<id>/nouveau/quiz|cartes création · #/reviser (choix) · #/reviser/tout|dossier/<id>|cours/<id> · #/reglages
 async function route() {
   const hash = location.hash;
+  stopSpeaking();
   // Le suivi des créations se replie quand on change de page (sauf juste après avoir lancé une création).
   if (jobsState.keepOpen) jobsState.keepOpen = false;
   else foldJobs();
@@ -165,6 +166,34 @@ async function route() {
     location.hash = "#/cours";
   }
 }
+
+// ---------- Barre du haut : la pastille qui suit l'onglet ----------
+// Une seule pastille pour tous les onglets. En changeant d'onglet, elle s'étire jusqu'au nouveau (en couvrant les
+// deux), s'aplatit un peu, puis se rétracte dessus avec un léger rebond — comme une goutte.
+const navPill = $(".nav-pill"), navGlider = $(".nav-glider");
+let gliderAt = null;
+function moveGlider() {
+  const on = navPill.querySelector("a.on:not([hidden])");
+  navPill.classList.toggle("glide", Boolean(on));
+  if (!on) { gliderAt = null; return; }
+  const x = on.offsetLeft, w = on.offsetWidth;
+  const still = !gliderAt || matchMedia("(prefers-reduced-motion: reduce)").matches;
+  if (!still && (gliderAt.x !== x || gliderAt.w !== w)) {
+    const { x: fx, w: fw } = gliderAt, left = Math.min(fx, x), right = Math.max(fx + fw, x + w), dir = x > fx ? 1 : -1;
+    navGlider.animate([
+      { left: `${fx}px`, width: `${fw}px`, transform: "scaleY(1)" },
+      { left: `${left}px`, width: `${right - left}px`, transform: "scaleY(.84)", offset: .45 },
+      { left: `${x + dir * 3}px`, width: `${w}px`, transform: "scaleY(1.05)", offset: .8 },
+      { left: `${x}px`, width: `${w}px`, transform: "scaleY(1)" },
+    ], { duration: 520, easing: "cubic-bezier(.3, .7, .3, 1)" });
+  }
+  navGlider.style.left = `${x}px`;
+  navGlider.style.width = `${w}px`;
+  gliderAt = { x, w };
+}
+new MutationObserver(() => requestAnimationFrame(moveGlider)).observe(navPill, { subtree: true, attributes: true, attributeFilter: ["class", "hidden"] });
+addEventListener("resize", () => { gliderAt = null; moveGlider(); });
+document.fonts?.ready.then(() => { gliderAt = null; moveGlider(); });
 
 // ---------- Fil d'Ariane : où je suis, et un clic pour remonter ----------
 // crumbs : [{ label, href }] ; le dernier est la page affichée (pas de lien).
@@ -927,7 +956,7 @@ $("#name-skip").addEventListener("click", () => saveName(""));
 // Rangés comme les Réglages du Mac : un menu à gauche, une rubrique à la fois (ses cartes), avec un en-tête
 const PREF_ICON = (d) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg>`;
 const PREFS = [
-  { id: "revisions", label: "Révisions", desc: "Ton rythme, et comment tu réponds.", cards: ["revision-card", "definitions-card"],
+  { id: "revisions", label: "Révisions", desc: "Ton rythme, comment tu réponds, et la voix qui lit les cartes.", cards: ["revision-card", "voice-card", "definitions-card"],
     icon: '<rect x="4" y="6" width="12" height="15" rx="2"/><path d="M8 3h10a2 2 0 0 1 2 2v12"/>' },
   { id: "claude", label: "App Claude", desc: "Branche Claude pour créer quiz et flashcards à partir de tes cours.",
     cards: ["claude-app-card", "settings-key-form", "local-ai"], icon: '<path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z"/>' },
@@ -962,6 +991,7 @@ function showPref(id) {
   const all = [PROFILE_PREF, ...PREFS].flatMap((x) => x.cards);
   all.forEach((card) => $(`#${card}`)?.classList.toggle("pref-off", !pref.cards.includes(card)));
   if (pref.id === "clavier") $("#keys-card").open = true;
+  if (pref.id === "revisions") renderVoiceSettings();
   // Le titre d'une carte qui répète celui de la rubrique (« Révisions » dans Révisions) est masqué
   pref.cards.forEach((card) => {
     const h2 = $(`#${card}`)?.querySelector("h2, summary h2");
@@ -3564,6 +3594,85 @@ function showItem() {
   else if (after === "question") { $("#flashcard").classList.remove("dealing"); slideIn($("#card-stage")); }
 }
 
+// ---------- La voix : lire les cartes à voix haute ----------
+// La voix de l'ordinateur ou du téléphone (gratuite, sans Internet). Dans l'app, si la page n'a pas accès aux voix,
+// c'est Pirouette qui fait parler le Mac (say) ou Windows. Réglages (voix, vitesse) gardés sur cet appareil.
+const voice = {
+  on: localPref("pirouette.voice") === "1",
+  name: localPref("pirouette.voiceName") || "",
+  rate: Number(localPref("pirouette.voiceRate")) || 1,
+  viaServer: false,
+};
+function localPref(key, value) {
+  try {
+    if (value === undefined) return localStorage.getItem(key);
+    localStorage.setItem(key, value);
+  } catch { /* stockage indisponible : réglage pour cette fois */ }
+  return value;
+}
+const webVoices = () => ("speechSynthesis" in window ? speechSynthesis.getVoices() : []).filter((v) => /^fr/i.test(v.lang));
+// Sans choix : une voix « améliorée » / « premium » si l'ordinateur en a une, sinon la française par défaut
+function pickVoice(voices) {
+  return voices.find((v) => v.name === voice.name)
+    || voices.find((v) => /premium|enhanced|amélior|natural|neural/i.test(v.name) && /fr-FR/i.test(v.lang))
+    || voices.find((v) => /fr-FR/i.test(v.lang) && v.default) || voices.find((v) => /fr-FR/i.test(v.lang)) || voices[0];
+}
+function speak(text) {
+  stopSpeaking();
+  const clean = plainMd(text || "").replace(/\s+/g, " ").trim();
+  if (!clean) return;
+  const voices = webVoices();
+  if (voices.length) {
+    const u = new SpeechSynthesisUtterance(clean);
+    u.voice = pickVoice(voices);
+    u.lang = u.voice?.lang || "fr-FR";
+    u.rate = voice.rate;
+    speechSynthesis.speak(u);
+    return;
+  }
+  voice.viaServer = true;
+  api("/api/speak", jsonBody("POST", { text: clean, rate: voice.rate })).catch(() => {});
+}
+function stopSpeaking() {
+  if ("speechSynthesis" in window) speechSynthesis.cancel();
+  if (voice.viaServer) { voice.viaServer = false; api("/api/speak", { method: "DELETE" }).catch(() => {}); }
+}
+// La face visible de la carte en cours : la question, ou la réponse une fois retournée
+function speakCard() {
+  const s = state.session, item = s?.items[s.index];
+  if (item?.kind !== "card") return;
+  speak(s.flipped ? item.card.back : item.card.front);
+}
+function setVoiceOn(on) {
+  voice.on = on;
+  localPref("pirouette.voice", on ? "1" : "0");
+  renderVoiceButton();
+  if (on) speakCard(); else stopSpeaking();
+}
+function renderVoiceButton() {
+  const b = $("#voice-toggle");
+  b.classList.toggle("on", voice.on);
+  b.setAttribute("aria-pressed", String(voice.on));
+  b.title = voice.on ? "Lecture à voix haute activée (L : relire la carte)" : "Lire les cartes à voix haute (L)";
+}
+// Le bouton rend la main tout de suite : sinon Espace (retourner la carte) le recliquerait
+$("#voice-toggle").addEventListener("click", (e) => { setVoiceOn(!voice.on); e.currentTarget.blur(); $("#flashcard").focus(); });
+renderVoiceButton();
+// Réglages : la voix et la vitesse
+function renderVoiceSettings() {
+  const voices = webVoices();
+  $("#voice-name-row").hidden = !voices.length;
+  const chosen = pickVoice(voices);
+  $("#voice-name").innerHTML = voices.map((v) => `<option value="${escapeHtml(v.name)}"${v === chosen ? " selected" : ""}>${escapeHtml(v.name)}${/fr-FR/i.test(v.lang) ? "" : ` (${escapeHtml(v.lang)})`}</option>`).join("");
+  $("#voice-rate").value = String(voice.rate);
+  $("#voice-on").checked = voice.on;
+}
+if ("speechSynthesis" in window) speechSynthesis.addEventListener?.("voiceschanged", renderVoiceSettings);
+$("#voice-on").addEventListener("change", (e) => setVoiceOn(e.target.checked));
+$("#voice-name").addEventListener("change", (e) => { voice.name = localPref("pirouette.voiceName", e.target.value); });
+$("#voice-rate").addEventListener("input", (e) => { voice.rate = Number(localPref("pirouette.voiceRate", e.target.value)); });
+$("#voice-test").addEventListener("click", () => speak("Qu'est-ce que la pulpe dentaire ? Un tissu conjonctif lâche, au cœur de la dent."));
+
 function showCard() {
   const s = state.session;
   const { card } = s.items[s.index];
@@ -3584,6 +3693,7 @@ function showCard() {
   $("#ratings").classList.toggle("typing", typing);  // en mode Écrire, on répond d'abord (pas de « Retourner »)
   renderKeyHints();
   (typing ? $("#typed-answer") : $("#flashcard")).focus();
+  if (voice.on) speakCard();
 }
 
 // ---- La carte à collectionner : rareté (d'après ta progression), numéro, pile, tirage ----
@@ -3751,6 +3861,7 @@ function flipCard() {
   if (cardMode() === "type" && !s.checked) return checkTyped();
   s.flipped = !s.flipped;
   $("#flashcard").classList.toggle("flipped", s.flipped);
+  if (voice.on) speakCard();
   if (!s.revealed) {
     s.revealed = true;
     showRatings();
@@ -3800,6 +3911,7 @@ function checkTyped() {
   s.flipped = s.revealed = true;
   $("#typed-answer").disabled = true;
   $("#flashcard").classList.add("flipped");
+  if (voice.on) speakCard();
   $("#card-back").innerHTML = highlightFound(card.back, found);
   const box = $("#typed-result");
   box.className = `typed-result ${verdict}`;
@@ -5163,6 +5275,24 @@ function showFigure(id, q, courseId) {
 
 document.querySelectorAll(".q-figure").forEach((img) => img.addEventListener("click", () => img.classList.toggle("zoomed")));
 
+// Les pastilles des questions : juste / faux pour celles passées, la question en cours entourée. Au-delà de 60
+// questions, elles deviendraient illisibles : la barre seule suffit.
+function renderTrail() {
+  const trail = $("#quiz-trail"), total = state.questions.length;
+  trail.hidden = total > 60 || total < 2;
+  if (trail.hidden) return;
+  if (trail.children.length !== total) trail.innerHTML = "<i></i>".repeat(total);
+  [...trail.children].forEach((dot, i) => {
+    const r = i < state.index ? state.results.find((x) => x.question === state.questions[i]) : null;
+    dot.className = i === state.index && !state.answered ? "now" : r ? (r.correct ? "ok" : "ko") : "";
+  });
+}
+
+function markTrail(correct) {
+  const dot = $("#quiz-trail").children[state.index];
+  if (dot) dot.className = correct ? "ok pop" : "ko pop";
+}
+
 function renderQuestion() {
   const q = state.questions[state.index];
   const total = state.questions.length;
@@ -5170,7 +5300,8 @@ function renderQuestion() {
   $("#question-tools").hidden = true;
   $("#quiz-counter").textContent = `${state.index + 1} / ${total}`;
   if (state.index > 0) $("#quiz-note").hidden = true;
-  $("#progress-bar").style.width = `${(state.index / total) * 100}%`;
+  $("#progress-bar").style.width = `${Math.max(state.index / total, .02) * 100}%`;
+  renderTrail();
   $("#question-type").textContent = (TYPE_LABELS[q.type] || q.type) + (q.kind === "cours" ? " · Question de cours" : "")
     + (q.manual ? " · Ta question" : "");
   $("#question-text").textContent = q.question;
@@ -5255,6 +5386,7 @@ const KEY_ACTIONS = [
   { id: "previous", group: "Répondre", label: "Question précédente", key: "ArrowLeft" },
   { id: "next", group: "Répondre", label: "Question suivante", key: "ArrowRight" },
   { id: "flip", group: "Flashcards", label: "Retourner la carte", key: " " },
+  { id: "speak", group: "Flashcards", label: "Lire la carte à voix haute", key: "l" },
   { id: "again", group: "Flashcards", label: "Je ne savais pas", key: "ArrowLeft" },
   { id: "good", group: "Flashcards", label: "Je savais", key: "ArrowRight" },
   { id: "quit", group: "Partout", label: "Quitter (quiz, révision, partiel)", key: "Escape" },
@@ -5959,14 +6091,14 @@ $("#prepare-local-off").addEventListener("click", (e) => {
 const ONBOARD_VERSION = "3";
 const ob = { steps: [], i: 0, info: {} };
 const OB_STEPS = {
-  card: { label: "Essayer une carte", min: "20 s" },
-  name: { label: "Ton prénom" },
-  semester: { label: "Ton semestre et tes partiels", min: "1 min" },
-  course: { label: "Ton premier cours", min: "1 min" },
-  update: { label: "Quand ton cours change", min: "10 s" },
-  claude: { label: "Brancher Claude" },
-  friends: { label: "Retrouver tes amis" },
-  phone: { label: "Ton téléphone" },
+  card: { label: "Essayer une carte", min: "20 s", ic: "🃏" },
+  name: { label: "Ton prénom", ic: "👋" },
+  semester: { label: "Ton semestre et tes partiels", min: "1 min", ic: "📅" },
+  course: { label: "Ton premier cours", min: "1 min", ic: "📄" },
+  update: { label: "Quand ton cours change", min: "10 s", ic: "🔄" },
+  claude: { label: "Brancher Claude", ic: "✨" },
+  friends: { label: "Retrouver tes amis", ic: "👥" },
+  phone: { label: "Ton téléphone", ic: "📱" },
 };
 // Étapes à montrer à chaque fois (rien à « avoir déjà fait ») : l'essai d'une carte, les nouvelles versions d'un cours
 const OB_INFO = new Set(["card", "update"]);
@@ -5994,15 +6126,21 @@ function obNext(markDone = true) {
 }
 function drawOnboard() {
   const stage = $("#ob-stage");
-  $("#ob-progress").innerHTML = ob.i < 0 ? "" : ob.steps.map((k, j) => `<i class="${j < ob.i || ob.done.has(k) ? "on" : j === ob.i ? "now" : ""}"></i>`).join("");
+  // Segments façon « stories » : faits pleins, celui en cours à moitié ; les mêmes éléments d'un écran à l'autre,
+  // pour que le remplissage glisse au lieu de sauter
+  const bar = $("#ob-progress");
+  if (bar.children.length !== ob.steps.length) bar.innerHTML = ob.steps.map(() => "<i></i>").join("");
+  bar.hidden = ob.i < 0;
+  [...bar.children].forEach((seg, j) => seg.style.setProperty("--f",
+    j < ob.i || (ob.done.has(ob.steps[j]) && j !== ob.i) ? "100%" : j === ob.i ? "45%" : "0%"));
   const later = `<button class="ob-later" type="button" data-ob="later">Plus tard</button>`;
-  if (ob.i < 0) {  // la bienvenue : la couleur de l'app à gauche, la liste à droite
-    stage.innerHTML = obScreen(`<div class="ob-hero"><div class="ob-icon">${APP_ICON_SVG}</div><h1>Bienvenue dans Pirouette</h1>
-        <p>Tes cours deviennent des quiz et des flashcards, et Pirouette t'aide à tout revoir avant les partiels.
-        Quelques petites choses et c'est prêt : compte trois minutes.</p></div>
-      <div class="ob-list"><ol>${ob.steps.map((k) => `<li class="${ob.done.has(k) && !OB_INFO.has(k) ? "done" : ""}"><i>${ob.done.has(k) && !OB_INFO.has(k) ? "✓" : ""}</i>
-        <span>${OB_STEPS[k].label}</span>${OB_STEPS[k].min ? `<small>${OB_STEPS[k].min}</small>` : ""}</li>`).join("")}</ol></div>`,
-      `<button class="primary" type="button" data-ob="start">Commencer</button>`, "", "ob-welcome");
+  if (ob.i < 0) {  // la bienvenue : l'icône, une phrase, trois cartes qui s'étalent, et le chemin des étapes en pictos
+    stage.innerHTML = obScreen(`<div class="ob-icon ob-hello-ic">${APP_ICON_SVG}</div>
+      <h1 class="ob-hello">Bienvenue dans Pirouette</h1>
+      <p>Tes cours deviennent des quiz et des flashcards, et Pirouette t'aide à tout revoir avant les partiels. Trois minutes et c'est prêt.</p>
+      <div class="ob-fan" aria-hidden="true"><span>Qu'est-ce que la pulpe dentaire ?</span><span>Combien d'observations pour invalider une loi ?</span><span>Définis l'hypothèse théorique</span></div>
+      <ol class="ob-path">${ob.steps.map((k, j) => `${j ? "<i></i>" : ""}<li class="${ob.done.has(k) && !OB_INFO.has(k) ? "done" : ""}" title="${OB_STEPS[k].label}">${OB_STEPS[k].ic}</li>`).join("")}</ol>`,
+      `<button class="primary" type="button" data-ob="start">Commencer</button>`);
     return;
   }
   if (ob.i >= ob.steps.length) {
@@ -6238,6 +6376,7 @@ function sessionKeys(e) {
   if (!$("#cards-done").hidden) return;
   if (item.kind === "card") {
     if (e.target.id === "typed-answer") return;
+    if (isKey(e, "speak")) { e.preventDefault(); return speakCard(); }
     const flip = isKey(e, "flip") || (isKey(e, "validate") && !s.revealed);
     if (flip && !e.target.closest?.("button")) { e.preventDefault(); return flipCard(); }
     // Les flèches et 1 / 2 marchent toujours, en plus des touches réglées
@@ -6358,7 +6497,7 @@ function validateShort(q) {
   $("#validate-btn").hidden = true;
   $("#dunno-btn").hidden = true;
   // La réponse attendue et l'explication sont déjà affichées : on passe directement à la suite.
-  const selfGrade = (correct) => { saveAnswer(q, correct); state.results.push({ question: q, given, correct }); next(); };
+  const selfGrade = (correct) => { saveAnswer(q, correct); state.results.push({ question: q, given, correct }); markTrail(correct); next(); };
   $("#self-right").onclick = () => selfGrade(true);
   $("#self-wrong").onclick = () => selfGrade(false);
 }
@@ -6377,7 +6516,7 @@ function record(q, given, correct) {
   saveAnswer(q, correct);
   state.answered = true;
   showReportButton(q, given);
-  state.results.push({ question: q, given, correct });
+  state.results.push({ question: q, given, correct }); markTrail(correct);
   const fb = $("#feedback");
   ringAnswer(correct);
   fb.className = `feedback ${correct ? "ok" : "ko"}`;

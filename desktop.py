@@ -83,6 +83,28 @@ def start_server(port: int):
     return server
 
 
+def splash_html(error: str = "") -> str:
+    """L'écran affiché pendant le démarrage : l'icône de Pirouette qui respire, aux couleurs de l'app (clair ou sombre)."""
+    from html import escape
+
+    try:
+        import app
+
+        icon = (Path(app.__file__).parent / "static" / "brand" / "icon.svg").read_text(encoding="utf-8")
+    except OSError:
+        icon = ""
+    note = f'<p class="err">{escape(error)}</p>' if error else ""
+    return f"""<!doctype html><html lang="fr"><head><meta charset="utf-8"><style>
+html, body {{ margin: 0; height: 100%; background: #FAF8F3; color: #86868B; font: 14px -apple-system, "Segoe UI", sans-serif; }}
+@media (prefers-color-scheme: dark) {{ html, body {{ background: #1C1A18; }} }}
+body {{ display: grid; place-items: center; }}
+.ic {{ width: 84px; height: 84px; animation: breathe 1.6s ease-in-out infinite; filter: drop-shadow(0 14px 22px rgba(120, 50, 20, .3)); }}
+.ic svg {{ width: 100%; height: 100%; display: block; }}
+.err {{ max-width: 340px; text-align: center; margin-top: 18px; }}
+@keyframes breathe {{ 50% {{ transform: scale(1.06); }} }}
+</style></head><body><div><div class="ic">{icon}</div>{note}</div></body></html>"""
+
+
 class DesktopApi:
     """Fonctions appelables depuis l'interface (window.pywebview.api.*).
 
@@ -244,10 +266,10 @@ def main() -> None:
     if "--server-only" not in sys.argv:  # (le mode serveur seul écrit son adresse sur la vraie sortie standard)
         quiet_streams(Path(os.environ["QUIZZ_DATA_DIR"]))
     port = free_port()
-    server = start_server(port)
     url = f"http://127.0.0.1:{port}/"
 
     if "--server-only" in sys.argv:
+        start_server(port)
         out = std_stream("stdout")
         out.write((json.dumps({"url": url, "data_dir": os.environ["QUIZZ_DATA_DIR"]}) + "\n").encode())
         out.flush()
@@ -258,35 +280,51 @@ def main() -> None:
             pass
         return
 
-    from app import backup, updater
-    from app.main import store
-
-    try:
-        updater.resume_pending()  # une mise à jour téléchargée attend encore : elle s'installera à la fermeture
-    except Exception as exc:  # une mise à jour qui coince ne doit pas empêcher Pirouette de s'ouvrir
-        print(f"Mise à jour en attente : {exc!r}", file=sys.stderr)
-    refresh_claude_link()
-    try:
-        store.merge_chapter_quizzes()  # des quiz sur les mêmes chapitres : un seul, sans questions en double
-    except Exception:
-        pass
-    saving = threading.Thread(target=backup.run_if_due, args=(store,), daemon=True)  # sauvegarde automatique
-    saving.start()
-
     import webview
 
-    webview.create_window(
-        "Pirouette", url, js_api=DesktopApi(),
+    # La fenêtre s'ouvre tout de suite, sur un petit écran Pirouette ; le serveur démarre et les vérifications se
+    # font derrière (voir boot), puis la fenêtre charge l'app. Avant, tout se faisait avant d'afficher quoi que ce soit.
+    window = webview.create_window(
+        "Pirouette", html=splash_html(), js_api=DesktopApi(),
         width=1180, height=860, min_size=(420, 560),
         background_color="#FAF8F3",
         text_select=True,  # indispensable pour sélectionner un mot et demander sa définition
     )
+    started: dict = {}
+
+    def boot() -> None:
+        try:
+            started["server"] = start_server(port)
+        except Exception as exc:  # le serveur ne démarre pas : on le dit dans la fenêtre au lieu de rester sur l'attente
+            window.load_html(splash_html(f"Pirouette n'a pas pu démarrer : {exc}. Quitte-la et rouvre-la."))
+            return
+        from app import backup, updater
+        from app.main import store
+
+        try:
+            updater.resume_pending()  # une mise à jour téléchargée attend encore : elle s'installera à la fermeture
+        except Exception as exc:  # une mise à jour qui coince ne doit pas empêcher Pirouette de s'ouvrir
+            print(f"Mise à jour en attente : {exc!r}", file=sys.stderr)
+        try:
+            store.merge_chapter_quizzes()  # des quiz sur les mêmes chapitres : un seul, sans questions en double
+        except Exception:
+            pass
+        window.load_url(url)
+        # Après l'ouverture, en fond : le chemin de l'app Claude et la sauvegarde automatique
+        refresh_claude_link()
+        started["saving"] = threading.Thread(target=backup.run_if_due, args=(store,), daemon=True)
+        started["saving"].start()
+
     # La barre des menus (« Rechercher une mise à jour… ») est celle du Mac ; sous Windows, tout passe par Réglages.
-    webview.start(menu=app_menu() if sys.platform == "darwin" else [])
-    server.should_exit = True
+    webview.start(boot, menu=app_menu() if sys.platform == "darwin" else [])
+    server = started.get("server")
+    if server is not None:
+        server.should_exit = True
+    saving = started.get("saving")
     # Fenêtre fermée : on s'arrête pour de bon. Sinon Python attend ses tâches de fond (une création de quiz, une
     # requête en cours…) et l'app restait ouverte sans fenêtre, bloquée, empêchant aussi la mise à jour de s'installer.
-    saving.join(timeout=15)  # une sauvegarde en cours se termine d'abord
+    if saving is not None:
+        saving.join(timeout=15)  # une sauvegarde en cours se termine d'abord
     os._exit(0)
 
 

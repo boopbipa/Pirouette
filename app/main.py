@@ -630,6 +630,37 @@ async def delete_course(course_id: str) -> dict:
     return {"deleted": course_id}
 
 
+class SpeakIn(BaseModel):
+    text: str
+    rate: float = 1.0
+
+
+_speech: dict = {}
+
+
+@app.post("/api/speak")
+async def speak(body: SpeakIn) -> dict:
+    """Lit un texte avec la voix de l'ordinateur (quand la page n'a pas accès aux voix) : say sur Mac, la synthèse
+    vocale de Windows sinon. Une seule lecture à la fois : la nouvelle coupe la précédente."""
+    from . import speech
+
+    _stop_speech()
+    _speech["proc"] = await run_in_threadpool(speech.start, body.text[:4000], body.rate)
+    return {"speaking": _speech["proc"] is not None}
+
+
+@app.delete("/api/speak")
+async def stop_speak() -> dict:
+    _stop_speech()
+    return {"speaking": False}
+
+
+def _stop_speech() -> None:
+    proc = _speech.pop("proc", None)
+    if proc is not None and proc.poll() is None:
+        proc.kill()
+
+
 @app.get("/api/ocr")
 async def ocr_status() -> dict:
     """Lecture des PDF scannés possible sur cet ordinateur ?"""

@@ -25,6 +25,7 @@
   <header class="topbar">
     <a href="#/" class="brand"><span class="app-icon"><svg viewBox="0 0 100 100" aria-hidden="true"><use href="#app-icon"/></svg><span class="beta-badge">bêta</span></span><span class="brand-name">Pirouette</span></a>
     <nav class="nav-pill" aria-label="Menu">
+      <span class="nav-glider" aria-hidden="true"></span>
       <a href="#/cours" data-nav="cours">Matières</a>
       <a href="#/defis" data-nav="defis" hidden>Social<span class="nav-badge" id="social-badge" hidden></span></a>
       <a href="#/reglages" data-nav="reglages">Réglages</a>
@@ -566,6 +567,25 @@
           <input type="number" id="quiz-size" min="0" max="50" value="10">
         </div>
         <p class="status" id="revision-status" hidden></p>
+      </div>
+
+      <div class="card" id="voice-card">
+        <h2>La voix</h2>
+        <label class="toggle-row first">
+          <input type="checkbox" id="voice-on">
+          <span><strong>Lire les flashcards à voix haute</strong>
+            <small class="muted">La question, puis la réponse quand tu retournes la carte. Pendant une séance : le haut-parleur en haut, ou la touche L pour relire.</small></span>
+        </label>
+        <div class="field inline-field" id="voice-name-row">
+          <label for="voice-name">Voix</label>
+          <select id="voice-name" class="chip"></select>
+        </div>
+        <div class="field inline-field">
+          <label for="voice-rate">Vitesse</label>
+          <input type="range" id="voice-rate" min="0.6" max="1.6" step="0.1" value="1">
+        </div>
+        <div class="inline-row"><button class="ghost small" type="button" id="voice-test">Écouter un exemple</button></div>
+        <p class="muted small-text">Des voix plus naturelles : sur Mac, Réglages Système → Accessibilité → Contenu énoncé → Voix du système → Gérer les voix, puis une voix française « améliorée » ou « premium » ; sur Windows, Paramètres → Heure et langue → Voix.</p>
       </div>
 
       <div class="card" id="theme-card">
@@ -1157,6 +1177,8 @@
         <p class="muted small-text session-origin" id="session-origin"></p>
         <div class="session-tools">
           <button class="ghost small" type="button" id="session-prev" title="Revenir à la carte ou la question d'avant, et changer ta réponse" hidden>← Précédent</button>
+          <button class="icon voice-toggle" type="button" id="voice-toggle" aria-pressed="false" aria-label="Lire les cartes à voix haute">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z"/><path class="wave" d="M15.5 9a4 4 0 0 1 0 6"/><path class="wave" d="M18 6.5a7.5 7.5 0 0 1 0 11"/><path class="mute" d="M16 9.5l5 5M21 9.5l-5 5"/></svg></button>
           <div class="filters mini" id="session-mode" role="radiogroup" aria-label="Façon de réviser les cartes">
             <button type="button" role="radio" data-card-mode="flip">Retourner</button>
             <button type="button" role="radio" data-card-mode="type">Écrire</button>
@@ -1293,7 +1315,9 @@
         <span class="quiz-head-pills"><span id="quiz-timer" class="pill quiz-timer" hidden></span>
           <span id="quiz-counter" class="pill"></span></span>
       </div>
-      <div class="progress"><div id="progress-bar"></div></div>
+      <div class="progress quiz-progress"><div id="progress-bar"></div></div>
+      <!-- Une pastille par question : verte si c'est juste, rouge sinon, entourée pour celle en cours -->
+      <div class="quiz-trail" id="quiz-trail" aria-hidden="true"></div>
       <p class="status" id="quiz-note" hidden></p>
       <p class="quiz-draw" id="quiz-draw" hidden></p>
       <div class="card question-card">

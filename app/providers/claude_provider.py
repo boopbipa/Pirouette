@@ -6,8 +6,6 @@ import json
 import os
 from contextlib import asynccontextmanager
 
-import anthropic
-
 from ..quiz import SYSTEM_PROMPT, QuizOptions, build_user_prompt, quiz_schema
 from ..revision import CARDS_SCHEMA, CARDS_SYSTEM, build_cards_prompt
 from .base import ProviderError, QuotaError
@@ -32,7 +30,7 @@ async def check_key() -> str:
     if not is_configured():
         raise ProviderError("Aucune clé API enregistrée.")
     async with _api_errors(None):
-        model = await anthropic.AsyncAnthropic().models.retrieve(default_model())
+        model = await _sdk().AsyncAnthropic().models.retrieve(default_model())
     return model.display_name
 
 
@@ -54,7 +52,7 @@ async def run(course_text: str, system: str, schema: dict, prompt: str, model: s
 
     async with _api_errors(model):
         # Streaming : évite les timeouts HTTP sur les longs cours / longues réponses.
-        async with anthropic.AsyncAnthropic().beta.messages.stream(
+        async with _sdk().AsyncAnthropic().beta.messages.stream(
             model=model or default_model(),
             max_tokens=64000,
             thinking={"type": "adaptive"},
@@ -82,7 +80,7 @@ async def ask(system: str, schema: dict, prompt: str, model: str | None = None) 
     if not is_configured():
         raise ProviderError("Clé API manquante : ajoute ta clé Claude dans Réglages.")
     async with _api_errors(model):
-        message = await anthropic.AsyncAnthropic().beta.messages.create(
+        message = await _sdk().AsyncAnthropic().beta.messages.create(
             model=model or default_model(),
             max_tokens=16000,
             thinking={"type": "adaptive"},
@@ -107,8 +105,17 @@ def _parse(message) -> dict:
         raise ProviderError("Réponse de Claude illisible. Réessaie.") from exc
 
 
+def _sdk():
+    """La bibliothèque d'Anthropic, chargée au premier appel seulement : elle pèse à elle seule les deux tiers du
+    chargement de Pirouette, et ne sert qu'avec une clé API (l'app Claude, elle, passe par MCP)."""
+    import anthropic
+
+    return anthropic
+
+
 @asynccontextmanager
 async def _api_errors(model: str | None):
+    anthropic = _sdk()
     try:
         yield
     except anthropic.AuthenticationError as exc:
