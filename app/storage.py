@@ -526,13 +526,14 @@ class Store:
         shutil.rmtree(path)
 
     def add_file(self, course_id: str, filename: str, data: bytes, text: str, chapters: list[dict] | None = None,
-                 extract_version: int = 1, chapters_by: str = "auto") -> str:
-        """Ajoute un fichier au cours, ou remplace celui qui porte le même nom. Renvoie "added" ou "updated"."""
+                 extract_version: int = 1, chapters_by: str = "auto", replace_id: str | None = None) -> str:
+        """Ajoute un fichier au cours, ou remplace celui qui porte le même nom (ou `replace_id` : une nouvelle version
+        déposée sous un autre nom, qui prend alors ce nom). Renvoie "added" ou "updated"."""
         course = self.get_course(course_id)
         files_dir = self._course_dir(course_id) / "files"
         files_dir.mkdir(exist_ok=True)
         name = Path(filename).name or "fichier"
-        existing = next((f for f in course["files"] if f["name"].lower() == name.lower()), None)
+        existing = next((f for f in course["files"] if (f["id"] == replace_id if replace_id else f["name"].lower() == name.lower())), None)
         entry = existing or {"id": _new_id(8), "name": name, "added_at": _now(), "revisions": 0}
         # Nouvelle version : le texte de l'ancienne est gardé pour repérer les passages nouveaux (voir news.py).
         # S'il en reste un plus ancien (nouveautés pas encore traitées), c'est lui la référence.

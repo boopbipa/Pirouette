@@ -670,11 +670,13 @@ async def ocr_status() -> dict:
 
 
 @app.post("/api/courses/{course_id}/files")
-async def upload_files(course_id: str, files: list[UploadFile] = File(...), stream: bool = False):
-    """`stream` : la réponse suit la lecture en NDJSON (page lue sur pages, par fichier), puis le résultat."""
+async def upload_files(course_id: str, files: list[UploadFile] = File(...), stream: bool = False, similar: bool = False):
+    """`stream` : la réponse suit la lecture en NDJSON (page lue sur pages, par fichier), puis le résultat.
+    `similar` : un fichier nouveau dont le texte ressemble à un cours de la matière n'est pas ajouté tout de suite :
+    il est mis de côté (« pending ») et l'interface demande s'il remplace ce cours (voir resolve_pending)."""
     store.get_course(course_id)
     if not stream:
-        return await _import_files(course_id, files)
+        return await _import_files(course_id, files, similar=similar)
     loop = asyncio.get_running_loop()
     queue: asyncio.Queue = asyncio.Queue()
 
@@ -687,7 +689,7 @@ async def upload_files(course_id: str, files: list[UploadFile] = File(...), stre
 
     async def run() -> None:
         try:
-            await queue.put({"type": "done", "result": await _import_files(course_id, files, on_page)})
+            await queue.put({"type": "done", "result": await _import_files(course_id, files, on_page, similar)})
         except HTTPException as exc:
             await queue.put({"type": "error", "message": exc.detail})
         except Exception as exc:
@@ -705,7 +707,7 @@ async def upload_files(course_id: str, files: list[UploadFile] = File(...), stre
     return StreamingResponse(events(), media_type="application/x-ndjson")
 
 
-async def _import_files(course_id: str, files: list[UploadFile], on_page=None) -> dict:
+async def _import_files(course_id: str, files: list[UploadFile], on_page=None, similar: bool = False) -> dict:
     extracted = []
     # On lit tout avant d'enregistrer : un fichier illisible n'entraîne pas d'import partiel.
     for index, upload in enumerate(files):
@@ -727,14 +729,61 @@ async def _import_files(course_id: str, files: list[UploadFile], on_page=None) -
     # Un nouveau fichier reste d'un seul bloc : Pirouette propose de le découper (l'utilisateur choisit). Une nouvelle
     # version garde le choix d'avant : pas de chapitres s'il n'y en avait pas, sinon le repérage automatique.
     known = {f["name"].lower(): f for f in store.get_course(course_id)["files"]}
-    results = {}
+    results, pending = {}, []
     for name, data, text in extracted:
         before = known.get(Path(name).name.lower())
-        whole = before is None or before.get("chapters_by") in UNSPLIT
-        results[name] = await run_in_threadpool(
-            store.add_file, course_id, name, data, text, [] if whole else detect_chapters(text), EXTRACT_VERSION,
-            chapters_by=(before or {}).get("chapters_by", "none") if whole else "auto")
-    return {"results": results, "course": store.get_course(course_id)}
+        if before is None and similar:
+            match = await run_in_threadpool(_similar_file, course_id, text)
+            if match:
+                pending.append(_set_aside(course_id, name, data, text, *match))
+                continue
+        results[name] = await run_in_threadpool(_save_file, course_id, name, data, text, before)
+    return {"results": results, "pending": pending, "course": store.get_course(course_id)}
+
+
+def _save_file(course_id: str, name: str, data: bytes, text: str, before: dict | None) -> str:
+    whole = before is None or before.get("chapters_by") in UNSPLIT
+    return store.add_file(course_id, name, data, text, [] if whole else detect_chapters(text), EXTRACT_VERSION,
+                          chapters_by=(before or {}).get("chapters_by", "none") if whole else "auto",
+                          replace_id=before["id"] if before else None)
+
+
+def _similar_file(course_id: str, text: str) -> tuple[dict, float] | None:
+    """Le cours de la matière dont ce texte semble être une nouvelle version, et la part de texte en commun."""
+    from .similar import best_match
+
+    files = store.get_course(course_id)["files"]
+    found = best_match(text, [(f["id"], store.file_text(course_id, f["id"])) for f in files])
+    return (next(f for f in files if f["id"] == found[0]), found[1]) if found else None
+
+
+# Fichiers mis de côté le temps que l'étudiant dise s'ils remplacent un cours (une heure au plus, en mémoire)
+_pending_files: dict[str, dict] = {}
+
+
+def _set_aside(course_id: str, name: str, data: bytes, text: str, target: dict, score: float) -> dict:
+    now = datetime.now()
+    for token in [t for t, p in _pending_files.items() if now - p["at"] > timedelta(hours=1)]:
+        del _pending_files[token]
+    token = uuid.uuid4().hex
+    _pending_files[token] = {"course_id": course_id, "name": name, "data": data, "text": text, "target": target["id"], "at": now}
+    return {"token": token, "name": name, "target": {"id": target["id"], "name": target["name"]}, "score": round(score, 2)}
+
+
+class PendingIn(BaseModel):
+    replace: bool
+
+
+@app.post("/api/courses/{course_id}/files/pending/{token}")
+async def resolve_pending(course_id: str, token: str, body: PendingIn) -> dict:
+    """Le fichier mis de côté remplace le cours qui lui ressemble (nouvelle version, qui prend son nouveau nom), ou
+    s'ajoute à côté."""
+    item = _pending_files.pop(token, None)
+    if item is None or item["course_id"] != course_id:
+        raise HTTPException(404, "Ce fichier n'est plus en attente : redépose-le.")
+    before = next((f for f in store.get_course(course_id)["files"] if f["id"] == item["target"]), None) if body.replace else None
+    result = await run_in_threadpool(_save_file, course_id, item["name"], item["data"], item["text"], before)
+    return {"results": {item["name"]: result}, "course": store.get_course(course_id)}
 
 
 SCAN_MESSAGE = ("« {name} » est un scan : ses pages sont des images, sans texte à lire. "

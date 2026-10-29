@@ -916,7 +916,7 @@ $("#ask-cancel").addEventListener("click", () => $("#ask-dialog").close(""));
 // La première phrase sert de titre, la suite d'explication ; le bouton reprend le verbe de la question.
 const CONFIRM_VERBS = ["Supprimer", "Effacer", "Retirer", "Réinitialiser", "Remplacer", "Recalculer", "Rendre", "Quitter"];
 const DANGER_VERBS = ["Supprimer", "Effacer", "Retirer", "Réinitialiser"];
-function showConfirm(message, { ok, danger, notice } = {}) {
+function showConfirm(message, { ok, cancel, danger, notice } = {}) {
   const dialog = $("#confirm-dialog");
   const text = String(message);
   const cut = text.search(/[?:!.](\s|$)/);
@@ -928,6 +928,7 @@ function showConfirm(message, { ok, danger, notice } = {}) {
   const leaving = /quitter/i.test(title) ? "Quitter" : null;
   const verb = CONFIRM_VERBS.find((v) => title.startsWith(v)) || leaving;
   $("#confirm-ok").textContent = ok || (notice ? "OK" : verb || "Confirmer");
+  $("#confirm-cancel").textContent = cancel || "Annuler";
   dialog.classList.toggle("danger", danger ?? DANGER_VERBS.includes(verb));
   dialog.classList.toggle("notice", Boolean(notice));
   dialog.returnValue = "";
@@ -2748,7 +2749,7 @@ function sendFiles(url, form, onProgress) {
       }
       seen = end;
     };
-    xhr.open("POST", `${url}?stream=1`);
+    xhr.open("POST", `${url}${url.includes("?") ? "&" : "?"}stream=1`);
     xhr.upload.onprogress = (e) => e.lengthComputable && onProgress({ phase: "send", loaded: e.loaded, total: e.total });
     xhr.upload.onload = () => onProgress({ phase: "wait" });
     xhr.onprogress = read;
@@ -2810,8 +2811,18 @@ async function uploadFiles(fileList) {
   $("#start-drop").hidden = true;
   const onProgress = uploadProgress(status, files);
   try {
-    const { results, course } = await sendFiles(`/api/courses/${state.course.id}/files`, form, onProgress);
+    let { results, course, pending = [] } = await sendFiles(`/api/courses/${state.course.id}/files?similar=1`, form, onProgress);
     state.uploading = null;
+    // Un fichier nouveau qui ressemble à un cours de la matière (« CM1 v2.pdf » ≈ « CM1.pdf ») : on demande
+    for (const p of pending) {
+      status.textContent = `« ${p.name} » ressemble à « ${p.target.name} »…`;
+      const replace = await askConfirm(`Une nouvelle version de « ${p.target.name} » ? `
+        + `« ${p.name} » a ${Math.round(p.score * 100)} % de son texte en commun avec ce cours. En le remplaçant, tes quiz, `
+        + `tes cartes et ta progression restent, et Pirouette repère ce qui a changé.`, { ok: "Remplacer", cancel: "Garder les deux", danger: false });
+      const done = await api(`/api/courses/${state.course.id}/files/pending/${p.token}`, jsonBody("POST", { replace }));
+      results = { ...results, ...done.results };
+      course = done.course;
+    }
     status.textContent = "Enregistrement…";
     await refreshCourse();
     const kinds = Object.values(results);
@@ -6200,7 +6211,7 @@ function drawOnboard() {
   }
   if (step === "update") {  // une nouvelle version du même fichier remplace l'ancienne, rien n'est perdu
     stage.innerHTML = obScreen(`<h2>Ton cours change ? Redépose-le</h2>
-      <p>Le prof a mis en ligne une nouvelle version ? Dépose le fichier <b>sous le même nom</b>, dans la même matière : il remplace l'ancien.</p>
+      <p>Le prof a mis en ligne une nouvelle version ? Dépose-la dans la même matière : elle remplace l'ancienne. Même sous un autre nom, Pirouette la reconnaît et te propose de remplacer.</p>
       <div class="ob-update" aria-hidden="true">
         <span class="ob-file old">CM1.pdf<small>version 1</small></span><span class="ob-arrow">→</span>
         <span class="ob-file new">CM1.pdf<small>version 2</small></span></div>
