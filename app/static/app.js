@@ -6032,8 +6032,8 @@ function drawOnboard() {
   }
   if (step === "card") {  // « Continuer » attend sa place (invisible) jusqu'à la récompense
     stage.innerHTML = obScreen(`<h2>Essaie : retourne la carte</h2><p>Clique dessus (ou Espace). C'est comme ça qu'on révise ses flashcards.</p>
-      <button class="ob-flash" type="button" data-ob="flip" aria-label="Retourner la carte"><span class="ob-face front">Combien d'observations suffisent pour invalider une loi&nbsp;?</span>
-        <span class="ob-face back">Une seule observation contraire suffit</span></button>
+      <button class="ob-flash" type="button" data-ob="flip" aria-label="Retourner la carte"><span class="ob-face ob-front">Combien d'observations suffisent pour invalider une loi&nbsp;?</span>
+        <span class="ob-face ob-back">Une seule observation contraire suffit</span></button>
       <div class="ob-rate" hidden><button class="ghost" type="button" data-ob="rate">Je ne savais pas</button><button class="primary" type="button" data-ob="rate">Je savais</button></div>
       <div class="ob-reward" hidden><p><b>Bien joué !</b> Plus tu sais une carte, plus elle revient tard… et plus elle devient rare :</p>
         <div class="ob-rarity"><span>Nouvelle</span><span class="rare">En cours</span><span class="holo">★ Acquise</span></div></div>`,

@@ -411,7 +411,7 @@ button.small { padding: 6px 12px; font-size: 14px; }
 :root[data-theme="dark"] .tcg-glare { background: radial-gradient(circle at var(--mx) var(--my), rgba(255, 255, 255, .12), rgba(255, 255, 255, 0) 45%); }
 :root[data-theme="dark"] .tcg-art { background: radial-gradient(circle at 25% 15%, rgba(255, 255, 255, .1), transparent 55%), var(--accent-soft); }
 :root[data-theme="dark"] .flashcard.holo .tcg-art { color: #241b2e; }
-.flashcard.tcg:focus-visible .flashcard-face { outline: 2px solid var(--accent); outline-offset: 2px; }
+
 /* La pile : les cartes qui restent, face cachée */
 .tcg-pile { position: absolute; top: 14px; left: 50%; width: min(330px, 86vw); aspect-ratio: 63 / 88; transform: translateX(-50%); pointer-events: none; }
 .tcg-pile span { position: absolute; inset: 0; border-radius: 18px; border: 9px solid #2b211c;
@@ -568,7 +568,7 @@ code { font-family: "SF Mono", Menlo, monospace; font-size: .88em; background: v
 .fcard-back small { color: var(--muted); font-size: 12.5px; line-height: 1.35; }
 .fcard-back p { font-size: 15px; line-height: 1.45; }
 
-.fcard:focus-visible .fcard-face { box-shadow: 0 0 0 2px var(--text); }
+
 .fcard-mark {
   position: absolute; left: 12px; top: 10px; font-size: 12px; font-weight: 700; pointer-events: none;
   color: var(--accent-ink); z-index: 2;
@@ -2811,9 +2811,9 @@ dialog.onboard::backdrop { background: var(--bg); }
 .ob-face { position: absolute; inset: 0; display: grid; place-items: center; padding: 22px; border-radius: 22px; backface-visibility: hidden; -webkit-backface-visibility: hidden;
   font-weight: 600; font-size: 18px; line-height: 1.35; color: #1D1D1F; transition: transform .5s cubic-bezier(.2, .8, .2, 1);
   background: linear-gradient(155deg, #fff, #F4F3F0 48%, #E9E7E2); box-shadow: 0 24px 44px -24px rgba(60, 35, 20, .6), inset 0 0 0 .5px rgba(0, 0, 0, .07); }
-.ob-face.back { transform: rotateY(180deg); font-weight: 500; }
-.ob-flash.flipped .front { transform: rotateY(-180deg); }
-.ob-flash.flipped .back { transform: rotateY(0); }
+.ob-face.ob-back { transform: rotateY(180deg); font-weight: 500; }
+.ob-flash.flipped .ob-front { transform: rotateY(-180deg); }
+.ob-flash.flipped .ob-back { transform: rotateY(0); }
 .ob-flash.away { animation: ob-away .45s ease-in forwards; pointer-events: none; }
 .ob-rate { display: flex; gap: 10px; }
 .ob-reward { display: flex; flex-direction: column; align-items: center; }
@@ -2933,3 +2933,8 @@ body.focus .primary:not(:disabled):hover { box-shadow: 0 0 0 4px rgba(255, 255, 
 .ob-small { font-size: 14px; color: var(--muted); }
 @keyframes ob-new { 50% { transform: translateY(-3px); } }
 @media (prefers-reduced-motion: reduce) { .ob-file.new { animation: none; } }
+
+/* Cartes (matières, flashcards, cartes du classeur, tuto) : pas de cadre orange quand elles ont le focus — Espace
+   pour retourner une carte le faisait apparaître ; le survol et le retournement suffisent à montrer où l'on est */
+.course-card:focus-visible, .flashcard:focus-visible, .flashcard.tcg:focus-visible, .fcard:focus-visible, .gcard:focus-visible,
+.ob-flash:focus-visible, .choice:focus-visible, .today-bar:focus-visible { outline: none; }
