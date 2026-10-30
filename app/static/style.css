@@ -2457,10 +2457,17 @@ body.card-zoomed .tcg-pile, body.card-zoomed .focus-close, body.card-zoomed .day
 .feedback.ok, .feedback.ko, body.focus .feedback.ok, body.focus .feedback.ko, body.focus.day .feedback.ok, body.focus.day .feedback.ko {
   background: color-mix(in srgb, var(--fc) 13%, var(--surface));
   box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--fc) 55%, transparent), 0 14px 28px -20px color-mix(in srgb, var(--fc) 55%, transparent); }
-.feedback.ok::before, .feedback.ko::before { display: inline-flex; align-items: center; gap: 6px; margin-bottom: 8px; padding: 4px 12px;
-  border-radius: 999px; font-weight: 700; font-size: 14px; color: #FFF; background: var(--fc); }
-.feedback.ok::before { content: "✓ Juste"; }
-.feedback.ko::before { content: "✗ Faux"; }
+/* Le verdict : juste le mot en couleur (« Exact », « Pas tout à fait »…, choisi par la page), avec un point lumineux */
+.feedback.ok::before, .feedback.ko::before { display: flex; align-items: center; margin: 0 0 8px; padding: 0 0 0 20px; border-radius: 0; font-size: 20px; font-weight: 700; letter-spacing: -.01em;
+  line-height: 1.2; color: var(--fc); background: radial-gradient(circle at 6px 50%, var(--fc) 0 4.5px, color-mix(in srgb, var(--fc) 25%, transparent) 5px 8.5px, transparent 9px) no-repeat; }
+.feedback.ok::before { content: "Exact"; }
+.feedback.ko::before { content: "Raté"; }
+.feedback.ok[data-word]::before, .feedback.ko[data-word]::before { content: attr(data-word); }
+body.focus .feedback.ok::before, body.focus .feedback.ko::before { color: color-mix(in srgb, var(--fc) 75%, #fff); }
+body.focus.day .feedback.ok::before, body.focus.day .feedback.ko::before { color: var(--fc); }
+/* Réponse écrite : les mots-clés retrouvés surlignés dans la réponse attendue */
+.keywords mark { background: color-mix(in srgb, var(--right) 25%, transparent); color: inherit; border-radius: 4px; padding: 0 2px; }
+.keywords-lead { margin-top: 0; }
 
 /* Mes cours › Flashcards : les cartes ont le même visuel que pendant les révisions (plaque claire unie, crème
    « en cours », nacrée « acquise »), plus les anciens cadres argent / or / holo */

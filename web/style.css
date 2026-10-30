@@ -259,9 +259,11 @@ body.with-tabbar .toast { bottom: calc(env(safe-area-inset-bottom) + 82px); }
 .feedback.ok { --fc: var(--right); } .feedback.ko { --fc: var(--wrong); }
 .feedback.ok, .feedback.ko { background: color-mix(in srgb, var(--fc) 13%, var(--surface));
   box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--fc) 55%, transparent), 0 14px 28px -20px color-mix(in srgb, var(--fc) 55%, transparent); }
-.feedback.ok::before, .feedback.ko::before { display: inline-block; margin-bottom: 10px; padding: 4px 12px; border-radius: 999px;
-  font-weight: 700; font-size: 14px; color: #FFF; background: var(--fc); }
-.feedback.ok::before { content: "✓ Juste"; } .feedback.ko::before { content: "✗ Faux"; }
+/* Le verdict : juste le mot en couleur (« Exact », « Pas tout à fait »…), avec un point lumineux */
+.feedback.ok::before, .feedback.ko::before { display: flex; align-items: center; margin: 0 0 8px; padding: 0 0 0 20px; border-radius: 0; font-size: 20px; font-weight: 700; letter-spacing: -.01em;
+  line-height: 1.2; color: var(--fc); background: radial-gradient(circle at 6px 50%, var(--fc) 0 4.5px, color-mix(in srgb, var(--fc) 25%, transparent) 5px 8.5px, transparent 9px) no-repeat; }
+.feedback.ok::before { content: "Exact"; } .feedback.ko::before { content: "Raté"; }
+.feedback.ok[data-word]::before, .feedback.ko[data-word]::before { content: attr(data-word); }
 
 /* Réponse écrite validée : un contour vert ou rouge, qui s'efface */
 .ring-ok { --rc: var(--right); } .ring-ko { --rc: var(--wrong); }

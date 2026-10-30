@@ -3887,27 +3887,30 @@ function showRatings(suggested = null) {
 
 // ---- Mode « j'écris la réponse » : comparaison souple avec le verso ----
 const FILLER_WORDS = new Set(("le la les l un une des du de d au aux a à en et ou est sont qui que qu ce ces cette se "
-  + "sa son ses leur leurs par pour sur dans avec il elle ils elles on ne pas plus y the of and to in is").split(" "));
+  + "sa son ses leur leurs par pour sur dans avec il elle ils elles on ne pas plus y the of and to in is "
+  + "tout toute tous toutes long cours très aussi ainsi alors donc mais comme lors entre chez sans sous vers peut "
+  + "être etre fait font ont avoir c s cela ça celui celle ceux elles-mêmes même mêmes leur afin").split(" "));
 
 function answerWords(text) {
   return normalize(text).split(" ").filter((w) => w.length > 1 && !FILLER_WORDS.has(w));
 }
 const stem = (w) => w.slice(0, 6);
 
-// Part des mots importants de la réponse attendue qu'on retrouve dans la réponse écrite (au début de mot près).
+// Part des mots importants de la réponse attendue qu'on retrouve dans la réponse écrite. Deux mots vont ensemble
+// s'ils ont le même début (« fabriquent » / « fabrique ») ou si l'un commence par l'autre (« dent » / « dentine »).
+const sameWord = (a, b) => stem(a) === stem(b) || (Math.min(a.length, b.length) >= 4 && (a.startsWith(b) || b.startsWith(a)));
 function compareAnswer(given, expected) {
-  const said = new Set(answerWords(given).map(stem));
+  const said = answerWords(given);
   const wanted = [...new Set(answerWords(expected))];
   if (!wanted.length) return { score: looselyEqual(given, expected) ? 1 : 0, found: new Set() };
-  const found = new Set(wanted.filter((w) => said.has(stem(w))));
+  const found = new Set(wanted.filter((w) => said.some((x) => sameWord(w, x))));
   return { score: found.size / wanted.length, found };
 }
 
 function highlightFound(expected, found) {
-  const stems = new Set([...found].map(stem));
   return escapeHtml(expected).replace(/[\p{L}\p{N}]+/gu, (word) => {
     const key = normalize(word);
-    return key.length > 1 && stems.has(stem(key)) ? `<mark>${word}</mark>` : word;
+    return key.length > 1 && found.has(key) ? `<mark>${word}</mark>` : word;
   });
 }
 
@@ -4171,7 +4174,7 @@ document.addEventListener("keydown", (e) => {
 function sessionFeedback(q, correct, verdict = "") {
   const fb = $("#sq-feedback");
   ringAnswer(correct);
-  fb.className = `feedback ${correct ? "ok" : "ko"}`;
+  setVerdict(fb, correct);
   fb.innerHTML = `${verdict}${q.explanation ? `<p>${escapeHtml(cleanExplanation(q.explanation))}</p>` : ""}${sourceHtml(q)}${keyTermsHtml(q)}${SQ_DELETE}`;
   fb.hidden = false;
   $("#sq-validate").hidden = true;
@@ -4193,10 +4196,16 @@ function validateSessionQuestion() {
       recordSessionAnswer(item, given, true);
       return sessionFeedback(q, true, `<p><strong>Bonne réponse !</strong></p>`);
     }
+    const keys = keywordCheck(q, given);
+    if (keys?.right) {
+      recordSessionAnswer(item, given, true);
+      return sessionFeedback(q, true, keywordsNote(q, keys, true));
+    }
     ringAnswer(false);  // pas la réponse attendue (on peut quand même dire « J'avais bon »)
     const fb = $("#sq-feedback");
     fb.className = "feedback neutral";
-    fb.innerHTML = `<p><strong>Réponse attendue :</strong> ${escapeHtml(q.answer)}</p>
+    delete fb.dataset.word;
+    fb.innerHTML = `${keys ? keywordsNote(q, keys, false) : `<p><strong>Réponse attendue :</strong> ${escapeHtml(q.answer)}</p>`}
       ${q.explanation ? `<p>${escapeHtml(cleanExplanation(q.explanation))}</p>` : ""}${sourceHtml(q)}
       <div class="actions self-grade"><button class="ghost" id="sq-wrong">J'avais faux <kbd class="key-hint">${gradeKeys().again}</kbd></button>
         <button class="primary" id="sq-right">J'avais bon <kbd class="key-hint on-accent">${gradeKeys().good}</kbd></button></div>${SQ_DELETE}`;
@@ -5354,7 +5363,7 @@ function showAnswered(q, result) {
   });
   const fb = $("#feedback");
   ringAnswer(result.correct);
-  fb.className = `feedback ${result.correct ? "ok" : "ko"}`;
+  setVerdict(fb, result.correct);
   fb.innerHTML = `${q.choices?.length ? "" : `<p><strong>${result.correct ? "Bonne réponse" : "Réponse attendue"} :</strong> ${escapeHtml(q.answer)}</p>`}
     ${q.explanation ? `<p>${escapeHtml(cleanExplanation(q.explanation))}</p>` : ""}${sourceHtml(q)}${keyTermsHtml(q)}`;
   fb.hidden = false;
@@ -6449,6 +6458,32 @@ function clozeHtml(q, inputId) {
     autocomplete="off" spellcheck="false" aria-label="Mot manquant">${escapeHtml(after)}</span>`;
 }
 
+// Juste ou faux : un mot en couleur, qui change d'une réponse à l'autre (affiché par la feuille de style, ::before)
+const VERDICT_WORDS = { ok: ["Exact", "Bien vu", "C'est ça", "Juste", "Parfait"], ko: ["Raté", "Pas tout à fait", "Pas cette fois", "Faux"] };
+function setVerdict(fb, correct) {
+  fb.className = `feedback ${correct ? "ok" : "ko"}`;
+  const words = VERDICT_WORDS[correct ? "ok" : "ko"];
+  fb.dataset.word = words[Math.floor(Math.random() * words.length)];
+}
+
+// Réponse écrite (réponse courte) : les mots importants de la réponse attendue qu'on retrouve dans la sienne, sans
+// tenir compte des accents, des petits mots ni des terminaisons. Au moins 70 % : juste ; sinon on s'auto-évalue,
+// avec les mots retrouvés surlignés dans la réponse attendue.
+const KEYWORDS_RIGHT = 0.7, KEYWORDS_CLOSE = 0.4;
+// Ce qu'on affiche : la réponse attendue, les mots-clés retrouvés surlignés, et où on en est
+function keywordsNote(q, keys, right) {
+  const share = `${Math.round(keys.score * 100)} % des mots-clés`;
+  const lead = right ? `<strong>Les mots-clés y sont</strong> (${Math.round(keys.score * 100)} %).`
+    : keys.close ? `<strong>Presque</strong> : ${share} retrouvés. Compare avec la réponse attendue, puis dis-nous.`
+      : `<strong>Pas les mots attendus</strong> (${share}). Si tu l'as dit autrement, tu peux quand même dire « J'avais bon ».`;
+  return `<p class="keywords-lead">${lead}</p><p><strong>Réponse attendue :</strong> <span class="keywords">${highlightFound(q.answer, keys.found)}</span></p>`;
+}
+function keywordCheck(q, given) {
+  if (q.type !== "reponse_courte") return null;
+  const { score, found } = compareAnswer(given, q.answer);
+  return { score, found, right: score >= KEYWORDS_RIGHT, close: score >= KEYWORDS_CLOSE };
+}
+
 // Réponse tapée juste : identique à quelques détails près (accents, articles, majuscules, faute de frappe).
 function typedIsRight(given, expected) {
   if (looselyEqual(given, expected)) return true;
@@ -6491,13 +6526,16 @@ function validateShort(q) {
   if (!given) return;
   input.disabled = true;
   if (typedIsRight(given, q.answer)) return record(q, given, true);
+  const keys = keywordCheck(q, given);
+  if (keys?.right) return record(q, given, true, keywordsNote(q, keys, true));
 
   // Réponse libre : on montre la réponse attendue et l'utilisateur s'auto-évalue.
   state.answered = true;
   showReportButton(q, given);
   const fb = $("#feedback");
   fb.className = "feedback neutral";
-  fb.innerHTML = `<p><strong>Réponse attendue :</strong> ${escapeHtml(q.answer)}</p>
+  delete fb.dataset.word;
+  fb.innerHTML = `${keys ? keywordsNote(q, keys, false) : `<p><strong>Réponse attendue :</strong> ${escapeHtml(q.answer)}</p>`}
     ${q.explanation ? `<p>${escapeHtml(cleanExplanation(q.explanation))}</p>` : ""}
     ${sourceHtml(q)}
     ${keyTermsHtml(q)}
@@ -6523,18 +6561,18 @@ function saveAnswer(q, correct) {
     ...(replaces === undefined ? {} : { replaces }) }] })).catch(() => {});
 }
 
-function record(q, given, correct) {
+function record(q, given, correct, note = "") {
   saveAnswer(q, correct);
   state.answered = true;
   showReportButton(q, given);
   state.results.push({ question: q, given, correct }); markTrail(correct);
   const fb = $("#feedback");
   ringAnswer(correct);
-  fb.className = `feedback ${correct ? "ok" : "ko"}`;
+  setVerdict(fb, correct);
   // QCM et vrai/faux : la bonne réponse est déjà surlignée en vert, inutile de la répéter.
-  const verdict = !isTyped(q) ? ""
+  const verdict = note || (!isTyped(q) ? ""
     : correct ? `<p><strong>Bonne réponse !</strong>${q.type === "texte_a_trous" && given !== q.answer ? ` (${escapeHtml(q.answer)})` : ""}</p>`
-    : `<p><strong>Réponse attendue :</strong> ${escapeHtml(q.answer)}</p>`;
+    : `<p><strong>Réponse attendue :</strong> ${escapeHtml(q.answer)}</p>`);
   fb.innerHTML = `${verdict}
     ${q.explanation ? `<p>${escapeHtml(cleanExplanation(q.explanation))}</p>` : ""}
     ${sourceHtml(q)}

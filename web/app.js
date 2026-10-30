@@ -1165,6 +1165,9 @@ function ringAnswer(input, right) {
 function showFeedback(q, correct, extra = "") {
   const fb = $("#feedback");
   fb.className = `feedback ${correct === null ? "neutral" : correct ? "ok" : "ko"}`;
+  // Juste ou faux : un mot en couleur, qui change d'une réponse à l'autre (affiché par la feuille de style)
+  const words = correct ? ["Exact", "Bien vu", "C'est ça", "Juste", "Parfait"] : ["Raté", "Pas tout à fait", "Pas cette fois", "Faux"];
+  fb.dataset.word = words[Math.floor(Math.random() * words.length)];
   fb.innerHTML = `${correct === null ? `<p><b>Réponse attendue :</b> ${rich(q.answer)}</p>`
       : correct ? "" : typed(q) || q.type === "vrai_faux" ? `<p>La réponse : ${rich(q.answer)}</p>` : ""}
     ${q.explanation ? `<p class="expl">${rich(q.explanation)}</p>` : ""}${extra}`;
