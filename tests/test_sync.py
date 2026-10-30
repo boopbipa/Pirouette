@@ -57,7 +57,7 @@ def test_phone_pairs_with_the_code_and_its_reviews_come_back_to_the_mac(tmp_path
     store, course, mac = mac_with_cards(tmp_path, fake)
     s = sync.Sync(mac)
     pairing = run(s.pair())
-    assert pairing["code"][4] == "-" and "#jumeler=" in pairing["url"] and pairing["qr"].startswith("<svg")
+    assert len(pairing["code"]) == 8 and "-" not in pairing["code"] and "#jumeler=" in pairing["url"] and pairing["qr"].startswith("<svg")
     # L'iPhone : un compte anonyme, puis le code
     phone = online.Online(Store(tmp_path / "phone"), transport=httpx.MockTransport(fake.handler))
     signup = run(phone._call("POST", "/auth/v1/signup", auth=False, json={})).json()

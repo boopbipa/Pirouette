@@ -185,7 +185,7 @@ function deviceName() {
 }
 async function pair(code) {
   if (!S.session) await keepSession(await request("/auth/v1/signup", { method: "POST", auth: false, body: { data: {} } }));
-  S.owner = await request("/rest/v1/rpc/sync_pair", { method: "POST", body: { pair_code: code.trim().toUpperCase(), device_name: deviceName() } });
+  S.owner = await request("/rest/v1/rpc/sync_pair", { method: "POST", body: { pair_code: code.replace(/[^a-z0-9]/gi, "").toUpperCase(), device_name: deviceName() } });
   await kv.set("owner", S.owner);
   await syncNow({ quiet: true });
 }
@@ -453,7 +453,7 @@ function renderPair() {
   const fromLink = (location.hash.match(/jumeler=([A-Z0-9-]+)/i) || [])[1] || "";
   const ios = /iPhone|iPad/.test(navigator.userAgent) || (/Macintosh/.test(navigator.userAgent) && navigator.maxTouchPoints > 1);
   const installed = navigator.standalone || matchMedia("(display-mode: standalone)").matches;
-  const pretty = fromLink.replace(/-/g, "").replace(/^(.{4})(.+)$/, "$1-$2").toUpperCase();
+  const pretty = fromLink.replace(/[^a-z0-9]/gi, "").toUpperCase();
   app.innerHTML = `<section class="center-page pair">
     <div class="logo-tile">${logoSvg()}</div>
     <h1>Pirouette</h1>
@@ -470,7 +470,7 @@ function renderPair() {
       pour avoir Pirouette sur ton écran d'accueil.</p>` : ""}
     <form class="pair-form" id="pair-form" ${ios && !installed ? "hidden" : ""}>
       <label for="code">Le code affiché sur ton ordinateur</label>
-      <input id="code" autocomplete="one-time-code" autocapitalize="characters" spellcheck="false" placeholder="ABCD-1234" value="${esc(pretty)}" maxlength="12">
+      <input id="code" autocomplete="one-time-code" autocapitalize="characters" spellcheck="false" placeholder="ABCD1234" value="${esc(pretty)}" maxlength="12">
       <button class="primary" type="submit">Jumeler</button>
       <p class="muted small">Sur ton ordinateur : Pirouette › Réglages › Téléphone et tablette › Ajouter un téléphone ou une tablette.</p>
     </form>

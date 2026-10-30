@@ -83,26 +83,19 @@ def start_server(port: int):
     return server
 
 
+SHOWN = threading.Event()  # la fenêtre est apparue (une seule fois : un rappel tardif ne la ramène pas devant)
+
+
 def splash_html(error: str = "") -> str:
-    """L'écran affiché pendant le démarrage : l'icône de Pirouette qui respire, aux couleurs de l'app (clair ou sombre)."""
+    """Le fond de la fenêtre avant l'app (elle est alors cachée), ou le message si Pirouette ne démarre pas."""
     from html import escape
 
-    try:
-        import app
-
-        icon = (Path(app.__file__).parent / "static" / "brand" / "icon.svg").read_text(encoding="utf-8")
-    except OSError:
-        icon = ""
-    note = f'<p class="err">{escape(error)}</p>' if error else ""
+    note = f"<p>{escape(error)}</p>" if error else ""
     return f"""<!doctype html><html lang="fr"><head><meta charset="utf-8"><style>
 html, body {{ margin: 0; height: 100%; background: #FAF8F3; color: #86868B; font: 14px -apple-system, "Segoe UI", sans-serif; }}
 @media (prefers-color-scheme: dark) {{ html, body {{ background: #1C1A18; }} }}
-body {{ display: grid; place-items: center; }}
-.ic {{ width: 84px; height: 84px; animation: breathe 1.6s ease-in-out infinite; filter: drop-shadow(0 14px 22px rgba(120, 50, 20, .3)); }}
-.ic svg {{ width: 100%; height: 100%; display: block; }}
-.err {{ max-width: 340px; text-align: center; margin-top: 18px; }}
-@keyframes breathe {{ 50% {{ transform: scale(1.06); }} }}
-</style></head><body><div><div class="ic">{icon}</div>{note}</div></body></html>"""
+body {{ display: grid; place-items: center; }} p {{ max-width: 340px; text-align: center; }}
+</style></head><body>{note}</body></html>"""
 
 
 class DesktopApi:
@@ -144,10 +137,20 @@ class DesktopApi:
         except Exception:
             pass
 
+    def ready(self) -> None:
+        """La première page est affichée : la fenêtre (cachée jusque-là) apparaît."""
+        import webview
+
+        if webview.windows and not SHOWN.is_set():
+            SHOWN.set()
+            webview.windows[0].show()
+
     def set_icon(self, png_data_url: str | None = None) -> None:
         """L'icône du Dock aux couleurs choisies dans Réglages (dessinée par la page, en PNG). Sans image : l'icône
         d'origine. Seulement pendant que Pirouette est ouverte : l'icône du dossier Applications ne change pas (la
         modifier abîmerait l'app aux yeux de macOS)."""
+        if sys.platform == "win32":
+            return self._set_windows_icon(png_data_url)
         if sys.platform != "darwin":
             return
         try:
@@ -164,6 +167,39 @@ class DesktopApi:
             AppHelper.callAfter(lambda: NSApplication.sharedApplication().setApplicationIconImage_(image))
         except Exception:
             pass
+
+    def _set_windows_icon(self, png_data_url: str | None) -> None:
+        """Windows : l'icône de la fenêtre et de la barre des tâches aux couleurs choisies (un .ico tiré du PNG de la
+        page), le temps que Pirouette est ouverte. Les raccourcis (Bureau, menu Démarrer) gardent l'icône de l'app."""
+        try:
+            import base64
+            import io
+
+            import webview
+            from PIL import Image
+            from System import Func, IntPtr, Int32, Type
+            from System.Drawing import Icon
+
+            form = webview.windows[0].native
+            if png_data_url and png_data_url.startswith("data:image/png;base64,"):
+                path = Path(os.environ["QUIZZ_DATA_DIR"]) / "icone-couleur.ico"
+                image = Image.open(io.BytesIO(base64.b64decode(png_data_url.split(",", 1)[1]))).convert("RGBA")
+                image.save(path, sizes=[(16, 16), (24, 24), (32, 32), (48, 48), (64, 64), (128, 128), (256, 256)])
+                icon = Icon(str(path))
+            else:  # l'icône d'origine, celle du programme
+                from ctypes import windll
+
+                handle = windll.shell32.ExtractIconW(windll.kernel32.GetModuleHandleW(None), sys.executable, 0)
+                if not handle:
+                    return
+                icon = Icon.FromHandle(IntPtr.op_Explicit(Int32(handle))).Clone()
+                windll.user32.DestroyIcon(handle)
+
+            def apply():
+                form.Icon = icon
+            form.Invoke(Func[Type](apply))
+        except Exception as exc:
+            print(f"Icône de la fenêtre : {exc!r}", file=sys.stderr)
 
     def import_legacy_data(self) -> dict:
         """Récupère les cours d'une ancienne version (le dossier « data » à côté de run.sh)."""
@@ -282,10 +318,10 @@ def main() -> None:
 
     import webview
 
-    # La fenêtre s'ouvre tout de suite, sur un petit écran Pirouette ; le serveur démarre et les vérifications se
-    # font derrière (voir boot), puis la fenêtre charge l'app. Avant, tout se faisait avant d'afficher quoi que ce soit.
+    # La fenêtre est créée cachée : le serveur démarre derrière (voir boot), la fenêtre charge l'app, et la page la
+    # montre (DesktopApi.ready) une fois les matières affichées : pas d'écran d'attente qui clignote.
     window = webview.create_window(
-        "Pirouette", html=splash_html(), js_api=DesktopApi(),
+        "Pirouette", html=splash_html(), js_api=DesktopApi(), hidden=True,
         width=1180, height=860, min_size=(420, 560),
         background_color="#FAF8F3",
         text_select=True,  # indispensable pour sélectionner un mot et demander sa définition
@@ -297,6 +333,7 @@ def main() -> None:
             started["server"] = start_server(port)
         except Exception as exc:  # le serveur ne démarre pas : on le dit dans la fenêtre au lieu de rester sur l'attente
             window.load_html(splash_html(f"Pirouette n'a pas pu démarrer : {exc}. Quitte-la et rouvre-la."))
+            window.show()
             return
         from app import backup, updater
         from app.main import store
@@ -310,6 +347,8 @@ def main() -> None:
         except Exception:
             pass
         window.load_url(url)
+        # Filet : si la page ne dit rien (erreur de chargement), la fenêtre apparaît quand même
+        threading.Timer(8, lambda: SHOWN.is_set() or (SHOWN.set(), window.show())).start()
         # Après l'ouverture, en fond : le chemin de l'app Claude et la sauvegarde automatique
         refresh_claude_link()
         started["saving"] = threading.Thread(target=backup.run_if_due, args=(store,), daemon=True)

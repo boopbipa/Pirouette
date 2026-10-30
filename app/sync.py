@@ -164,7 +164,7 @@ class Sync:
         url = f"{WEB_URL}#jumeler={code}"
         # viewBox (sans taille fixe) : le code garde ses proportions quelle que soit sa taille à l'écran ; 4 modules de marge
         qr = segno.make(url, error="m").svg_inline(border=4, omitsize=True, dark="#1D1D1F", light="#FFFFFF")
-        return {"code": f"{code[:4]}-{code[4:]}", "url": url, "web": WEB_URL, "qr": qr}
+        return {"code": code, "url": url, "web": WEB_URL, "qr": qr}  # sans tiret : 8 lettres à taper d'affilée
 
     async def devices(self) -> list[dict]:
         me = self.online._me()

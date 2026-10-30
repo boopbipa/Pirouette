@@ -6810,7 +6810,14 @@ function formatDay(iso) {
   return day.toLocaleDateString("fr-FR", { day: "numeric", month: "short" });
 }
 
-setTimeout(route);  // une fois tout le script chargé (les dernières parties, comme Messages, en ont besoin)
+// Une fois tout le script chargé (les dernières parties, comme Messages, en ont besoin). Dans l'app, la fenêtre
+// reste cachée jusqu'à ce que la première page (les matières) soit affichée : elle apparaît d'un coup, déjà prête.
+setTimeout(() => route().finally(appReady));
+function appReady() {
+  const show = () => window.pywebview?.api?.ready?.();
+  if (window.pywebview?.api) show();
+  else window.addEventListener("pywebviewready", show, { once: true });
+}
 
 // ---------- Menus déroulants aux couleurs de l'app ----------
 // Chaque <select> est doublé d'un bouton et d'une liste stylés ; le <select> (caché) garde la valeur, les
