@@ -6222,6 +6222,7 @@ async function openOnboard({ fromSettings = false } = {}) {
   ob.done = new Set([profile.name && "name", folders.length && "semester", stats.courses && "course",
     claude.installed && "claude", online.connected && online.profile && "friends", devices.length && "phone"].filter(Boolean));
   ob.redo = new Set();  // les étapes déjà faites qu'on a choisi de refaire
+  ob.pseudoTried = false;
   ob.steps = ["card", "name", "semester", "course", "update", ...(claude.supported ? ["claude"] : []),
     ...(online.configured ? ["friends"] : []), ...(sync?.configured ? ["phone"] : [])];
   ob.i = -1;  // -1 : l'écran de bienvenue
@@ -6304,6 +6305,7 @@ function drawOnboard() {
     return;
   }
   if (step === "course") {
+    setTimeout(() => { const zone = $(".ob-drop"); if (zone) dropTarget(zone, (files) => obAddCourse([...files])); });
     stage.innerHTML = obScreen(`<h2>Dépose ton premier cours</h2><p>Un PDF, un Word, un PowerPoint, un Pages… Pirouette le découpe en chapitres et le range dans sa matière.</p>
       <button class="ob-drop" type="button" data-ob="course"><b>Glisse ton cours ici</b><small>ou clique pour le choisir</small></button>`,
       `<button class="primary" type="button" data-ob="course">Choisir mon cours</button>`, later);
@@ -6320,13 +6322,25 @@ function drawOnboard() {
     return;
   }
   if (step === "claude") {
-    stage.innerHTML = obScreen(`<h2>Branche Claude</h2><p>Claude (l'app, avec ton abonnement) lit tes cours et crée les quiz et les flashcards dans Pirouette. Un clic, puis tu quittes et rouvres l'app Claude.</p>
+    // Claude, l'IA d'Anthropic : c'est elle qui crée les quiz et les flashcards. Sans l'app sur l'ordinateur, rien à brancher.
+    const found = info.claude?.claude_found;
+    stage.innerHTML = found
+      ? obScreen(`<h2>Branche Claude</h2><p><b>C'est Claude qui crée tes quiz et tes flashcards</b> : il lit tes cours et les prépare dans Pirouette, avec ton abonnement Claude. Un clic pour les relier, puis tu quittes et rouvres l'app Claude.</p>
       <p class="ob-note" id="ob-claude-note" hidden></p>`,
-      `<button class="primary" type="button" data-ob="claude">Brancher l'app Claude</button>`, later);
+      `<button class="primary" type="button" data-ob="claude">Brancher l'app Claude</button>`, later)
+      : obScreen(`<h2>Installe Claude</h2><p><b>C'est Claude qui crée tes quiz et tes flashcards</b> : il lit tes cours et les prépare dans Pirouette. Il faut l'app Claude sur cet ordinateur (gratuite au téléchargement, avec un compte Claude).</p>
+      <p>1. Télécharge-la sur <a href="https://claude.ai/download" target="_blank" rel="noopener">claude.ai/download</a> et ouvre-la une fois.<br>2. Reviens ici : Pirouette la branchera.</p>
+      <p class="ob-note" id="ob-claude-note" hidden></p>`,
+      `<button class="primary" type="button" data-ob="claude-check">C'est installé</button>`, later);
     return;
   }
   if (step === "friends") {
     const fresh = info.online?.connected && !info.online?.profile;
+    if (fresh && info.profile?.name && !ob.pseudoTried) {  // connecté·e, pas encore de pseudo : le prénom du début
+      stage.innerHTML = obScreen(`<h2>Retrouve tes amis</h2><p>Un instant…</p>`, `<button class="primary" type="button" disabled>Connexion…</button>`);
+      obAutoPseudo();
+      return;
+    }
     stage.innerHTML = fresh ? obScreen(`<h2>Ton pseudo</h2><p>C'est ce que verront tes amis.</p>
       <form class="ob-form" id="ob-form" data-ob-form="pseudo"><input type="text" id="ob-pseudo" maxlength="24" value="${escapeHtml((info.online?.name || info.profile?.name || "").split(" ")[0])}" required></form>`,
       `<button class="primary" type="submit" form="ob-form">Valider</button>`, later)
@@ -6373,12 +6387,12 @@ $("#ob-stage").addEventListener("click", async (e) => {
     $("#ob-card-next")?.classList.remove("ob-wait");
     return;
   }
-  if (act === "course") {
-    await openNewCourse({ folder: (await api("/api/folders").catch(() => [])).at(-1)?.id || "" });
-    $("#new-course-dialog").addEventListener("close", async () => {
-      const stats = await api("/api/stats").catch(() => ({}));
-      if (stats.courses) { ob.info.stats = stats; obNext(); }
-    }, { once: true });
+  if (act === "course") return obAddCourse();
+  if (act === "claude-check") {
+    ob.info.claude = await api("/api/claude-app").catch(() => ob.info.claude);
+    if (ob.info.claude?.claude_found) return drawOnboard();
+    $("#ob-claude-note").hidden = false;
+    $("#ob-claude-note").textContent = "Pirouette ne trouve pas encore l'app Claude : installe-la, ouvre-la une fois, puis réessaie (ou passe pour l'instant : c'est aussi dans Réglages).";
     return;
   }
   if (act === "claude") {
@@ -6405,7 +6419,7 @@ $("#ob-stage").addEventListener("click", async (e) => {
       ob.wait = setInterval(async () => {
         const me = await api("/api/online").catch(() => null);
         if (++tries > 120 || !$("#onboard").open) return clearInterval(ob.wait);
-        if (me?.connected) { clearInterval(ob.wait); ob.info.online = me; if (me.profile) obNext(); else drawOnboard(); }
+        if (me?.connected) { clearInterval(ob.wait); ob.info.online = me; if (me.profile) obNext(); else obAutoPseudo(); }
       }, 2000);
     } catch (err) {
       $("#ob-google-note").hidden = false;
@@ -6413,6 +6427,32 @@ $("#ob-stage").addEventListener("click", async (e) => {
     }
   }
 });
+// Le premier cours : « Ajouter un cours » s'ouvre (avec le fichier s'il a été glissé dans la zone du tuto) ; une fois
+// la matière créée, on passe à la suite
+async function obAddCourse(files = null) {
+  await openNewCourse({ folder: (await api("/api/folders").catch(() => [])).at(-1)?.id || "" });
+  if (files?.length) addNewCourseFiles(files);
+  $("#new-course-dialog").addEventListener("close", async () => {
+    const stats = await api("/api/stats").catch(() => ({}));
+    if (stats.courses) { ob.info.stats = stats; obNext(); }
+  }, { once: true });
+}
+// Retrouver ses amis : le prénom donné au début sert de pseudo (on ne le redemande pas) ; s'il est déjà pris, ou
+// s'il n'y en a pas, on demande
+async function obAutoPseudo() {
+  const name = (ob.info.profile?.name || "").trim().split(/\s+/)[0];
+  if (!name || ob.pseudoTried) return drawOnboard();
+  ob.pseudoTried = true;
+  try {
+    await api("/api/online/start", jsonBody("POST", { text: name }));
+    ob.info.online = await api("/api/online").catch(() => ob.info.online);
+    startDock();
+    obNext();
+  } catch {
+    drawOnboard();  // le formulaire du pseudo, prérempli
+  }
+}
+
 $("#ob-stage").addEventListener("submit", async (e) => {
   e.preventDefault();
   const form = e.target.dataset.obForm;

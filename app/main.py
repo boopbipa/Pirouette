@@ -330,8 +330,12 @@ async def claude_app_status() -> dict:
 
 @app.post("/api/claude-app")
 async def claude_app_install() -> dict:
-    if not _claude_app_view()["supported"]:
+    view = _claude_app_view()
+    if not view["supported"]:
         raise HTTPException(400, "Le branchement à l'app Claude se fait depuis l'app Pirouette pour Mac.")
+    if not view["claude_found"]:
+        raise HTTPException(400, "L'app Claude n'est pas installée sur cet ordinateur (ou pas encore ouverte) : télécharge-la sur "
+                                 "claude.ai/download, ouvre-la une fois, puis réessaie.")
     try:
         claude_desktop.install()
     except (OSError, ValueError) as exc:
