@@ -3050,3 +3050,14 @@ p, li, h1, h2, h3, h4, blockquote, td, th, dd, dt, pre, code, .feedback, .msg-bu
    couleur de l'app, sur la pastille blanche */
 .nav-pill a.on, .scope-tabs a.active { color: var(--accent-ink); }
 .nav-pill a.on svg, .scope-tabs a.active svg { color: var(--accent-ink); }
+
+/* Anciens macOS (sans <dialog>, voir compat.js) : la fenêtre au milieu, un voile derrière */
+.no-dialog dialog:not([open]) { display: none; }
+.no-dialog dialog.poly-modal { display: block; position: fixed; inset: 0; margin: auto; z-index: 1000; max-height: calc(100vh - 40px);
+  overflow: auto; box-shadow: 0 0 0 100vmax rgba(20, 12, 8, .45), 0 30px 60px -20px rgba(0, 0, 0, .5); }
+.no-dialog dialog.onboard.poly-modal { box-shadow: 0 0 0 100vmax var(--bg); }
+/* L'app n'a pas démarré : le message, au milieu de la page */
+.boot-error { position: fixed; inset: 120px 24px auto; margin: 0 auto; max-width: 520px; padding: 22px 24px; border-radius: 18px; z-index: 2000;
+  background: var(--surface, #fff); color: var(--text, #1D1D1F); box-shadow: 0 20px 50px -20px rgba(0, 0, 0, .4); font-size: 15px; line-height: 1.5;
+  -webkit-user-select: text; user-select: text; }
+.boot-error code { display: block; margin-top: 8px; font-size: 12px; color: var(--muted, #86868B); word-break: break-word; }

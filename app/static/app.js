@@ -6691,7 +6691,9 @@ function record(q, given, correct, note = "") {
 // La phrase du cours d'où vient la question (vérifiée à la création du quiz).
 // Sans les marques de gras / italique du cours (« ***GABA*** » → « GABA »).
 function plainMd(text) {
-  return String(text ?? "").replace(/\*{2,3}(?=\S)(.+?)(?<=\S)\*{2,3}/g, "$1").replace(/(?<![\w*])\*(?=\S)([^*\n]+?)(?<=\S)\*(?![\w*])/g, "$1");
+  // Sans « lookbehind » (regarder en arrière dans une regex) : les Mac restés sur un ancien macOS (Safari avant 16.4) refusaient tout le script
+  return String(text ?? "").replace(/\*{2,3}(\S(?:.*?\S)?)\*{2,3}/g, "$1")
+    .replace(/(^|[^\w*])\*([^*\s](?:[^*\n]*?[^*\s])?)\*(?![\w*])/g, "$1$2");
 }
 
 // Explications déjà enregistrées : sans « Le cours précise que… » (on sait que tout vient du cours).
@@ -6954,6 +6956,7 @@ function formatDay(iso) {
 // reste cachée jusqu'à ce que la première page (les matières) soit affichée : elle apparaît d'un coup, déjà prête.
 setTimeout(() => route().finally(appReady));
 function appReady() {
+  window.__pirouetteStarted = true;
   const show = () => window.pywebview?.api?.ready?.();
   if (window.pywebview?.api) show();
   else window.addEventListener("pywebviewready", show, { once: true });
