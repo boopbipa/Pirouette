@@ -39,6 +39,45 @@
   .list .ic svg { width: 21px; height: 21px; }
   .list b { display: block; font-size: 15.5px; } .list small { color: var(--muted); font-size: 13px; }
   .list .go { margin-left: auto; color: var(--muted); }
+  /* Le guide d'installation : une étape = une phrase + un dessin de la fenêtre qui s'affiche, ce qu'il faut cliquer entouré */
+  .guide { margin-top: 30px; text-align: left; }
+  .guide > h2 { font-size: 20px; margin: 0 0 4px; text-align: center; }
+  .guide > p { color: var(--muted); text-align: center; margin: 0 0 16px; font-size: 14.5px; }
+  .gtabs { display: flex; justify-content: center; gap: 2px; padding: 4px; margin: 0 auto 18px; width: max-content; border-radius: 999px;
+    background: color-mix(in srgb, var(--surface) 70%, transparent); box-shadow: 0 0 0 1px var(--border); }
+  .gtabs button { border: 0; background: none; font: inherit; font-size: 14px; padding: 7px 16px; border-radius: 999px; color: var(--muted); cursor: pointer; }
+  .gtabs button.on { background: var(--surface); color: var(--accent-ink); font-weight: 600; box-shadow: 0 1px 3px rgba(0,0,0,.12); }
+  .gpane[hidden] { display: none; }
+  .step { display: grid; grid-template-columns: 34px 1fr; gap: 4px 12px; margin: 0 0 18px; }
+  .step > i { grid-row: span 2; width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; font-style: normal; font-weight: 700;
+    font-size: 14px; color: #fff; background: var(--accent); }
+  .step > div { font-size: 15px; } .step > div small { display: block; color: var(--muted); font-size: 13px; margin-top: 2px; }
+  .shot { grid-column: 2; margin-top: 8px; border-radius: 14px; padding: 16px; background: color-mix(in srgb, var(--text) 6%, var(--bg)); }
+  /* Fenêtres dessinées (comme celles du Mac et de Windows, simplifiées) */
+  .win { margin: 0 auto; max-width: 330px; border-radius: 14px; background: #ECECEC; color: #1D1D1F; padding: 16px; text-align: center;
+    box-shadow: 0 0 0 .5px rgba(0,0,0,.2), 0 14px 30px -12px rgba(0,0,0,.45); font-size: 12.5px; line-height: 1.4; }
+  .win .appic { width: 40px; height: 40px; border-radius: 10px; margin: 0 auto 8px; display: block; }
+  .win b { display: block; font-size: 13px; margin-bottom: 4px; }
+  .win .btns { display: flex; flex-direction: column; gap: 6px; margin-top: 12px; }
+  .win .b { padding: 5px 10px; border-radius: 7px; background: #fff; box-shadow: 0 .5px 1.5px rgba(0,0,0,.25); }
+  .win .b.blue { background: #0A84FF; color: #fff; }
+  .click { position: relative; outline: 2.5px solid #E5484D; outline-offset: 3px; border-radius: 8px; }
+  .click { animation: here 1.6s ease-in-out infinite; }
+  @keyframes here { 50% { outline-offset: 5px; outline-color: rgba(229, 72, 77, .55); } }
+  .settings { max-width: 360px; text-align: left; padding: 0; overflow: hidden; }
+  .settings .top { background: #E3E3E3; padding: 8px 12px; font-weight: 600; font-size: 12px; }
+  .settings .body { padding: 12px; background: #F5F5F5; }
+  .settings .row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 9px 10px; border-radius: 8px; background: #fff; font-size: 12px; }
+  .settings .muted { color: #86868B; font-size: 11px; margin: 0 0 6px; }
+  .winw { max-width: 340px; text-align: left; border-radius: 4px; padding: 18px; background: #0F5FAD; color: #fff; }
+  .winw b { font-size: 17px; font-weight: 600; } .winw u { color: #fff; }
+  .winw .b { display: inline-block; margin-top: 12px; padding: 5px 12px; white-space: nowrap; font-size: 12px; border-radius: 3px; background: #fff; color: #1D1D1F; box-shadow: none; }
+  .winw .row { display: flex; justify-content: flex-end; gap: 8px; }
+  .dl-bar { max-width: 340px; text-align: left; border-radius: 10px; padding: 12px 14px; }
+  .phone { max-width: 220px; border-radius: 26px; padding: 14px 12px; background: #fff; }
+  .sheet { display: flex; flex-direction: column; gap: 6px; text-align: left; }
+  .sheet span { padding: 8px 10px; border-radius: 9px; background: #F2F2F7; }
+  @media (prefers-reduced-motion: reduce) { .click { animation: none; } }
   footer { margin-top: 28px; color: var(--muted); font-size: 13px; }
   footer a { color: inherit; }
 </style>
@@ -53,6 +92,48 @@
     <a class="btn" id="main-btn" href="#autres"><span id="main-label">Choisis ton appareil</span></a>
     <p class="note" id="main-note">Tous les téléchargements sont juste en dessous.</p>
   </div>
+
+
+  <section class="guide" id="guide">
+    <h2>Installer Pirouette</h2>
+    <p>Pirouette n'est pas (encore) vendue sur l'App Store : ton ordinateur va hésiter la première fois. C'est normal, voici quoi cliquer.</p>
+    <div class="gtabs" role="tablist"><button data-g="mac">Mac</button><button data-g="windows">Windows</button><button data-g="phone">Téléphone</button></div>
+
+    <div class="gpane" data-pane="mac">
+      <div class="step"><i>1</i><div>Ouvre le fichier téléchargé, puis <b>glisse Pirouette sur le dossier Applications</b>.<small>Le fichier « Pirouette-….dmg » est dans Téléchargements.</small></div>
+        <div class="shot"><div class="win" style="max-width:300px"><div style="display:flex;justify-content:space-around;align-items:center;padding:6px 0">
+          <span><img class="appic" src="icon.svg" alt="">Pirouette</span><span style="font-size:22px;color:#86868B">→</span><span><span class="appic" style="display:grid;place-items:center;background:#3E8DF0;color:#fff;font-size:20px">A</span>Applications</span></div></div></div></div>
+      <div class="step"><i>2</i><div>Ouvre Pirouette depuis Applications. Le Mac affiche ce message : <b>clique sur « Terminé »</b>.<small>Pas de panique : Apple ne connaît simplement pas encore Pirouette.</small></div>
+        <div class="shot"><div class="win"><img class="appic" src="icon.svg" alt=""><b>« Pirouette » n'a pas été ouvert</b>Apple n'a pas pu confirmer que « Pirouette » ne contenait pas de logiciel malveillant…
+          <div class="btns"><span class="b blue click">Terminé</span><span class="b">Placer dans la corbeille</span></div></div></div></div>
+      <div class="step"><i>3</i><div>Ouvre <b>Réglages Système › Confidentialité et sécurité</b>, descends tout en bas, et <b>clique sur « Ouvrir quand même »</b>.<small>Menu Pomme en haut à gauche › Réglages Système.</small></div>
+        <div class="shot"><div class="win settings"><div class="top">Confidentialité et sécurité</div><div class="body"><p class="muted">Sécurité</p>
+          <div class="row"><span>« Pirouette » a été bloqué pour protéger votre Mac.</span><span class="b click" style="padding:4px 8px;border-radius:6px;white-space:nowrap">Ouvrir quand même</span></div></div></div></div></div>
+      <div class="step"><i>4</i><div>Confirme une dernière fois avec <b>« Ouvrir quand même »</b>, puis ton mot de passe du Mac.<small>C'est fini : les fois suivantes, Pirouette s'ouvre comme n'importe quelle app.</small></div>
+        <div class="shot"><div class="win"><img class="appic" src="icon.svg" alt=""><b>Ouvrir « Pirouette » ?</b>
+          <div class="btns"><span class="b blue click">Ouvrir quand même</span><span class="b">Placer dans la corbeille</span></div></div></div></div>
+      <p class="note" style="margin:6px 0 0 46px">Le Mac dit que l'app « est endommagée » ? Ouvre l'app Terminal, colle <code>xattr -dr com.apple.quarantine /Applications/Pirouette.app</code>, appuie sur Entrée, puis rouvre Pirouette.</p>
+    </div>
+
+    <div class="gpane" data-pane="windows" hidden>
+      <div class="step"><i>1</i><div>Si ton navigateur bloque le téléchargement : <b>⋯ › Conserver</b>, puis <b>« Conserver quand même »</b>.<small>Edge et Chrome se méfient des fichiers peu téléchargés.</small></div>
+        <div class="shot"><div class="win dl-bar"><b>Pirouette-Windows-Setup.exe n'est pas fréquemment téléchargé.</b>
+          <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:10px"><span class="b">Supprimer</span><span class="b click">Conserver</span></div></div></div></div>
+      <div class="step"><i>2</i><div>Lance l'installateur. Si cette fenêtre bleue s'affiche, <b>clique sur « Informations complémentaires »</b>…</div>
+        <div class="shot"><div class="winw"><b>Windows a protégé votre ordinateur</b><p style="margin:8px 0">Microsoft Defender SmartScreen a empêché le démarrage d'une application non reconnue.</p>
+          <u class="click" style="outline-color:#FFB4B4">Informations complémentaires</u><div class="row"><span class="b">Ne pas exécuter</span></div></div></div></div>
+      <div class="step"><i>3</i><div>… puis sur <b>« Exécuter quand même »</b>. L'installation se fait toute seule.<small>Pirouette s'ouvre à la fin, et se trouve ensuite dans le menu Démarrer.</small></div>
+        <div class="shot"><div class="winw"><b>Windows a protégé votre ordinateur</b><p style="margin:8px 0">Application : Pirouette-Windows-Setup.exe<br>Éditeur : Éditeur inconnu</p>
+          <div class="row"><span class="b click" style="outline-color:#FFB4B4">Exécuter quand même</span><span class="b">Ne pas exécuter</span></div></div></div></div>
+    </div>
+
+    <div class="gpane" data-pane="phone" hidden>
+      <div class="step"><i>1</i><div>Ouvre <b>boopbipa.github.io/Pirouette</b> sur ton téléphone (Safari sur iPhone, Chrome sur Android).</div></div>
+      <div class="step"><i>2</i><div><b>iPhone, iPad :</b> touche le bouton Partager, puis <b>« Sur l'écran d'accueil »</b>. <b>Android :</b> menu ⋮ › <b>« Installer l'application »</b>.</div>
+        <div class="shot"><div class="win phone"><div class="sheet"><span>Copier</span><span>Ajouter aux favoris</span><span class="click">Sur l'écran d'accueil</span></div></div></div></div>
+      <div class="step"><i>3</i><div>Ouvre Pirouette depuis l'écran d'accueil et <b>tape le code</b> affiché sur ton ordinateur.<small>Sur l'ordinateur : Réglages › Téléphone et tablette › Ajouter un téléphone ou une tablette.</small></div></div>
+    </div>
+  </section>
 
   <section class="others" id="autres">
     <h2 id="others-title">Tous les appareils</h2>
@@ -74,6 +155,19 @@
   <footer>Apple Silicon ou Intel ? Sur ton Mac : menu Pomme › À propos de ce Mac. « Puce Apple M… » = Apple Silicon, « Processeur Intel » = Intel.</footer>
 </main>
 <script>
+  function showGuide(which) {
+    document.querySelectorAll("[data-g]").forEach((b) => b.classList.toggle("on", b.dataset.g === which));
+    document.querySelectorAll("[data-pane]").forEach((p) => { p.hidden = p.dataset.pane !== which; });
+  }
+  document.querySelector(".gtabs").addEventListener("click", (e) => { const b = e.target.closest("[data-g]"); if (b) showGuide(b.dataset.g); });
+  // Un téléchargement lancé : on fait défiler jusqu'au guide (le fichier, lui, se télécharge)
+  document.addEventListener("click", (e) => {
+    const a = e.target.closest("#main-btn, [data-device]");
+    if (!a || a.dataset.device === "phone" || /\/$/.test(a.getAttribute("href") || "")) return;
+    const d = a.dataset.device || "";
+    if (d) showGuide(d === "windows" ? "windows" : "mac");
+    setTimeout(() => document.getElementById("guide").scrollIntoView({ behavior: "smooth" }), 300);
+  });
   // L'appareil qu'on tient : son téléchargement en grand, les autres restent dans la liste
   (async () => {
     const ua = navigator.userAgent;
@@ -91,19 +185,19 @@
         if (/Intel|AMD|Radeon|NVIDIA/i.test(gpu) && !/Apple/i.test(gpu)) device = "mac-intel";
       } catch (e) { /* on garde Apple Silicon */ }
     }
-    if (!device) return;
+    if (!device) return showGuide("mac");
     const link = document.querySelector(`[data-device="${device}"]`);
     const names = { "mac-arm": "pour Mac", "mac-intel": "pour Mac (Intel)", windows: "pour Windows", phone: "sur ton téléphone" };
     const btn = document.getElementById("main-btn");
     btn.href = link.href;
     document.getElementById("main-label").textContent = device === "phone" ? "Ouvrir Pirouette" : `Télécharger ${names[device]}`;
-    document.getElementById("main-note").textContent = {
-      "mac-arm": "Ouvre le fichier, glisse Pirouette dans Applications. Au premier lancement, si le Mac la bloque : Réglages Système › Confidentialité et sécurité › « Ouvrir quand même ».",
-      "mac-intel": "Ouvre le fichier, glisse Pirouette dans Applications. Au premier lancement, si le Mac la bloque : Réglages Système › Confidentialité et sécurité › « Ouvrir quand même ».",
-      windows: "Lance l'installateur. Si Windows hésite : « Informations complémentaires » › « Exécuter quand même ».",
-      phone: "Puis ajoute-la à ton écran d'accueil (Partager › Sur l'écran d'accueil) et jumelle-la à ton ordinateur.",
-    }[device];
+    document.getElementById("main-note").textContent = device === "phone"
+      ? "Puis ajoute-la à ton écran d'accueil et jumelle-la à ton ordinateur (guide juste en dessous)."
+      : "Ton ordinateur va hésiter la première fois : le guide juste en dessous montre quoi cliquer.";
     link.hidden = true;  // déjà le gros bouton
+    // Le guide : l'onglet de l'appareil
+    showGuide(device === "windows" ? "windows" : device === "phone" ? "phone" : "mac");
+
     document.getElementById("others-title").textContent = "Les autres appareils";
   })();
 </script>

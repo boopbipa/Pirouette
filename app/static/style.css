@@ -3045,3 +3045,8 @@ body { -webkit-user-select: none; user-select: none; }
 p, li, h1, h2, h3, h4, blockquote, td, th, dd, dt, pre, code, .feedback, .msg-bubble, .card-source, #question-text,
 #sq-text, .question-text, .app-request-text, .keywords, .course-text, .reader, .explain-text {
   -webkit-user-select: text; user-select: text; }
+
+/* L'onglet actif de chaque menu (barre du haut, onglets d'une matière, Cours | Réglages, Social) : le mot à la
+   couleur de l'app, sur la pastille blanche */
+.nav-pill a.on, .scope-tabs a.active { color: var(--accent-ink); }
+.nav-pill a.on svg, .scope-tabs a.active svg { color: var(--accent-ink); }

@@ -1,6 +1,9 @@
 PIROUETTE — installation
 ========================
 
+Le guide en images (quoi cliquer, étape par étape) :
+  https://boopbipa.github.io/Pirouette/telecharger.html#guide
+
 1. Glisse l'icône Pirouette sur le dossier Applications.
 
 2. Premier lancement (une seule fois) :
