@@ -800,11 +800,12 @@ def _watch_scan(course_id: str) -> dict:
     found = watch.scan(course)
     job = None
     busy = import_jobs().active(course_id)
-    if found["updated"] and not (busy and busy["status"] == "running"):
-        files = watch.take(course, found["updated"])
-        if files:
-            job = import_jobs().start(course_id, files, similar=False)
+    files = watch.take(course, found["updated"]) if found["updated"] and not (busy and busy["status"] == "running") else []
+    # Les dates retenues d'abord : l'import, en enregistrant le cours, repart de cette version (sinon il remettrait
+    # l'ancienne date, et le même cours serait relu en boucle)
     store._save_course(course)
+    if files:
+        job = import_jobs().start(course_id, files, similar=False)
     return found | {"job": job, "watch": course.get("watch")}
 
 
