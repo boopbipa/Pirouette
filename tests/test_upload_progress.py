@@ -19,7 +19,7 @@ def _pdf(pages: int) -> bytes:
 
 def test_upload_streams_page_progress_then_the_result(tmp_path, monkeypatch):
     monkeypatch.setattr(main, "store", Store(tmp_path))
-    monkeypatch.setattr(main, "extract_text", lambda name, data, on_page=None: [on_page(i, 3) for i in (1, 2, 3)] and "Texte")
+    monkeypatch.setattr(main, "extract_text", lambda name, data, on_page=None, cache=None: [on_page(i, 3) for i in (1, 2, 3)] and "Texte")
     client = TestClient(main.app)
     course = client.post("/api/courses", json={"name": "Endo"}).json()
     response = client.post(f"/api/courses/{course['id']}/files?stream=1", files={"files": ("manuel.pdf", _pdf(3))})
@@ -42,7 +42,7 @@ def test_a_scanned_pdf_goes_through_the_computer_ocr(monkeypatch):
 
     seen = []
 
-    def fake_ocr(data, on_page=None):
+    def fake_ocr(data, on_page=None, cache=None):
         on_page(1, 2)
         on_page(2, 2)
         return "[Page 1]\nLa pulpe dentaire\n\n[Page 2]\nLe canal radiculaire"
@@ -56,7 +56,7 @@ def test_a_scanned_pdf_goes_through_the_computer_ocr(monkeypatch):
 def test_without_ocr_a_scan_has_no_text(monkeypatch):
     from app import extract, ocr
 
-    def unavailable(data, on_page=None):
+    def unavailable(data, on_page=None, cache=None):
         raise ocr.OcrUnavailable("pas ici")
 
     monkeypatch.setattr(ocr, "ocr_pdf", unavailable)

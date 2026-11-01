@@ -1985,6 +1985,7 @@ async function openCourse(id, tab, { keepScroll = false } = {}) {
   $("#course-settings-tab").toggleAttribute("aria-current", toSettings);
   renderFolderPick(course);
   fillNotes(course);
+  resumeImportView(course.id);
   renderTiles(course);
   // Cours tout neuf, sans fichier ni carte : on invite d'abord à importer le cours.
   const empty = !course.files.length && !course.quizzes.length && !course.cards.total;
@@ -2789,69 +2790,109 @@ $("#file-input").addEventListener("change", (e) => { uploadFiles(e.target.files)
   if (ev === "drop") uploadFiles(e.dataTransfer.files);
 }));
 
-// Envoi des fichiers avec suivi : l'envoi (en %), puis la lecture page par page, reçue en NDJSON au fil de l'eau.
-function sendFiles(url, form, onProgress) {
+// Envoi des fichiers avec le pourcentage envoyé ; la réponse est du JSON
+function postFiles(url, form, onProgress) {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
-    let seen = 0, result = null, failure = null;
-    const read = () => {
-      const text = xhr.responseText;
-      const end = text.lastIndexOf("\n") + 1;
-      for (const line of text.slice(seen, end).split("\n")) {
-        if (!line.trim()) continue;
-        const event = JSON.parse(line);
-        if (event.type === "progress") onProgress({ phase: "read", ...event });
-        else if (event.type === "done") result = event.result;
-        else if (event.type === "error") failure = event.message;
-      }
-      seen = end;
-    };
-    xhr.open("POST", `${url}${url.includes("?") ? "&" : "?"}stream=1`);
+    xhr.open("POST", url);
     xhr.upload.onprogress = (e) => e.lengthComputable && onProgress({ phase: "send", loaded: e.loaded, total: e.total });
     xhr.upload.onload = () => onProgress({ phase: "wait" });
-    xhr.onprogress = read;
     xhr.onerror = () => reject(new Error("L'envoi du fichier a échoué."));
     xhr.onload = () => {
-      if (xhr.status >= 400) {
-        let detail = "";
-        try { detail = JSON.parse(xhr.responseText).detail; } catch { /* réponse vide */ }
-        return reject(new Error(detail || `Erreur ${xhr.status}`));
-      }
-      read();
-      if (failure || !result) return reject(new Error(failure || "Lecture interrompue."));
-      noteColors(result);
-      resolve(result);
+      let body = {};
+      try { body = JSON.parse(xhr.responseText); } catch { /* réponse vide */ }
+      if (xhr.status >= 400) return reject(new Error(body.detail || `Erreur ${xhr.status}`));
+      resolve(body);
     };
     xhr.send(form);
   });
 }
 
-// Barre de chargement de l'import : texte au-dessus, barre pleine largeur (indéterminée tant qu'on ne sait pas).
-function uploadProgress(status, files) {
-  const many = files.length > 1;
+// Barre de chargement de l'import : texte au-dessus, barre pleine largeur (indéterminée tant qu'on ne sait pas), et
+// les boutons Pause / Reprendre / Relancer / Annuler selon l'état de l'import
+function uploadProgress(status, names) {
+  const many = names.length > 1;
   const mb = (n) => `${(n / 1048576).toFixed(n < 10485760 ? 1 : 0).replace(".", ",")} Mo`;
   status.className = "status upload-progress";
-  status.innerHTML = `<span class="up-label"></span><span class="up-track"><span class="up-fill"></span></span>`;
+  status.innerHTML = `<span class="up-row"><span class="up-label"></span><span class="up-actions"></span></span><span class="up-track"><span class="up-fill"></span></span>`;
   const label = status.querySelector(".up-label"), fill = status.querySelector(".up-fill"), track = status.querySelector(".up-track");
-  const show = (text, ratio) => {
+  const actions = status.querySelector(".up-actions");
+  const show = (text, ratio, buttons = []) => {
     label.textContent = text;
     track.classList.toggle("busy", ratio == null);
+    track.classList.toggle("paused", buttons.some((b) => b[0] === "resume"));
     if (ratio != null) fill.style.width = `${Math.round(ratio * 100)}%`;
+    const html = buttons.map(([act, text]) => `<button class="link-button" type="button" data-import="${act}">${text}</button>`).join("");
+    if (actions.innerHTML !== html) actions.innerHTML = html;
   };
-  show(many ? `Envoi de ${files.length} fichiers…` : `Envoi de ${files[0].name}…`, null);
+  show(many ? `Envoi de ${names.length} fichiers…` : `Envoi de ${names[0]}…`, null);
   return (p) => {
-    if (p.phase === "send") {
-      // L'envoi compte pour les 15 premiers %, la lecture pour le reste.
-      show(`Envoi… ${mb(p.loaded)} sur ${mb(p.total)}`, 0.15 * p.loaded / p.total);
-    } else if (p.phase === "wait") {
-      show("Ouverture du document…", 0.15);
-    } else {
-      const done = (p.index + p.page / p.pages) / p.count;
-      // Un scan passe par la reconnaissance de texte de l'ordinateur : plus lent, on le dit.
-      const what = p.kind === "ocr" ? "Scan : reconnaissance du texte" : "Lecture";
-      show(`${what}${many ? ` de ${p.file} (${p.index + 1}/${p.count})` : ""} : page ${p.page} sur ${p.pages}`, 0.15 + 0.85 * done);
-    }
+    if (p.phase === "send") return show(`Envoi… ${mb(p.loaded)} sur ${mb(p.total)}`, 0.15 * p.loaded / p.total);  // 15 % pour l'envoi
+    if (p.phase === "wait") return show("Ouverture du document…", 0.15);
+    // Un import en cours (tâche de fond) : où il en est
+    const ratio = p.pages ? 0.15 + 0.85 * (p.index + p.page / p.pages) / (p.count || 1) : 0.15;
+    const what = p.kind === "ocr" ? "Scan : reconnaissance du texte" : "Lecture";
+    const where = p.pages ? `${many ? ` de ${p.file} (${p.index + 1}/${p.count})` : ""} : page ${p.page} sur ${p.pages}` : "…";
+    if (p.status === "paused") return show(`En pause${p.pages ? ` : page ${p.page} sur ${p.pages}` : ""}`, ratio, [["resume", "Reprendre"], ["cancel", "Annuler"]]);
+    if (p.status === "error") return show(p.message || "La lecture s'est arrêtée.", ratio, [["resume", "Réessayer"], ["cancel", "Annuler"]]);
+    if (p.stalled) return show(`${what} : ça ne bouge plus (mise en veille ?)`, ratio, [["resume", "Relancer"], ["cancel", "Annuler"]]);
+    return show(`${what}${where}`, ratio, [["pause", "Pause"]]);
   };
+}
+
+// L'import en tâche de fond qu'on suit (un à la fois) : on demande où il en est, régulièrement, tant qu'il n'est pas
+// fini. Il continue même si on quitte la page ; en y revenant, on le retrouve.
+const importWatch = { id: null, timer: 0 };
+function followImport(job) {
+  const status = $("#upload-status");
+  status.hidden = false;
+  state.uploading = job.course_id;
+  $("#start-drop").hidden = true;
+  const render = uploadProgress(status, job.names || [job.file || "ton cours"]);
+  clearInterval(importWatch.timer);
+  importWatch.id = job.id;
+  const tick = async (current) => {
+    if (importWatch.id !== job.id) return;
+    const now = current || await api(`/api/imports/${job.id}`).catch((err) => ({ status: "gone", message: err.message }));
+    if (state.course?.id !== job.course_id) return;  // on regarde une autre matière : on reprendra en revenant
+    if (now.status === "done") {
+      clearInterval(importWatch.timer);
+      importWatch.id = null;
+      return finishImport(now.result, status);
+    }
+    if (now.status === "gone") {
+      clearInterval(importWatch.timer);
+      importWatch.id = null;
+      state.uploading = null;
+      status.textContent = now.message;
+      status.className = "status ko";
+      return;
+    }
+    render(now);
+  };
+  status.onclick = async (e) => {
+    const act = e.target.closest("[data-import]")?.dataset.import;
+    if (!act) return;
+    if (act === "cancel") {
+      await api(`/api/imports/${job.id}`, { method: "DELETE" }).catch(() => {});
+      clearInterval(importWatch.timer);
+      importWatch.id = null;
+      state.uploading = null;
+      status.hidden = true;
+      $("#start-drop").hidden = state.course.files.length > 0;
+      return;
+    }
+    tick(await api(`/api/imports/${job.id}/${act}`, { method: "POST" }).catch((err) => ({ status: "error", message: err.message })));
+  };
+  tick(job);
+  importWatch.timer = setInterval(() => tick(), 800);
+}
+// En arrivant sur une matière : un import pas fini (en cours, en pause, figé par une mise en veille) réapparaît
+async function resumeImportView(courseId) {
+  const { job } = await api(`/api/courses/${courseId}/imports/active`).catch(() => ({}));
+  if (!job || state.course?.id !== courseId) return;
+  if (importWatch.id === job.id && !$("#upload-status").hidden) return;  // déjà suivi et affiché
+  followImport(job);
 }
 
 async function uploadFiles(fileList) {
@@ -2866,9 +2907,22 @@ async function uploadFiles(fileList) {
   // Matière vide : le grand cadre laisse la place à la barre
   state.uploading = state.course.id;
   $("#start-drop").hidden = true;
-  const onProgress = uploadProgress(status, files);
+  const onProgress = uploadProgress(status, files.map((f) => f.name));
   try {
-    let { results, course, pending = [] } = await sendFiles(`/api/courses/${state.course.id}/files?similar=1`, form, onProgress);
+    // Les fichiers partent au serveur, qui les lit en tâche de fond (pause, reprise, mise en veille sans souci)
+    followImport(await postFiles(`/api/courses/${state.course.id}/imports?similar=1`, form, onProgress));
+  } catch (err) {
+    state.uploading = null;
+    $("#start-drop").hidden = state.course.files.length > 0;
+    status.textContent = err.message;
+    status.className = "status ko";
+  }
+}
+
+// L'import est fini : fichiers semblables à trancher, puis la matière se réaffiche avec le nouveau cours
+async function finishImport(result, status) {
+  let { results, course, pending = [] } = result;
+  try {
     state.uploading = null;
     // Un fichier nouveau qui ressemble à un cours de la matière (« CM1 v2.pdf » ≈ « CM1.pdf ») : on demande
     for (const p of pending) {
@@ -2881,6 +2935,7 @@ async function uploadFiles(fileList) {
       course = done.course;
     }
     status.textContent = "Enregistrement…";
+    status.className = "status";
     await refreshCourse();
     const kinds = Object.values(results);
     const updatedCount = kinds.filter((r) => r === "updated").length, addedCount = kinds.length - updatedCount;
@@ -2901,7 +2956,6 @@ async function uploadFiles(fileList) {
     }
     await refreshCourse();
   } catch (err) {
-    state.uploading = null;
     $("#start-drop").hidden = state.course.files.length > 0;
     status.textContent = err.message;
     status.className = "status ko";

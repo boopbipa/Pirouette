@@ -712,16 +712,26 @@ async def upload_files(course_id: str, files: list[UploadFile] = File(...), stre
 
 
 async def _import_files(course_id: str, files: list[UploadFile], on_page=None, similar: bool = False) -> dict:
+    named = [(upload.filename or "fichier", await upload.read()) for upload in files]
+    # Dans un fil à part : la lecture d'un gros PDF ou la conversion d'un fichier Pages / Keynote prend du temps.
+    return await run_in_threadpool(_extract_and_store, course_id, named, on_page, similar)
+
+
+def _extract_and_store(course_id: str, files: list[tuple[str, bytes]], on_page=None, similar: bool = False,
+                       caches: list[dict] | None = None) -> dict:
+    """Lit les fichiers, puis les enregistre dans la matière (ou les met de côté s'ils ressemblent à un cours déjà là).
+    `caches` : les pages de scan déjà reconnues, par fichier (reprise d'un import en tâche de fond)."""
+    from .imports import Paused
+
     extracted = []
     # On lit tout avant d'enregistrer : un fichier illisible n'entraîne pas d'import partiel.
-    for index, upload in enumerate(files):
-        name = upload.filename or "fichier"
-        data = await upload.read()
+    for index, (name, data) in enumerate(files):
         progress = (lambda page, pages, kind="text", name=name, index=index:
                     on_page(name, index, len(files), page, pages, kind)) if on_page else None
         try:
-            # Dans un fil à part : la lecture d'un gros PDF ou la conversion d'un fichier Pages / Keynote prend du temps.
-            text = await run_in_threadpool(extract_text, name, data, progress)
+            text = extract_text(name, data, progress, caches[index] if caches else None)
+        except Paused:
+            raise
         except (UnsupportedFileError, ConversionError) as exc:
             raise HTTPException(400, str(exc)) from exc
         except Exception as exc:  # fichier corrompu, PDF protégé…
@@ -737,12 +747,77 @@ async def _import_files(course_id: str, files: list[UploadFile], on_page=None, s
     for name, data, text in extracted:
         before = known.get(Path(name).name.lower())
         if before is None and similar:
-            match = await run_in_threadpool(_similar_file, course_id, text)
+            match = _similar_file(course_id, text)
             if match:
                 pending.append(_set_aside(course_id, name, data, text, *match))
                 continue
-        results[name] = await run_in_threadpool(_save_file, course_id, name, data, text, before)
+        results[name] = _save_file(course_id, name, data, text, before)
     return {"results": results, "pending": pending, "course": store.get_course(course_id)}
+
+
+# ---------- Import en tâche de fond : suivi, pause, reprise (voir imports.py) ----------
+def _run_import(job: dict, files: list[tuple[str, bytes]], on_page, caches: list[dict]) -> dict:
+    from .imports import ImportError_
+
+    try:
+        return _extract_and_store(job["course_id"], files, on_page, job["similar"], caches)
+    except HTTPException as exc:
+        raise ImportError_(exc.detail) from exc
+
+
+_imports = None
+
+
+def import_jobs():
+    """Les imports en cours, rangés avec les données (relus au démarrage)."""
+    global _imports
+    from .imports import Imports
+
+    if _imports is None or _imports.dir != store.root / "imports":
+        _imports = Imports(store.root, _run_import)
+    return _imports
+
+
+@app.post("/api/courses/{course_id}/imports")
+async def start_import(course_id: str, files: list[UploadFile] = File(...), similar: bool = False) -> dict:
+    store.get_course(course_id)
+    named = [(upload.filename or "fichier", await upload.read()) for upload in files]
+    return import_jobs().start(course_id, named, similar)
+
+
+@app.get("/api/courses/{course_id}/imports/active")
+async def active_import(course_id: str) -> dict:
+    return {"job": import_jobs().active(course_id)}
+
+
+def _import_job(job_id: str) -> dict:
+    job = import_jobs().get(job_id)
+    if job is None:
+        raise HTTPException(404, "Cet import n'existe plus : redépose le fichier.")
+    return job
+
+
+@app.get("/api/imports/{job_id}")
+async def import_status(job_id: str) -> dict:
+    return import_jobs().view(_import_job(job_id))
+
+
+@app.post("/api/imports/{job_id}/pause")
+async def pause_import(job_id: str) -> dict:
+    _import_job(job_id)
+    return import_jobs().pause(job_id)
+
+
+@app.post("/api/imports/{job_id}/resume")
+async def resume_import(job_id: str) -> dict:
+    _import_job(job_id)
+    return import_jobs().resume(job_id)
+
+
+@app.delete("/api/imports/{job_id}")
+async def cancel_import(job_id: str) -> dict:
+    import_jobs().cancel(job_id)
+    return {"cancelled": job_id}
 
 
 def _save_file(course_id: str, name: str, data: bytes, text: str, before: dict | None) -> str:

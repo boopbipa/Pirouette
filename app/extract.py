@@ -34,19 +34,19 @@ class ConversionError(ValueError):
     """Un fichier Pages / Keynote n'a pas pu être converti ; le message explique quoi faire."""
 
 
-def extract_text(filename: str, data: bytes, on_page=None) -> str:
+def extract_text(filename: str, data: bytes, on_page=None, ocr_cache: dict | None = None) -> str:
     """`on_page(page, pages[, "ocr"])` : appelé après chaque page lue d'un PDF (barre de progression d'un gros
     manuel) ; « ocr » quand les pages d'un scan passent par la reconnaissance de texte."""
     ext = Path(filename).suffix.lower()
     if ext == ".pdf":
-        text = _extract_pdf(data, on_page)
+        text = _extract_pdf(data, on_page, ocr_cache)
     elif ext == ".docx":
         text = _extract_docx(data)
     elif ext == ".pptx":
         text = _extract_pptx(data)
     elif ext in IWORK:
         converted_ext, converted = _convert_iwork(ext, data)
-        return extract_text(f"converti{converted_ext}", converted, on_page)
+        return extract_text(f"converti{converted_ext}", converted, on_page, ocr_cache)
     elif ext in {".txt", ".md", ".markdown"}:
         text = data.decode("utf-8", errors="replace")
     else:
@@ -134,7 +134,7 @@ def _app_location(bundle_id: str) -> str | bool | None:
     return url.path() if url else None
 
 
-def _extract_pdf(data: bytes, on_page=None) -> str:
+def _extract_pdf(data: bytes, on_page=None, ocr_cache: dict | None = None) -> str:
     from pypdf import PdfReader
 
     reader = PdfReader(io.BytesIO(data))
@@ -152,7 +152,7 @@ def _extract_pdf(data: bytes, on_page=None) -> str:
         from . import ocr
 
         try:
-            scanned = ocr.ocr_pdf(data, (lambda page, pages: on_page(page, pages, "ocr")) if on_page else None)
+            scanned = ocr.ocr_pdf(data, (lambda page, pages: on_page(page, pages, "ocr")) if on_page else None, ocr_cache)
         except ocr.OcrUnavailable:
             return text
         if len(scanned) > len(text):

@@ -24,8 +24,9 @@ def status() -> dict:
     return {"available": True, "reason": ""}
 
 
-def ocr_pdf(data: bytes, on_page=None) -> str:
-    """Texte d'un PDF scanné, page par page (« [Page n] »). `on_page(page, pages)` suit l'avancée."""
+def ocr_pdf(data: bytes, on_page=None, cache: dict | None = None) -> str:
+    """Texte d'un PDF scanné, page par page (« [Page n] »). `on_page(page, pages)` suit l'avancée. `cache` (numéro de
+    page → texte) : les pages déjà lues ne sont pas relues (reprise après une pause ou une mise en veille)."""
     import pypdfium2 as pdfium
 
     engine = _engine()
@@ -34,13 +35,18 @@ def ocr_pdf(data: bytes, on_page=None) -> str:
         total = len(pdf)
         pages = []
         for i in range(total):
-            page = pdf[i]
-            width, height = page.get_size()
-            scale = min(SCALE, MAX_SIDE / max(width, height, 1))
-            image = page.render(scale=scale).to_pil().convert("RGB")
-            buffer = io.BytesIO()
-            image.save(buffer, "PNG")
-            content = engine(buffer.getvalue()).strip()
+            if cache is not None and str(i) in cache:
+                content = cache[str(i)]
+            else:
+                page = pdf[i]
+                width, height = page.get_size()
+                scale = min(SCALE, MAX_SIDE / max(width, height, 1))
+                image = page.render(scale=scale).to_pil().convert("RGB")
+                buffer = io.BytesIO()
+                image.save(buffer, "PNG")
+                content = engine(buffer.getvalue()).strip()
+                if cache is not None:
+                    cache[str(i)] = content
             if content:
                 pages.append(f"[Page {i + 1}]\n{content}")
             if on_page:
