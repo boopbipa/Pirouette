@@ -785,6 +785,94 @@ async def start_import(course_id: str, files: list[UploadFile] = File(...), simi
     return import_jobs().start(course_id, named, similar)
 
 
+# ---------- Dossier suivi d'une matière (voir watch.py) ----------
+class WatchIn(BaseModel):
+    path: str = ""
+    names: list[str] = []
+
+
+def _watch_scan(course_id: str) -> dict:
+    """Regarde le dossier suivi : les cours modifiés sont relus tout de suite (un import en tâche de fond), les
+    nouveaux fichiers sont renvoyés pour être proposés."""
+    from . import watch
+
+    course = store.get_course(course_id)
+    found = watch.scan(course)
+    job = None
+    busy = import_jobs().active(course_id)
+    if found["updated"] and not (busy and busy["status"] == "running"):
+        files = watch.take(course, found["updated"])
+        if files:
+            job = import_jobs().start(course_id, files, similar=False)
+    store._save_course(course)
+    return found | {"job": job, "watch": course.get("watch")}
+
+
+@app.post("/api/courses/{course_id}/watch")
+async def watch_folder(course_id: str, body: WatchIn) -> dict:
+    from . import watch
+
+    course = store.get_course(course_id)
+    try:
+        watch.link(course, body.path)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    store._save_course(course)
+    return await run_in_threadpool(_watch_scan, course_id)
+
+
+@app.delete("/api/courses/{course_id}/watch")
+async def unwatch_folder(course_id: str) -> dict:
+    course = store.get_course(course_id)
+    course.pop("watch", None)
+    store._save_course(course)
+    return {"watch": None}
+
+
+@app.post("/api/courses/{course_id}/watch/scan")
+async def watch_scan(course_id: str) -> dict:
+    return await run_in_threadpool(_watch_scan, course_id)
+
+
+@app.post("/api/courses/{course_id}/watch/add")
+async def watch_add(course_id: str, body: WatchIn) -> dict:
+    """Ajoute les fichiers proposés (« Ajouter ») : un import en tâche de fond."""
+    from . import watch
+
+    course = store.get_course(course_id)
+    if not course.get("watch"):
+        raise HTTPException(400, "Cette matière ne suit aucun dossier.")
+    files = await run_in_threadpool(watch.take, course, body.names)
+    store._save_course(course)
+    if not files:
+        raise HTTPException(400, "Ces fichiers ne sont plus dans le dossier.")
+    return {"job": import_jobs().start(course_id, files, similar=False)}
+
+
+@app.post("/api/courses/{course_id}/watch/ignore")
+async def watch_ignore(course_id: str, body: WatchIn) -> dict:
+    """« Ignorer » : ce fichier du dossier n'est plus jamais proposé."""
+    from . import watch
+
+    course = store.get_course(course_id)
+    if course.get("watch"):
+        watch.ignore(course, body.names)
+        store._save_course(course)
+    return {"watch": course.get("watch")}
+
+
+@app.post("/api/watch/scan-all")
+async def watch_scan_all() -> dict:
+    """À l'ouverture et toutes les heures : chaque matière qui suit un dossier. Renvoie, par matière, les nouveaux
+    fichiers à proposer et l'import lancé pour les cours modifiés."""
+    out = {}
+    for course in store.list_courses():
+        if course.get("watch"):
+            found = await run_in_threadpool(_watch_scan, course["id"])
+            out[course["id"]] = {"new": found["new"], "job": found["job"]["id"] if found["job"] else None}
+    return {"courses": out}
+
+
 @app.get("/api/courses/{course_id}/imports/active")
 async def active_import(course_id: str) -> dict:
     return {"job": import_jobs().active(course_id)}

@@ -1986,6 +1986,11 @@ async function openCourse(id, tab, { keepScroll = false } = {}) {
   renderFolderPick(course);
   fillNotes(course);
   resumeImportView(course.id);
+  renderWatchRow(course);
+  // Un coup d'œil au dossier suivi (au plus une fois par minute) ; sinon les propositions déjà trouvées
+  const seen = (state.watchScan ||= {});
+  if (course.watch && Date.now() - (seen[course.id] || 0) > 60000) { seen[course.id] = Date.now(); scanWatch(course.id); }
+  else renderWatchNew(course.id, course.watch ? (state.watchNew?.[course.id] || []) : []);
   renderTiles(course);
   // Cours tout neuf, sans fichier ni carte : on invite d'abord à importer le cours.
   const empty = !course.files.length && !course.quizzes.length && !course.cards.total;
@@ -2894,6 +2899,89 @@ async function resumeImportView(courseId) {
   if (importWatch.id === job.id && !$("#upload-status").hidden) return;  // déjà suivi et affiché
   followImport(job);
 }
+
+// ---------- Dossier suivi d'une matière ----------
+// Les nouveaux cours trouvés dans le dossier : « Ajouter » (import en tâche de fond) ou « Ignorer » (plus jamais
+// proposé). Les cours modifiés, eux, se mettent à jour tout seuls (la barre d'import s'affiche).
+function renderWatchNew(courseId, names) {
+  (state.watchNew ||= {})[courseId] = names;
+  const box = $("#watch-new");
+  box.hidden = !names.length || state.course?.id !== courseId;
+  if (box.hidden) return;
+  const folder = (state.course.watch?.path || "").split(/[\\/]/).filter(Boolean).pop() || "ton dossier";
+  box.innerHTML = `<div class="watch-head"><b>${plural(names.length, "nouveau cours", "nouveaux cours")} dans « ${escapeHtml(folder)} »</b>
+      ${names.length > 1 ? `<button class="link-button" type="button" data-watch-add-all>Tout ajouter</button>` : ""}</div>
+    <ul>${names.map((n) => `<li><span>${escapeHtml(n)}</span><button class="primary small" type="button" data-watch-add="${escapeHtml(n)}">Ajouter</button>
+      <button class="ghost small" type="button" data-watch-ignore="${escapeHtml(n)}">Ignorer</button></li>`).join("")}</ul>`;
+  box.onclick = async (e) => {
+    const add = e.target.closest("[data-watch-add]")?.dataset.watchAdd;
+    const ignore = e.target.closest("[data-watch-ignore]")?.dataset.watchIgnore;
+    const all = e.target.closest("[data-watch-add-all]");
+    if (!add && !ignore && !all) return;
+    if (ignore) {
+      await api(`/api/courses/${courseId}/watch/ignore`, jsonBody("POST", { names: [ignore] })).catch(() => {});
+      return renderWatchNew(courseId, names.filter((n) => n !== ignore));
+    }
+    const picked = all ? names : [add];
+    try {
+      const { job } = await api(`/api/courses/${courseId}/watch/add`, jsonBody("POST", { names: picked }));
+      renderWatchNew(courseId, names.filter((n) => !picked.includes(n)));
+      followImport(job);
+    } catch (err) { notify(err.message); }
+  };
+}
+async function scanWatch(courseId) {
+  const found = await api(`/api/courses/${courseId}/watch/scan`, { method: "POST" }).catch(() => null);
+  if (!found || state.course?.id !== courseId) return;
+  if (found.job) followImport(found.job);
+  renderWatchNew(courseId, found.new);
+}
+function renderWatchRow(course) {
+  const watch = course.watch;
+  const desktop = Boolean(window.pywebview?.api?.pick_folder);
+  $("#watch-row").hidden = !desktop && !watch;
+  $("#watch-path").textContent = watch ? watch.path.replace(/^\/Users\/[^/]+/, "~") : "Aucun";
+  $("#watch-path").title = watch?.path || "";
+  $("#watch-pick").textContent = watch ? "Changer…" : "Choisir…";
+  $("#watch-pick").hidden = !desktop;
+  $("#watch-stop").hidden = !watch;
+  $("#watch-refresh").hidden = !watch;
+}
+$("#watch-refresh").addEventListener("click", async () => {
+  const found = await api(`/api/courses/${state.course.id}/watch/scan`, { method: "POST" }).catch((err) => ({ error: err.message }));
+  if (found.error) return notify(found.error);
+  if (found.missing) return notify("Le dossier suivi est introuvable : a-t-il été déplacé ou renommé ? Choisis-le à nouveau.");
+  if (found.job) followImport(found.job);
+  renderWatchNew(state.course.id, found.new);
+  notify([found.updated.length ? `${plural(found.updated.length, "cours mis à jour", "cours mis à jour")}` : "",
+    found.new.length ? `${plural(found.new.length, "nouveau cours", "nouveaux cours")} à ajouter (page Cours)` : "",
+    found.cloud.length ? `${plural(found.cloud.length, "cours", "cours")} encore dans iCloud : ouvre-les une fois dans le Finder` : ""]
+    .filter(Boolean).join(" · ") || "Rien de nouveau dans le dossier.");
+});
+$("#watch-pick").addEventListener("click", async () => {
+  const path = await window.pywebview?.api?.pick_folder?.();
+  if (!path) return;
+  try {
+    const found = await api(`/api/courses/${state.course.id}/watch`, jsonBody("POST", { path }));
+    state.course.watch = found.watch;
+    renderWatchRow(state.course);
+    if (found.job) followImport(found.job);
+    renderWatchNew(state.course.id, found.new);
+    notify(found.new.length ? `Dossier suivi. ${plural(found.new.length, "cours trouvé", "cours trouvés")} : ajoute-les depuis la page Cours de la matière.`
+      : "Dossier suivi : Pirouette y regardera à chaque ouverture, puis toutes les heures.");
+  } catch (err) { notify(err.message); }
+});
+$("#watch-stop").addEventListener("click", async () => {
+  if (!await askConfirm("Ne plus suivre ce dossier ? Les cours déjà ajoutés restent dans la matière.", { ok: "Ne plus suivre" })) return;
+  await api(`/api/courses/${state.course.id}/watch`, { method: "DELETE" }).catch(() => {});
+  delete state.course.watch;
+  renderWatchRow(state.course);
+  renderWatchNew(state.course.id, []);
+});
+// À l'ouverture de Pirouette, puis toutes les heures : chaque dossier suivi (les cours modifiés se mettent à jour)
+const scanAllWatched = () => api("/api/watch/scan-all", { method: "POST" }).catch(() => {});
+setTimeout(scanAllWatched, 4000);
+setInterval(scanAllWatched, 60 * 60 * 1000);
 
 async function uploadFiles(fileList) {
   const files = [...fileList];  // copie : la liste du champ est vidée juste après l'appel

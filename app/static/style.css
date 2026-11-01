@@ -3072,3 +3072,13 @@ p, li, h1, h2, h3, h4, blockquote, td, th, dd, dt, pre, code, .feedback, .msg-bu
 .up-actions .link-button { font-size: 13.5px; }
 .up-track.paused .up-fill { background: color-mix(in srgb, var(--accent) 45%, var(--border)); }
 .up-actions [data-import="resume"] { color: var(--accent-ink); font-weight: 600; text-decoration-color: currentColor; }
+
+/* Dossier suivi : les nouveaux cours trouvés, à ajouter ou ignorer */
+.watch-new { margin: 12px 0; padding: 14px 16px; border-radius: 16px; background: color-mix(in srgb, var(--accent) 6%, var(--surface));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 16%, transparent); }
+.watch-new[hidden] { display: none; }
+.watch-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 8px; }
+.watch-new ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.watch-new li { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 12px; background: var(--surface); }
+.watch-new li span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 550; }
+.set-row.set-watch .set-value { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); }

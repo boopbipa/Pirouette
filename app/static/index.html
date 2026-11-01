@@ -883,6 +883,8 @@
       </label>
       <!-- Hors de l'arbre : visible aussi sur une matière vide (barre de chargement, erreur de lecture) -->
       <p id="upload-status" class="status" hidden></p>
+      <!-- Dossier suivi : les nouveaux cours trouvés, à ajouter ou à ignorer (choix retenu) -->
+      <div class="watch-new" id="watch-new" hidden></div>
       <p class="status" id="course-status" hidden></p>
       <!-- Un cours tout juste ajouté (ni quiz ni flashcards) : un seul bouton, Claude découpe puis crée tout -->
       <div class="ready-card" id="ready-card" hidden>
@@ -995,6 +997,11 @@
             <select id="course-folder" class="chip set-select" data-icon="folder"></select></div>
           <div class="set-row"><span class="set-label">Partiels</span><span class="set-value" id="set-exam"></span>
             <button class="ghost small" type="button" id="course-exam">Choisir la date</button></div>
+          <div class="set-row set-watch" id="watch-row"><span class="set-label">Dossier suivi<small>Pirouette y reprend tes cours : les cours modifiés se mettent à jour tout seuls, les nouveaux te sont proposés.</small></span>
+            <span class="set-value" id="watch-path">Aucun</span>
+            <button class="ghost small" type="button" id="watch-refresh" hidden>Actualiser</button>
+            <button class="ghost small" type="button" id="watch-pick">Choisir…</button>
+            <button class="ghost small" type="button" id="watch-stop" hidden>Ne plus suivre</button></div>
           <div class="set-row set-notes"><label class="set-label" for="course-notes">Consignes pour Claude<small>Ajoutées à chaque création de quiz et de flashcards de cette matière.</small></label>
             <textarea id="course-notes" class="claude-notes" rows="2" maxlength="1000" placeholder="ex. ignore l&#39;introduction de chaque chapitre ; seulement les cours à partir du 12 mars ; pas de questions sur les dates"></textarea></div>
           <div class="set-row"><span class="set-label">Quiz et flashcards</span><span class="set-value muted">D'un paquet .zip, d'un tableau ou d'un .txt</span>

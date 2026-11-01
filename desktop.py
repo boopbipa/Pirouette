@@ -201,6 +201,13 @@ class DesktopApi:
         except Exception as exc:
             print(f"Icône de la fenêtre : {exc!r}", file=sys.stderr)
 
+    def pick_folder(self) -> str:
+        """Choisir un dossier dans le Finder (le dossier suivi d'une matière). "" si on annule."""
+        import webview
+
+        folders = webview.windows[0].create_file_dialog(webview.FileDialog.FOLDER)
+        return str(folders[0]) if folders else ""
+
     def import_legacy_data(self) -> dict:
         """Récupère les cours d'une ancienne version (le dossier « data » à côté de run.sh)."""
         import webview
