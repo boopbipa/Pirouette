@@ -4245,11 +4245,20 @@ $("#flashcard").addEventListener("pointercancel", endSwipe);
 
 // Deux doigts sur le trackpad (défilement horizontal) : la carte suit les doigts. Réponse vue : à droite « Je savais »,
 // à gauche « Je ne savais pas ». Pas encore vue : un glissement la retourne. Un geste = une action (l'élan est ignoré).
-const padSwipe = { dx: 0, done: false, idle: 0 };
+// Après une action, l'élan du trackpad (le Mac continue d'envoyer des mouvements une à deux secondes) est ignoré tant
+// qu'il dure : sinon il retournait, ou notait, la carte suivante.
+const padSwipe = { dx: 0, done: false, idle: 0, lockUntil: 0 };
+const lockPad = (ms = 900) => { padSwipe.lockUntil = Date.now() + ms; };
 $("#view-cards").addEventListener("wheel", (e) => {
   const s = state.session, item = s?.items[s.index];
-  if (e.ctrlKey || item?.kind !== "card" || s.leaving || swipe.x !== null || $("#cards-done").hidden === false) return;
-  if (Math.abs(e.deltaX) <= Math.abs(e.deltaY) && !padSwipe.dx) return;  // défilement vertical : rien à voir
+  if (e.ctrlKey || Math.abs(e.deltaX) <= Math.abs(e.deltaY) && !padSwipe.dx) return;  // défilement vertical : rien à voir
+  if (Date.now() < padSwipe.lockUntil) {
+    // L'élan continue : on attend qu'il se taise (300 ms sans mouvement) avant d'écouter un nouveau geste
+    e.preventDefault();
+    padSwipe.lockUntil = Math.max(padSwipe.lockUntil, Date.now() + 300);
+    return;
+  }
+  if (item?.kind !== "card" || s.leaving || swipe.x !== null || $("#cards-done").hidden === false) return;
   e.preventDefault();
   const el = $("#flashcard");
   const reset = () => {
@@ -4266,7 +4275,7 @@ $("#view-cards").addEventListener("wheel", (e) => {
   padSwipe.dx -= e.deltaX;  // doigts vers la droite = deltaX négatif
   let dx = padSwipe.dx;
   if (!s.revealed) {
-    if (Math.abs(dx) >= 70) { reset(); padSwipe.done = true; return flipCard(); }
+    if (Math.abs(dx) >= 70) { reset(); padSwipe.done = true; lockPad(); return flipCard(); }
     dx *= 0.35;
   }
   el.classList.remove("tilting");
@@ -4277,6 +4286,7 @@ $("#view-cards").addEventListener("wheel", (e) => {
   leanCard(dx / SWIPE_AT);
   if (Math.abs(dx) >= SWIPE_AT) {
     padSwipe.done = true;
+    lockPad();
     rateCard(dx > 0 ? "good" : "again", { thrown: true });
   }
 }, { passive: false });
