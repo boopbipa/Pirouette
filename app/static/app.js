@@ -218,7 +218,7 @@ function liquidNav(nav, { items, active }) {
   nav.addEventListener("pointermove", (e) => {
     if (!drag || e.pointerId !== drag.id) return;
     if (!drag.moved && Math.abs(e.clientX - drag.x0) < 5) return;
-    if (!drag.moved) { drag.moved = true; nav.setPointerCapture(e.pointerId); nav.classList.add("dragging"); }
+    if (!drag.moved) { drag.moved = true; nav.setPointerCapture(e.pointerId); nav.classList.add("dragging"); drag.over.classList.add("glide-over"); }
     const over = under(e.clientX), box = nav.getBoundingClientRect();
     const first = list()[0], last = list().at(-1);
     const x = Math.min(Math.max(e.clientX - box.left - drag.grab, first.offsetLeft), last.offsetLeft + last.offsetWidth - over.offsetWidth);

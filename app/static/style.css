@@ -3014,7 +3014,10 @@ body.focus.day .quiz-trail i.ko { background: color-mix(in srgb, var(--wrong) 80
 .liquid.glide a.on, .liquid.glide a.active { cursor: grab; }
 .liquid.dragging, .liquid.dragging a { cursor: grabbing !important; user-select: none; }
 .liquid.dragging .nav-glider { transform: scale(1.06); box-shadow: 0 6px 16px -6px rgba(60, 40, 20, .45), inset 0 .5px 0 rgba(255, 255, 255, .8); }
-.liquid.dragging a.glide-over { color: var(--text); }
+/* Pendant qu'on la déplace : l'onglet sous la pastille prend la couleur de l'app, l'onglet de départ la perd */
+.liquid a { transition: color .15s; }
+.liquid.dragging a.on:not(.glide-over), .liquid.dragging a.active:not(.glide-over) { color: color-mix(in srgb, var(--text) 75%, transparent); }
+.liquid.dragging a.glide-over { color: var(--accent-ink); }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .nav-glider { box-shadow: 0 1px 3px rgba(0, 0, 0, .4), inset 0 .5px 0 rgba(255, 255, 255, .12); } }
 :root[data-theme="dark"] .nav-glider { box-shadow: 0 1px 3px rgba(0, 0, 0, .4), inset 0 .5px 0 rgba(255, 255, 255, .12); }
 
