@@ -3005,11 +3005,16 @@ body.focus.day .quiz-trail i.ko { background: color-mix(in srgb, var(--wrong) 80
 
 /* Barre du haut : une seule pastille blanche qui glisse d'un onglet à l'autre en s'étirant comme une goutte
    (« liquid glass ») ; l'onglet actif n'a plus son propre fond */
-.nav-pill { position: relative; isolation: isolate; }
-.nav-glider { position: absolute; top: 5px; bottom: 5px; left: 0; width: 0; z-index: -1; border-radius: 999px; opacity: 0;
+.liquid { position: relative; isolation: isolate; }
+.nav-glider { position: absolute; top: 5px; left: 0; width: 0; height: 0; z-index: -1; border-radius: 999px; opacity: 0;
   background: var(--surface); box-shadow: 0 1px 3px rgba(0, 0, 0, .12), inset 0 .5px 0 rgba(255, 255, 255, .8); pointer-events: none; }
-.nav-pill.glide .nav-glider { opacity: 1; }
-.nav-pill.glide a.on { background: transparent; box-shadow: none; }
+.liquid.glide .nav-glider { opacity: 1; }
+.nav-pill.glide a.on, .scope-tabs.glide a.active { background: transparent; box-shadow: none; }
+/* On attrape la pastille : main fermée, et elle se soulève un peu */
+.liquid.glide a.on, .liquid.glide a.active { cursor: grab; }
+.liquid.dragging, .liquid.dragging a { cursor: grabbing !important; user-select: none; }
+.liquid.dragging .nav-glider { transform: scale(1.06); box-shadow: 0 6px 16px -6px rgba(60, 40, 20, .45), inset 0 .5px 0 rgba(255, 255, 255, .8); }
+.liquid.dragging a.glide-over { color: var(--text); }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .nav-glider { box-shadow: 0 1px 3px rgba(0, 0, 0, .4), inset 0 .5px 0 rgba(255, 255, 255, .12); } }
 :root[data-theme="dark"] .nav-glider { box-shadow: 0 1px 3px rgba(0, 0, 0, .4), inset 0 .5px 0 rgba(255, 255, 255, .12); }
 

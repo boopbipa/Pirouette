@@ -167,33 +167,90 @@ async function route() {
   }
 }
 
-// ---------- Barre du haut : la pastille qui suit l'onglet ----------
-// Une seule pastille pour tous les onglets. En changeant d'onglet, elle s'étire jusqu'au nouveau (en couvrant les
-// deux), s'aplatit un peu, puis se rétracte dessus avec un léger rebond — comme une goutte.
-const navPill = $(".nav-pill"), navGlider = $(".nav-glider");
-let gliderAt = null;
-function moveGlider() {
-  const on = navPill.querySelector("a.on:not([hidden])");
-  navPill.classList.toggle("glide", Boolean(on));
-  if (!on) { gliderAt = null; return; }
-  const x = on.offsetLeft, w = on.offsetWidth;
-  const still = !gliderAt || matchMedia("(prefers-reduced-motion: reduce)").matches;
-  if (!still && (gliderAt.x !== x || gliderAt.w !== w)) {
-    const { x: fx, w: fw } = gliderAt, left = Math.min(fx, x), right = Math.max(fx + fw, x + w), dir = x > fx ? 1 : -1;
-    navGlider.animate([
-      { left: `${fx}px`, width: `${fw}px`, transform: "scaleY(1)" },
-      { left: `${left}px`, width: `${right - left}px`, transform: "scaleY(.84)", offset: .45 },
-      { left: `${x + dir * 3}px`, width: `${w}px`, transform: "scaleY(1.05)", offset: .8 },
-      { left: `${x}px`, width: `${w}px`, transform: "scaleY(1)" },
-    ], { duration: 520, easing: "cubic-bezier(.3, .7, .3, 1)" });
+// ---------- Les menus en pastille : la pastille qui suit l'onglet (« liquid glass ») ----------
+// Barre du haut, onglets d'une matière (Aujourd'hui, Quiz…), Cours | Réglages, Social : une seule pastille par menu.
+// En changeant d'onglet, elle s'étire jusqu'au nouveau (en couvrant les deux), s'aplatit un peu, puis se rétracte
+// dessus avec un léger rebond — comme une goutte. On peut aussi l'attraper à la souris et la faire glisser : en la
+// lâchant sur un onglet, on y va.
+function liquidNav(nav, { items, active }) {
+  let glider = nav.querySelector(":scope > .nav-glider");
+  if (!glider) {
+    glider = Object.assign(document.createElement("span"), { className: "nav-glider" });
+    glider.setAttribute("aria-hidden", "true");
+    nav.prepend(glider);
   }
-  navGlider.style.left = `${x}px`;
-  navGlider.style.width = `${w}px`;
-  gliderAt = { x, w };
+  nav.classList.add("liquid");
+  const list = () => [...nav.querySelectorAll(items)].filter((a) => !a.hidden && a.offsetWidth);
+  const current = () => list().find((a) => a.matches(active));
+  let at = null, drag = null, swallowClick = false;
+  const place = (x, w, y, h) => Object.assign(glider.style, { left: `${x}px`, width: `${w}px`, top: `${y}px`, height: `${h}px` });
+  function move() {
+    if (drag) return;
+    const on = current();
+    nav.classList.toggle("glide", Boolean(on));
+    if (!on) { at = null; return; }
+    const x = on.offsetLeft, w = on.offsetWidth, y = on.offsetTop, h = on.offsetHeight;
+    if (at && (at.x !== x || at.w !== w) && !matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      const left = Math.min(at.x, x), right = Math.max(at.x + at.w, x + w), dir = x > at.x ? 1 : -1;
+      glider.animate([
+        { left: `${at.x}px`, width: `${at.w}px`, transform: "scaleY(1)" },
+        { left: `${left}px`, width: `${right - left}px`, transform: "scaleY(.84)", offset: .45 },
+        { left: `${x + dir * 3}px`, width: `${w}px`, transform: "scaleY(1.05)", offset: .8 },
+        { left: `${x}px`, width: `${w}px`, transform: "scaleY(1)" },
+      ], { duration: 520, easing: "cubic-bezier(.3, .7, .3, 1)" });
+    }
+    place(x, w, y, h);
+    at = { x, w };
+  }
+  const settle = () => { at = null; move(); };  // sans animation (menu qui apparaît, fenêtre redimensionnée)
+  new MutationObserver(() => requestAnimationFrame(move)).observe(nav, { subtree: true, attributes: true, attributeFilter: ["class", "hidden"] });
+  new ResizeObserver(() => requestAnimationFrame(settle)).observe(nav);
+  // Attraper la pastille : elle suit la souris, s'ajuste à l'onglet survolé ; lâchée, on va sur cet onglet
+  const under = (clientX) => {
+    const box = nav.getBoundingClientRect(), x = clientX - box.left;
+    return list().reduce((best, a) => Math.abs(a.offsetLeft + a.offsetWidth / 2 - x) < Math.abs(best.offsetLeft + best.offsetWidth / 2 - x) ? a : best);
+  };
+  nav.addEventListener("pointerdown", (e) => {
+    const on = current();
+    if (!on || e.button !== 0 || e.pointerType === "touch" || !on.contains(e.target)) return;
+    drag = { x0: e.clientX, grab: e.clientX - nav.getBoundingClientRect().left - on.offsetLeft, moved: false, over: on, id: e.pointerId };
+  });
+  nav.addEventListener("pointermove", (e) => {
+    if (!drag || e.pointerId !== drag.id) return;
+    if (!drag.moved && Math.abs(e.clientX - drag.x0) < 5) return;
+    if (!drag.moved) { drag.moved = true; nav.setPointerCapture(e.pointerId); nav.classList.add("dragging"); }
+    const over = under(e.clientX), box = nav.getBoundingClientRect();
+    const first = list()[0], last = list().at(-1);
+    const x = Math.min(Math.max(e.clientX - box.left - drag.grab, first.offsetLeft), last.offsetLeft + last.offsetWidth - over.offsetWidth);
+    glider.style.transition = "width .18s ease";
+    place(x, over.offsetWidth, over.offsetTop, over.offsetHeight);
+    if (over !== drag.over) { drag.over?.classList.remove("glide-over"); over.classList.add("glide-over"); drag.over = over; }
+  });
+  const drop = (e) => {
+    if (!drag || e.pointerId !== drag.id) return;
+    const { moved, over } = drag;
+    drag = null;
+    nav.classList.remove("dragging");
+    glider.style.transition = "";
+    over?.classList.remove("glide-over");
+    if (!moved) return;
+    at = { x: glider.offsetLeft, w: glider.offsetWidth };
+    if (over && !over.matches(active)) over.click();
+    swallowClick = true;  // le clic que le navigateur envoie après le relâchement ne compte pas
+    setTimeout(() => { swallowClick = false; }, 0);
+    requestAnimationFrame(move);
+  };
+  // Un lien se glisse tout seul (glisser-déposer du navigateur), ce qui annulerait le geste : pas dans ces menus
+  nav.addEventListener("dragstart", (e) => e.preventDefault());
+  nav.addEventListener("pointerup", drop);
+  nav.addEventListener("pointercancel", drop);
+  nav.addEventListener("click", (e) => { if (swallowClick) { e.preventDefault(); e.stopImmediatePropagation(); } }, true);
+  addEventListener("resize", settle);
+  document.fonts?.ready.then(settle);
+  settle();
 }
-new MutationObserver(() => requestAnimationFrame(moveGlider)).observe(navPill, { subtree: true, attributes: true, attributeFilter: ["class", "hidden"] });
-addEventListener("resize", () => { gliderAt = null; moveGlider(); });
-document.fonts?.ready.then(() => { gliderAt = null; moveGlider(); });
+liquidNav($(".nav-pill"), { items: "a[data-nav]", active: ".on" });
+document.querySelectorAll(".scope-tabs").forEach((nav) => liquidNav(nav, { items: ":scope > a", active: ".active" }));
 
 // ---------- Fil d'Ariane : où je suis, et un clic pour remonter ----------
 // crumbs : [{ label, href }] ; le dernier est la page affichée (pas de lien).
