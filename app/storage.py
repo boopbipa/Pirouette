@@ -798,6 +798,20 @@ class Store:
         _write(self.quizzes_dir / f"{quiz['id']}.json", quiz)
         return quiz
 
+    def accept_answer(self, quiz_id: str, index: int, answer: str) -> list[str]:
+        """Ajoute une formulation acceptée à une question (10 au plus, sans doublon)."""
+        quiz = self.get_quiz(quiz_id)
+        if not 0 <= index < len(quiz["questions"]):
+            raise IndexError(index)
+        question = quiz["questions"][index]
+        answer = answer.strip()[:300]
+        accepted = question.setdefault("accepted", [])
+        if answer and answer.lower() not in {a.lower() for a in accepted} and answer.lower() != str(question.get("answer", "")).lower():
+            accepted.append(answer)
+            del accepted[:-10]
+            self.save_quiz(quiz)
+        return accepted
+
     def get_quiz(self, quiz_id: str) -> dict:
         return _read(self._quiz_path(quiz_id))
 

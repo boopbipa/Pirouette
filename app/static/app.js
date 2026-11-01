@@ -4101,6 +4101,44 @@ function endSwipe() {
 $("#flashcard").addEventListener("pointerup", endSwipe);
 $("#flashcard").addEventListener("pointercancel", endSwipe);
 
+// Deux doigts sur le trackpad (défilement horizontal) : la carte suit les doigts. Réponse vue : à droite « Je savais »,
+// à gauche « Je ne savais pas ». Pas encore vue : un glissement la retourne. Un geste = une action (l'élan est ignoré).
+const padSwipe = { dx: 0, done: false, idle: 0 };
+$("#view-cards").addEventListener("wheel", (e) => {
+  const s = state.session, item = s?.items[s.index];
+  if (e.ctrlKey || item?.kind !== "card" || s.leaving || swipe.x !== null || $("#cards-done").hidden === false) return;
+  if (Math.abs(e.deltaX) <= Math.abs(e.deltaY) && !padSwipe.dx) return;  // défilement vertical : rien à voir
+  e.preventDefault();
+  const el = $("#flashcard");
+  const reset = () => {
+    padSwipe.dx = 0;
+    padSwipe.done = false;
+    if (state.session?.leaving) return;
+    el.classList.remove("dragging");
+    ["--dx", "--dy", "--dr"].forEach((v) => el.style.removeProperty(v));
+    leanCard(0);
+  };
+  clearTimeout(padSwipe.idle);
+  padSwipe.idle = setTimeout(reset, 180);  // le geste (et son élan) fini, on repart de zéro
+  if (padSwipe.done) return;
+  padSwipe.dx -= e.deltaX;  // doigts vers la droite = deltaX négatif
+  let dx = padSwipe.dx;
+  if (!s.revealed) {
+    if (Math.abs(dx) >= 70) { reset(); padSwipe.done = true; return flipCard(); }
+    dx *= 0.35;
+  }
+  el.classList.remove("tilting");
+  el.classList.add("dragging");
+  el.style.setProperty("--dx", `${dx}px`);
+  el.style.setProperty("--dr", `${dx / 16}deg`);
+  if (!s.revealed) return;
+  leanCard(dx / SWIPE_AT);
+  if (Math.abs(dx) >= SWIPE_AT) {
+    padSwipe.done = true;
+    rateCard(dx > 0 ? "good" : "again", { thrown: true });
+  }
+}, { passive: false });
+
 
 function nextItem() {
   const s = state.session;
@@ -4207,15 +4245,8 @@ $("#sq-feedback").addEventListener("click", async (e) => {
 });
 
 // Réponse écrite validée : un contour vert (juste) ou rouge (faux) fait le tour de la réponse, puis s'efface
-function ringAnswer(correct) {
-  const field = [...document.querySelectorAll("#sq-short, #short-answer")].find((f) => f.offsetParent);
-  if (!field) return;  // QCM, vrai / faux : les propositions se colorent déjà
-  const target = field.tagName === "TEXTAREA" ? field.parentElement : field;
-  target.classList.remove("answer-ring", "ok", "ko");
-  void target.offsetWidth;  // pour rejouer l'animation
-  target.classList.add("answer-ring", correct ? "ok" : "ko");
-  setTimeout(() => target.classList.remove("answer-ring", "ok", "ko"), 2400);
-}
+// Plus de contour animé autour du champ de réponse : c'est l'encadré du verdict qui s'illumine (voir la feuille de style)
+function ringAnswer() {}
 
 // « J'avais faux » à gauche, « J'avais bon » à droite : les mêmes touches que pour noter une carte (← / → par défaut)
 const gradeKeys = () => ({ again: escapeHtml(keyName(state.keys.again)), good: escapeHtml(keyName(state.keys.good)) });
@@ -4249,27 +4280,30 @@ function validateSessionQuestion() {
     const given = input.value.trim();
     if (!given) return;
     input.disabled = true;
-    if (typedIsRight(given, q.answer)) {
+    if (typedRight(q, given)) {
       recordSessionAnswer(item, given, true);
-      return sessionFeedback(q, true, `<p><strong>Bonne réponse !</strong></p>`);
+      return sessionFeedback(q, true, looselyEqual(given, q.answer) ? "" : `<p><strong>Réponse du cours :</strong> ${escapeHtml(q.answer)}</p>`);
     }
     const keys = keywordCheck(q, given);
     if (keys?.right) {
       recordSessionAnswer(item, given, true);
-      return sessionFeedback(q, true, keywordsNote(q, keys, true));
+      return sessionFeedback(q, true, keywordsNote(q, keys));
     }
     ringAnswer(false);  // pas la réponse attendue (on peut quand même dire « J'avais bon »)
     const fb = $("#sq-feedback");
     fb.className = "feedback neutral";
     delete fb.dataset.word;
-    fb.innerHTML = `${keys ? keywordsNote(q, keys, false) : `<p><strong>Réponse attendue :</strong> ${escapeHtml(q.answer)}</p>`}
+    fb.innerHTML = `${keys ? keywordsNote(q, keys) : `<p><strong>Réponse attendue :</strong> ${escapeHtml(q.answer)}</p>`}
       ${q.explanation ? `<p>${escapeHtml(cleanExplanation(q.explanation))}</p>` : ""}${sourceHtml(q)}
       <div class="actions self-grade"><button class="ghost" id="sq-wrong">J'avais faux <kbd class="key-hint">${gradeKeys().again}</kbd></button>
         <button class="primary" id="sq-right">J'avais bon <kbd class="key-hint on-accent">${gradeKeys().good}</kbd></button></div>${SQ_DELETE}`;
     fb.hidden = false;
     $("#sq-validate").hidden = true;
     $("#sq-dunno").hidden = true;
-    const grade = (correct) => { recordSessionAnswer(item, given, correct); nextItem(); };
+    const grade = (correct) => {
+      if (correct) rememberAnswer(q, given, item.quiz_id, item.index ?? -1);
+      recordSessionAnswer(item, given, correct); nextItem();
+    };
     $("#sq-right").onclick = () => grade(true);
     $("#sq-wrong").onclick = () => grade(false);
     return;
@@ -6527,19 +6561,27 @@ function setVerdict(fb, correct) {
 // tenir compte des accents, des petits mots ni des terminaisons. Au moins 70 % : juste ; sinon on s'auto-évalue,
 // avec les mots retrouvés surlignés dans la réponse attendue.
 const KEYWORDS_RIGHT = 0.7, KEYWORDS_CLOSE = 0.4;
-// Ce qu'on affiche : la réponse attendue, les mots-clés retrouvés surlignés, et où on en est
-function keywordsNote(q, keys, right) {
-  const share = `${Math.round(keys.score * 100)} % des mots-clés`;
-  const lead = right ? `<strong>Les mots-clés y sont</strong> (${Math.round(keys.score * 100)} %).`
-    : keys.close ? `<strong>Presque</strong> : ${share} retrouvés. Compare avec la réponse attendue, puis dis-nous.`
-      : `<strong>Pas les mots attendus</strong> (${share}). Si tu l'as dit autrement, tu peux quand même dire « J'avais bon ».`;
-  return `<p class="keywords-lead">${lead}</p><p><strong>Réponse attendue :</strong> <span class="keywords">${highlightFound(q.answer, keys.found)}</span></p>`;
+// Ce qu'on affiche : la réponse attendue, avec les mots-clés retrouvés surlignés (sans explication)
+function keywordsNote(q, keys) {
+  return `<p><strong>Réponse attendue :</strong> <span class="keywords">${highlightFound(q.answer, keys.found)}</span></p>`;
 }
 function keywordCheck(q, given) {
   if (q.type !== "reponse_courte") return null;
   const { score, found } = compareAnswer(given, q.answer);
-  return { score, found, right: score >= KEYWORDS_RIGHT, close: score >= KEYWORDS_CLOSE };
+  // Une réponse que l'étudiant a déjà fait accepter (« J'avais bon ») compte aussi
+  const accepted = (q.accepted || []).some((a) => typedIsRight(given, a) || compareAnswer(given, a).score >= KEYWORDS_RIGHT);
+  return { score, found, right: accepted || score >= KEYWORDS_RIGHT, close: score >= KEYWORDS_CLOSE };
 }
+// « J'avais bon » sur une réponse écrite : Pirouette retient la formulation pour cette question, la prochaine fois
+// elle est comptée juste toute seule
+function rememberAnswer(q, given, quizId, index) {
+  if (!given || given === DUNNO || index < 0 || !quizId) return;
+  q.accepted = [...new Set([...(q.accepted || []), given])];
+  api(`/api/quizzes/${quizId}/accepted`, jsonBody("POST", { index, answer: given })).catch(() => {});
+}
+
+// Juste : la réponse attendue, ou une formulation déjà acceptée par l'étudiant, à quelques détails près
+const typedRight = (q, given) => [q.answer, ...(q.accepted || [])].some((a) => typedIsRight(given, a));
 
 // Réponse tapée juste : identique à quelques détails près (accents, articles, majuscules, faute de frappe).
 function typedIsRight(given, expected) {
@@ -6582,9 +6624,9 @@ function validateShort(q) {
   const given = input.value.trim();
   if (!given) return;
   input.disabled = true;
-  if (typedIsRight(given, q.answer)) return record(q, given, true);
+  if (typedRight(q, given)) return record(q, given, true);
   const keys = keywordCheck(q, given);
-  if (keys?.right) return record(q, given, true, keywordsNote(q, keys, true));
+  if (keys?.right) return record(q, given, true, keywordsNote(q, keys));
 
   // Réponse libre : on montre la réponse attendue et l'utilisateur s'auto-évalue.
   state.answered = true;
@@ -6592,7 +6634,7 @@ function validateShort(q) {
   const fb = $("#feedback");
   fb.className = "feedback neutral";
   delete fb.dataset.word;
-  fb.innerHTML = `${keys ? keywordsNote(q, keys, false) : `<p><strong>Réponse attendue :</strong> ${escapeHtml(q.answer)}</p>`}
+  fb.innerHTML = `${keys ? keywordsNote(q, keys) : `<p><strong>Réponse attendue :</strong> ${escapeHtml(q.answer)}</p>`}
     ${q.explanation ? `<p>${escapeHtml(cleanExplanation(q.explanation))}</p>` : ""}
     ${sourceHtml(q)}
     ${keyTermsHtml(q)}
@@ -6603,7 +6645,10 @@ function validateShort(q) {
   $("#validate-btn").hidden = true;
   $("#dunno-btn").hidden = true;
   // La réponse attendue et l'explication sont déjà affichées : on passe directement à la suite.
-  const selfGrade = (correct) => { saveAnswer(q, correct); state.results.push({ question: q, given, correct }); markTrail(correct); next(); };
+  const selfGrade = (correct) => {
+    if (correct && !state.quiz.online && !state.quiz.shared) rememberAnswer(q, given, state.quiz.id, state.quiz.questions.indexOf(q));
+    saveAnswer(q, correct); state.results.push({ question: q, given, correct }); markTrail(correct); next();
+  };
   $("#self-right").onclick = () => selfGrade(true);
   $("#self-wrong").onclick = () => selfGrade(false);
 }
@@ -6628,7 +6673,7 @@ function record(q, given, correct, note = "") {
   setVerdict(fb, correct);
   // QCM et vrai/faux : la bonne réponse est déjà surlignée en vert, inutile de la répéter.
   const verdict = note || (!isTyped(q) ? ""
-    : correct ? `<p><strong>Bonne réponse !</strong>${q.type === "texte_a_trous" && given !== q.answer ? ` (${escapeHtml(q.answer)})` : ""}</p>`
+    : correct ? (looselyEqual(given, q.answer) ? "" : `<p><strong>Réponse du cours :</strong> ${escapeHtml(q.answer)}</p>`)
     : `<p><strong>Réponse attendue :</strong> ${escapeHtml(q.answer)}</p>`);
   fb.innerHTML = `${verdict}
     ${q.explanation ? `<p>${escapeHtml(cleanExplanation(q.explanation))}</p>` : ""}

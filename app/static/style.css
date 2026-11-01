@@ -3029,3 +3029,19 @@ body.focus .voice-toggle.on { color: #F5F5F7; }
 body.focus.day .voice-toggle { color: rgba(29, 29, 31, .6); }
 body.focus.day .voice-toggle.on { color: #1D1D1F; }
 #voice-rate { accent-color: var(--accent); width: 180px; }
+
+/* Le verdict s'illumine à son arrivée : c'est lui qu'on regarde (plus de contour animé autour du champ de réponse) */
+.feedback.ok, .feedback.ko { animation: verdict-glow 1.4s ease-out; }
+@keyframes verdict-glow {
+  0% { box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--fc) 55%, transparent), 0 0 0 0 color-mix(in srgb, var(--fc) 0%, transparent); }
+  18% { box-shadow: 0 0 0 2px var(--fc), 0 0 34px 6px color-mix(in srgb, var(--fc) 45%, transparent); }
+  100% { box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--fc) 55%, transparent), 0 14px 28px -20px color-mix(in srgb, var(--fc) 55%, transparent); }
+}
+@media (prefers-reduced-motion: reduce) { .feedback.ok, .feedback.ko { animation: none; } }
+
+/* Sélection du texte : seulement là où il y a du texte à lire (paragraphes, titres, réponses, explications, messages…).
+   Ailleurs (fonds, marges, zones vides en bas d'écran), un glisser de la souris ne surligne plus rien */
+body { -webkit-user-select: none; user-select: none; }
+p, li, h1, h2, h3, h4, blockquote, td, th, dd, dt, pre, code, .feedback, .msg-bubble, .card-source, #question-text,
+#sq-text, .question-text, .app-request-text, .keywords, .course-text, .reader, .explain-text {
+  -webkit-user-select: text; user-select: text; }

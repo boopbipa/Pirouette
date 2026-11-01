@@ -42,3 +42,15 @@ def test_keeping_both_adds_the_file_next_to_the_old_one(tmp_path, monkeypatch):
     done = client.post(f"{url}/pending/{token}", json={"replace": False}).json()
     assert done["results"] == {"Copie.md": "added"} and len(done["course"]["files"]) == 2
     assert client.post(f"{url}/pending/{token}", json={"replace": False}).status_code == 404
+
+
+def test_an_accepted_answer_is_remembered_once(tmp_path, monkeypatch):
+    store = Store(tmp_path)
+    monkeypatch.setattr(main, "store", store)
+    quiz = store.save_quiz({"title": "Q", "questions": [{"type": "reponse_courte", "question": "?", "answer": "Une cure de parole"}]})
+    client = TestClient(main.app)
+    for _ in range(2):
+        r = client.post(f"/api/quizzes/{quiz['id']}/accepted", json={"index": 0, "answer": "le traitement par l'écoute"})
+    assert r.json() == {"accepted": ["le traitement par l'écoute"]}
+    assert store.get_quiz(quiz["id"])["questions"][0]["accepted"] == ["le traitement par l'écoute"]
+    assert client.post(f"/api/quizzes/{quiz['id']}/accepted", json={"index": 5, "answer": "x"}).status_code == 400

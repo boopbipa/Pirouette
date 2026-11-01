@@ -1156,11 +1156,7 @@ function drawQuestion(q) {
   }
 }
 // Réponse écrite validée : un contour vert (juste) ou rouge (faux) l'entoure un instant, puis s'efface
-function ringAnswer(input, right) {
-  input.classList.remove("ring-ok", "ring-ko");
-  void input.offsetWidth;
-  input.classList.add(right ? "ring-ok" : "ring-ko");
-}
+function ringAnswer() {}  // c'est l'encadré du verdict qui s'illumine (voir la feuille de style)
 // Le retour : une pastille « ✓ Juste » / « ✗ Faux » en tête, la bonne réponse si besoin, l'explication
 function showFeedback(q, correct, extra = "") {
   const fb = $("#feedback");

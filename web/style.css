@@ -448,3 +448,12 @@ body.in-session { touch-action: pan-y; }  /* glisser de côté, c'est pour la ca
   .choice { font-size: 18px; padding: 18px 20px; }
   .rates { max-width: 520px; margin-inline: auto; width: 100%; }
 }
+
+/* Le verdict s'illumine à son arrivée : c'est lui qu'on regarde (plus de contour animé autour du champ de réponse) */
+.feedback.ok, .feedback.ko { animation: verdict-glow 1.4s ease-out; }
+@keyframes verdict-glow {
+  0% { box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--fc) 55%, transparent), 0 0 0 0 color-mix(in srgb, var(--fc) 0%, transparent); }
+  18% { box-shadow: 0 0 0 2px var(--fc), 0 0 34px 6px color-mix(in srgb, var(--fc) 45%, transparent); }
+  100% { box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--fc) 55%, transparent), 0 14px 28px -20px color-mix(in srgb, var(--fc) 55%, transparent); }
+}
+@media (prefers-reduced-motion: reduce) { .feedback.ok, .feedback.ko { animation: none; } }

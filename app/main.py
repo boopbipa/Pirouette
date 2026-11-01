@@ -2396,6 +2396,21 @@ async def record_answers(quiz_id: str, body: AnswersIn) -> dict:
         raise HTTPException(400, "Réponses mal formées.") from exc
 
 
+class AcceptedIn(BaseModel):
+    index: int
+    answer: str
+
+
+@app.post("/api/quizzes/{quiz_id}/accepted")
+async def accept_answer(quiz_id: str, body: AcceptedIn) -> dict:
+    """Une réponse écrite que l'étudiant a jugée juste (« J'avais bon ») : retenue pour cette question, elle sera
+    comptée juste la prochaine fois."""
+    try:
+        return {"accepted": store.accept_answer(quiz_id, body.index, body.answer)}
+    except IndexError as exc:
+        raise HTTPException(400, "Question introuvable.") from exc
+
+
 class AttemptIn(BaseModel):
     score: int
     total: int
