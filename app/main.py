@@ -847,7 +847,9 @@ async def watch_add(course_id: str, body: WatchIn) -> dict:
     store._save_course(course)
     if not files:
         raise HTTPException(400, "Ces fichiers ne sont plus dans le dossier.")
-    return {"job": import_jobs().start(course_id, files, similar=False)}
+    # similar : un fichier au nom différent d'un cours déjà là (« CM1.pages » pour « CM1.pdf ») est proposé comme sa
+    # nouvelle version plutôt qu'ajouté en double ; remplacé, le cours prend le nom du fichier et reste suivi
+    return {"job": import_jobs().start(course_id, files, similar=True)}
 
 
 @app.post("/api/courses/{course_id}/watch/ignore")
