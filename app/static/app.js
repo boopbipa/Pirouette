@@ -2041,8 +2041,7 @@ function newsRequest() {
     + `questions et cartes dépassées à modifier ou supprimer avec pirouette_corriger). Réponds ensuite par un résumé court.`;
 }
 $("#news-copy").addEventListener("click", async () => {
-  await copyText(newsRequest());
-  setStatus("#news-status", "Demande copiée : colle-la dans l'app Claude. L'encart disparaîtra quand Claude aura fini (reviens sur cette page).", true);
+  setStatus("#news-status", `${await sendToClaude(newsRequest())} L'encart disparaîtra quand Claude aura fini.`, true);
 });
 $("#news-dismiss").addEventListener("click", async () => {
   await api(`/api/courses/${state.course.id}/news/dismiss`, { method: "POST" }).catch(() => {});
@@ -3364,6 +3363,15 @@ $("#focus").addEventListener("input", () => {
 });
 $("#view-create").addEventListener("change", renderAppRequest);
 $("#view-create").addEventListener("click", () => setTimeout(renderAppRequest, 0));
+// Envoyer une demande à Claude : l'app Claude s'ouvre sur une nouvelle conversation, la demande déjà écrite (il n'y a
+// plus qu'à appuyer sur Entrée). Elle est aussi copiée : si l'app s'ouvre sans elle, ⌘V suffit. Renvoie le message
+// à afficher.
+async function sendToClaude(text) {
+  await copyText(text);
+  const { opened } = await api("/api/claude-app/open", jsonBody("POST", { text })).catch(() => ({ opened: false }));
+  return opened ? "Claude s'ouvre avec la demande : appuie sur Entrée. (Si elle n'y est pas, colle-la : elle est copiée.)"
+    : "Demande copiée : ouvre l'app Claude et colle-la dans une nouvelle conversation.";
+}
 async function copyText(text) {
   try {
     await navigator.clipboard.writeText(text);
@@ -3380,17 +3388,7 @@ $("#app-request-next").addEventListener("click", async () => {
   setStatus("#app-request-status", "Suite copiée. Colle-la dans la même conversation, une fois le quiz enregistré.", true);
 });
 $("#app-request-copy").addEventListener("click", async () => {
-  const text = appRequest();
-  try {
-    await navigator.clipboard.writeText(text);
-  } catch {
-    const area = Object.assign(document.createElement("textarea"), { value: text });
-    document.body.append(area);
-    area.select();
-    document.execCommand("copy");
-    area.remove();
-  }
-  setStatus("#app-request-status", "Copié. Colle-la dans l'app Claude (⌘V).", true);
+  setStatus("#app-request-status", await sendToClaude(appRequest()), true);
 });
 const selectedProvider = () => document.querySelector("input[name=provider]:checked")?.value || "local";
 
@@ -4603,12 +4601,10 @@ function clarifyRequest(course, refs = []) {
 $("#card-clarify-current").addEventListener("click", async () => {
   const item = state.session?.items[state.session.index];
   if (item?.kind !== "card") return;
-  await copyText(clarifyRequest({ id: item.course_id, name: item.course_name }, [`c:${item.card.id}`]));
-  notify("Demande copiée : colle-la dans l'app Claude. La carte sera reformulée dans ton paquet.");
+  notify(`${await sendToClaude(clarifyRequest({ id: item.course_id, name: item.course_name }, [`c:${item.card.id}`]))} La carte sera reformulée dans ton paquet.`);
 });
 $("#cards-clarify").addEventListener("click", async () => {
-  await copyText(clarifyRequest(state.course));
-  setStatus("#cards-status", "Demande copiée : colle-la dans l'app Claude. Il reformule les cartes et questions peu claires, ton suivi est gardé.", true);
+  setStatus("#cards-status", `${await sendToClaude(clarifyRequest(state.course))} Il reformule les cartes et questions peu claires, ton suivi est gardé.`, true);
 });
 $("#card-edit-current").addEventListener("click", () => {
   const s = state.session;
@@ -5012,8 +5008,7 @@ async function onDecksClick(e) {
   const course = state.reviewScope?.single ? { id: state.reviewScope.params.course, name: state.reviewScope.name } : null;
   if (act && course) {
     if (act === "clarify") {
-      await copyText(clarifyRequest(course));
-      setStatus("#grid-status", "Demande copiée : colle-la dans l'app Claude. Il reformule les cartes et questions peu claires, ton suivi est gardé.", true);
+      setStatus("#grid-status", `${await sendToClaude(clarifyRequest(course))} Il reformule les cartes et questions peu claires, ton suivi est gardé.`, true);
     }
     if (act === "import") { state.importFrom = "cartes"; $("#import-input").click(); }
     if (act === "export") exportItem("cards", course.id, "#grid-status");
@@ -8184,7 +8179,7 @@ function setPrepareEngine(engine) {
   const unsplit = unsplitFiles();
   $("#prepare-local-note").hidden = app;
   $("#prepare-app").hidden = !app;
-  $("#prepare-go").textContent = app ? "Copier la demande" : "Tout préparer";
+  $("#prepare-go").textContent = app ? "Ouvrir dans Claude" : "Tout préparer";
   if (app) $("#prepare-request").textContent = prepareRequest();
 }
 // Les fichiers (du cours affiché) pas encore découpés : avec l'app Claude, c'est Claude qui les découpe
@@ -8287,19 +8282,19 @@ function renderReady(course, waiting) {
   const f = focusFile(course) || course.files[0];
   $("#ready-title").textContent = `« ${fileLabel(f)} » est prêt`;
   $("#ready-text").textContent = ready.step === 1 ? "Claude le découpe en chapitres, puis crée quiz et flashcards."
-    : "Demande copiée : colle-la dans l'app Claude. Les quiz arrivent ici au fur et à mesure.";
+    : "Demande envoyée à Claude. Les quiz arrivent ici au fur et à mesure.";
 }
 function setReadyStep(step) {
   ready.step = step;
   document.querySelectorAll("#ready-steps [data-step]").forEach((x) => x.classList.toggle("on", Number(x.dataset.step) <= step));
-  $("#ready-go").textContent = step === 1 ? "Créer avec Claude" : "Copier à nouveau";
+  $("#ready-go").textContent = step === 1 ? "Créer avec Claude" : "Rouvrir dans Claude";
   $("#ready-go").classList.toggle("ghost", step > 1);
   $("#ready-go").classList.toggle("primary", step === 1);
 }
 $("#ready-go").addEventListener("click", async () => {
-  await copyText(prepareRequest());
+  const said = await sendToClaude(prepareRequest());
   setReadyStep(2);
-  $("#ready-text").textContent = "Demande copiée : colle-la dans l'app Claude. Les quiz arrivent ici au fur et à mesure.";
+  $("#ready-text").textContent = `${said} Les quiz arrivent ici au fur et à mesure.`;
   // Tant que la page reste ouverte, on guette l'arrivée des premiers quiz et cartes
   clearInterval(ready.timer);
   const id = state.course.id;
@@ -8314,8 +8309,7 @@ $("#prepare-go").addEventListener("click", async () => {
   const quizzes = $("#prepare-quizzes").checked, cards = $("#prepare-cards").checked;
   if (!quizzes && !cards) return showError("#prepare-error", "Coche au moins les quiz ou les flashcards.");
   if (state.prepareEngine === "app") {
-    await copyText(prepareRequest());
-    return setStatus("#prepare-status", "Demande copiée : colle-la dans l'app Claude. Quiz et flashcards apparaîtront dans cette matière au fur et à mesure.", true);
+    return setStatus("#prepare-status", `${await sendToClaude(prepareRequest())} Quiz et flashcards apparaîtront dans cette matière au fur et à mesure.`, true);
   }
   const form = new FormData();
   form.append("provider", "local");

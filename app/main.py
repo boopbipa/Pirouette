@@ -343,6 +343,29 @@ async def claude_app_install() -> dict:
     return _claude_app_view()
 
 
+class OpenClaudeIn(BaseModel):
+    text: str
+
+
+@app.post("/api/claude-app/open")
+async def open_in_claude(body: OpenClaudeIn) -> dict:
+    """Ouvre l'app Claude sur une nouvelle conversation, la demande déjà écrite (lien claude://…/new?q=). Renvoie
+    opened=False si l'app n'a pas pu s'ouvrir (pas installée…) : la page dit alors de coller la demande copiée."""
+    if os.getenv("PIROUETTE_DESKTOP") != "1":
+        return {"opened": False}
+    url = "claude://claude.ai/new?q=" + urllib.parse.quote(body.text[:6000], safe="")
+    try:
+        if sys.platform == "darwin":
+            done = await run_in_threadpool(subprocess.run, ["open", url], capture_output=True, timeout=10)
+            return {"opened": done.returncode == 0}
+        if sys.platform == "win32":
+            os.startfile(url)  # noqa: S606 — le lien est fabriqué ici, pas reçu de l'extérieur
+            return {"opened": True}
+    except (OSError, subprocess.SubprocessError):
+        pass
+    return {"opened": False}
+
+
 @app.get("/api/claude-app/diagnostic")
 async def claude_app_diagnostic() -> dict:
     return claude_desktop.diagnose()
