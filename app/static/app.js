@@ -605,14 +605,19 @@ async function renderPhoneHint(courses) {
   const content = courses.some((c) => c.quiz_count || c.card_count);
   if (!content || Date.now() < later) { box.hidden = true; return; }
   const s = await api("/api/sync").catch(() => null);
-  if (!s?.configured) { box.hidden = true; return; }
-  const devices = s.connected ? await api("/api/sync/devices").catch(() => []) : [];
-  box.hidden = devices.length > 0;
+  // La copie vers le téléphone déjà active (un appareil a été jumelé) : rien à proposer
+  if (!s?.configured || s.on) { box.hidden = true; return; }
+  // Pas de liste (compte en ligne déconnecté, réseau…) : dans le doute, on ne dit pas « connecte ton téléphone »
+  const devices = s.connected ? await api("/api/sync/devices").catch(() => null) : [];
+  box.hidden = devices === null || devices.length > 0;
 }
-$("#phone-hint-close").addEventListener("click", () => {
-  try { localStorage.setItem("pirouette.phoneHintLater", String(Date.now() + 14 * 86400000)); } catch {}
+const hidePhoneHint = (until) => {
+  try { localStorage.setItem("pirouette.phoneHintLater", String(until)); } catch {}
   $("#phone-hint").hidden = true;
-});
+};
+$("#phone-hint-close").addEventListener("click", () => hidePhoneHint(Date.now() + 14 * 86400000));
+$("#phone-hint-never").addEventListener("click", () => hidePhoneHint(8.64e15));  // pour toujours
+$("#phone-hint-go").addEventListener("click", () => { location.hash = "#/reglages/appareils"; });
 
 // ---------- Dossiers de cours (un semestre, une UE…) ----------
 // Dossiers repliés : une préférence de cet ordinateur (les dossiers archivés sont repliés par défaut).
@@ -3024,13 +3029,9 @@ async function finishImport(result, status) {
     status.textContent = "Enregistrement…";
     status.className = "status";
     await refreshCourse();
-    const kinds = Object.values(results);
-    const updatedCount = kinds.filter((r) => r === "updated").length, addedCount = kinds.length - updatedCount;
-    status.textContent = [
-      updatedCount ? (updatedCount > 1 ? `${updatedCount} nouvelles versions enregistrées` : "Nouvelle version enregistrée") : "",
-      addedCount ? (addedCount > 1 ? `${addedCount} fichiers ajoutés` : "Fichier ajouté") : "",
-    ].filter(Boolean).join(" · ");
-    status.className = "status ok";
+    // Pas de « Fichier ajouté » / « Nouvelle version enregistrée » : le cours, et l'encart « Ton cours a changé »
+    // pour une nouvelle version, le montrent déjà
+    status.hidden = true;
     const names = Object.keys(results).map((n) => n.toLowerCase());
     const ids = course.files.filter((f) => names.includes(f.name.toLowerCase())).map((f) => f.id);
     if (ids.length) setFocusFile(ids[0]);  // le cours déposé s'affiche (ses chapitres, puis ses quiz et cartes)
@@ -8718,7 +8719,14 @@ async function renderSync() {
 }
 async function renderDevices() {
   let list = [];
-  try { list = await api("/api/sync/devices"); } catch {}
+  try {
+    list = await api("/api/sync/devices");
+  } catch (err) {
+    // Liste illisible (session en ligne expirée, réseau…) : on le dit, plutôt que « aucun appareil »
+    $("#device-list").innerHTML = "";
+    $("#sync-state").innerHTML = `<span class="ko-text">Impossible de lister tes appareils pour l'instant : ${escapeHtml(err.message)}</span>`;
+    return;
+  }
   // Sans appareil : pas de case « aussi sur mon téléphone » (décochée, elle intriguait) ; jumeler l'active toute seule
   const none = !list.length && !$("#sync-on").checked;
   $("#sync-on").closest(".toggle-row").hidden = none;

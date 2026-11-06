@@ -88,8 +88,11 @@
       <div class="phone-hint" id="phone-hint" hidden>
         <span class="phone-hint-ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="3" width="10" height="18" rx="2.5"/><path d="M11 18h2"/></svg></span>
         <span class="phone-hint-text"><b>Révise aussi sur ton téléphone</b><small>Tes quiz et tes flashcards te suivent, même sans Internet. Un code à scanner, c'est tout.</small></span>
-        <a class="primary small" href="#/reglages/appareils">Connecter mon téléphone</a>
-        <button class="icon" type="button" id="phone-hint-close" title="Plus tard" aria-label="Plus tard">✕</button>
+        <span class="phone-hint-actions">
+          <button class="primary small" type="button" id="phone-hint-go">Connecter mon téléphone</button>
+          <span class="phone-hint-links"><button class="link-button" type="button" id="phone-hint-close">Plus tard</button>
+            <button class="link-button" type="button" id="phone-hint-never">Ne plus afficher</button></span>
+        </span>
       </div>
       <!-- Sélections enregistrées (plusieurs cours, de matières différentes) : un clic pour réviser -->
       <div class="review-sets" id="review-sets" hidden></div>
