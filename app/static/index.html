@@ -27,6 +27,7 @@
     <nav class="nav-pill" aria-label="Menu">
       <a href="#/accueil" data-nav="accueil">Accueil</a>
       <a href="#/cours" data-nav="cours">Matières</a>
+      <a href="#/planning" data-nav="planning">Planning</a>
       <a href="#/defis" data-nav="defis" hidden>Social<span class="nav-badge" id="social-badge" hidden></span></a>
       <a href="#/reglages" data-nav="reglages">Réglages</a>
       <button type="button" class="nav-feedback" id="feedback-btn" title="Une idée, un bug ? Écris-moi">
@@ -76,6 +77,7 @@
         <span class="today-text"><b id="today-title"></b><small id="today-sub"></small></span>
         <button class="primary go-btn" type="button" id="today-go">Commencer</button>
       </div>
+      <div class="after-class" id="after-class"></div>
       <div class="acc-grid" id="acc-grid">
         <div class="acc-card">
           <div class="acc-head"><b>Tes révisions du jour</b><small id="rev-sub"></small></div>
@@ -86,6 +88,25 @@
           <div id="rev-next"></div>
         </div>
       </div>
+    </section>
+
+    <!-- Planning : la semaine, les séances de l'emploi du temps et les cours à réviser chaque jour -->
+    <section id="view-planning" class="view planning" hidden>
+      <div class="wk-head">
+        <h1>Ta semaine</h1>
+        <div class="wk-nav">
+          <button class="ghost small" type="button" id="wk-prev" aria-label="Semaine précédente">‹</button>
+          <button class="ghost small" type="button" id="wk-today">Aujourd'hui</button>
+          <button class="ghost small" type="button" id="wk-next" aria-label="Semaine suivante">›</button>
+        </div>
+      </div>
+      <p class="muted wk-sub" id="wk-sub"></p>
+      <div class="wk-empty" id="wk-empty" hidden>
+        <p><b>Ajoute ton emploi du temps</b> pour voir tes cours ici, à côté de tes révisions.</p>
+        <a class="button primary small" href="#/reglages/agenda">Ajouter mon emploi du temps</a>
+      </div>
+      <div class="wk-week" id="wk-week"></div>
+      <div class="wk-legend" id="wk-legend"><span><i class="lg-class"></i>Cours</span><span><i class="lg-today"></i>À réviser aujourd'hui</span><span><i class="lg-later"></i>Révision prévue</span><span><i class="lg-done"></i>Faite</span></div>
     </section>
 
     <!-- Mes cours : cours et dossiers -->
@@ -827,6 +848,22 @@
             </div>
           </div>
           <p class="status" id="sync-status" hidden></p>
+        </div>
+      </div>
+
+      <div class="card" id="agenda-card">
+        <h2>Emploi du temps</h2>
+        <p class="muted small-text">Colle le lien d'abonnement de ton emploi du temps (« iCal », « .ics » ou « S'abonner »). Pirouette le relit toutes les heures : la veille d'un cours, il te fait réviser le précédent, et après la séance il récupère ton cours.</p>
+        <form class="agenda-form" id="agenda-form">
+          <input type="url" id="agenda-url" placeholder="https://…" autocomplete="off" spellcheck="false" aria-label="Lien de l'emploi du temps">
+          <button class="primary small" type="submit" id="agenda-save">Enregistrer</button>
+          <button class="ghost small" type="button" id="agenda-refresh" hidden>Actualiser</button>
+        </form>
+        <p class="agenda-status" id="agenda-status" hidden></p>
+        <div id="agenda-subjects" hidden>
+          <h3>Quel cours va avec quelle matière</h3>
+          <p class="muted small-text">Reconnu d'après les noms. Corrige si besoin : c'est retenu. « Aucune » pour les réunions et ce qui ne se révise pas.</p>
+          <div class="agenda-map" id="agenda-map"></div>
         </div>
       </div>
 

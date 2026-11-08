@@ -28,6 +28,7 @@ from pydantic import BaseModel
 load_dotenv()
 
 from . import backup, claude_desktop, exchange, figures, local_ai, news, online, plan as plans, reminder, spaced, srs, sync, updater  # noqa: E402
+from .agenda import Agenda, classes as agenda_classes, subjects as agenda_subjects  # noqa: E402
 from .grounding import Grounding  # noqa: E402
 from .jobs import Jobs  # noqa: E402
 from .chapters import (CHAPTERS_SCHEMA, CHAPTERS_SYSTEM, ai_candidates, build_chapters_prompt,  # noqa: E402
@@ -814,7 +815,7 @@ class WatchIn(BaseModel):
     names: list[str] = []
 
 
-def _watch_scan(course_id: str) -> dict:
+def _watch_scan(course_id: str, restart_updated: bool = False) -> dict:
     """Regarde le dossier suivi : les cours modifiés sont relus tout de suite (un import en tâche de fond), les
     nouveaux fichiers sont renvoyés pour être proposés."""
     from . import watch
@@ -824,6 +825,11 @@ def _watch_scan(course_id: str) -> dict:
     job = None
     busy = import_jobs().active(course_id)
     files = watch.take(course, found["updated"]) if found["updated"] and not (busy and busy["status"] == "running") else []
+    if restart_updated and files:  # repris pendant la séance : c'est le cours d'aujourd'hui, J+0
+        names = {name.lower() for name, _ in files}
+        for entry in course["files"]:
+            if entry["name"].lower() in names:
+                spaced.restart(entry, date.today())
     # Les dates retenues d'abord : l'import, en enregistrant le cours, repart de cette version (sinon il remettrait
     # l'ancienne date, et le même cours serait relu en boucle)
     store._save_course(course)
@@ -2575,13 +2581,27 @@ def _revision_minutes(cards: int, questions: int) -> int:
     return max(2, round(min(cards, REVISION_SIZE - asked) * 0.3 + asked * 0.6))
 
 
-def _revisions(today: date | None = None) -> dict:
-    """Les révisions de cours : celles du jour (en retard d'abord), celles faites aujourd'hui, et les prochaines."""
-    today = today or date.today()
+def _hour(text: str) -> str:
+    h, m = int(text[11:13]), int(text[14:16])
+    return f"{h} h {m:02d}" if m else f"{h} h"
+
+
+def _revisions(today: date | None = None, now: datetime | None = None) -> dict:
+    """Les révisions de cours : celles du jour (en retard d'abord), celles faites aujourd'hui, et les prochaines.
+    Avec l'emploi du temps : le dernier cours d'une matière revient la veille (ou le matin) de sa prochaine séance,
+    et une séance passée sans nouveau cours ajouté le rappelle (« Tu as eu Neurosciences ce matin »)."""
+    now = now or datetime.now()
+    today = today or now.date()
     due, done, upcoming = [], [], []
     active = set(store.active_course_ids())
-    for listed in store.list_courses():
-        if listed["id"] not in active or not listed.get("files"):
+    courses = [c for c in store.list_courses() if c["id"] in active]
+    agenda = _agenda()
+    data = agenda.load()
+    soon = agenda_classes(data, agenda, courses, now, datetime.combine(today + timedelta(days=2), datetime.min.time()))
+    recent = agenda_classes(data, agenda, courses, now - timedelta(hours=20), now)
+    by_file = {}
+    for listed in courses:
+        if not listed.get("files"):
             continue
         course = store.get_course(listed["id"])  # tel qu'enregistré (sans les compteurs ajoutés par la liste)
         changed = any(not isinstance(f.get("rev"), dict) for f in course["files"])  # suivi créé : à enregistrer
@@ -2592,7 +2612,9 @@ def _revisions(today: date | None = None) -> dict:
             item = view | {"course_id": course["id"], "course": course["name"], "color": course.get("color"),
                            "file_id": entry["id"], "title": store_file_label(entry), "kind": spaced.kind(entry["name"]),
                            "cards": len(has["cards"]), "questions": len(has["questions"]),
-                           "minutes": _revision_minutes(len(has["cards"]), len(has["questions"]))}
+                           "minutes": _revision_minutes(len(has["cards"]), len(has["questions"])),
+                           "added_at": entry.get("added_at") or "", "pre": (entry.get("rev") or {}).get("pre")}
+            by_file[(course["id"], entry["id"])] = item
             if view["done_today"]:
                 done.append(item)
                 if 0 < view["in_days"] <= 14:  # fait aujourd'hui : il revient dans les prochaines
@@ -2603,9 +2625,49 @@ def _revisions(today: date | None = None) -> dict:
                 upcoming.append(item)
         if changed:
             store._save_course(course)
-    due.sort(key=lambda i: (-i["late"], i["step"], i["course"]))
+    # La veille (ou le matin) d'un cours : le dernier cours de la matière, pour arriver en ayant réactivé la base
+    seen_course = set()
+    for c in soon:
+        if c["cancelled"] or not c["course_id"] or c["course_id"] in seen_course or c.get("all_day"):
+            continue
+        seen_course.add(c["course_id"])
+        mine = [i for (cid, _), i in by_file.items() if cid == c["course_id"] and i["added_at"][:10] < c["start"][:10]]
+        if not mine:
+            continue
+        last = max(mine, key=lambda i: i["added_at"])
+        when = "demain " if c["start"][:10] > today.isoformat() else ""
+        before = f"Avant ton cours de {when}{_hour(c['start'])}"
+        if last in due:
+            last["before"] = before
+        elif last in done or last["pre"] == today.isoformat():
+            if last not in done:
+                last["done_today"] = True
+                done.append(last)
+        else:
+            due.append(last | {"reason": before, "extra": True, "today": True})
+            if last in upcoming:
+                upcoming.remove(last)
+    # Après une séance : rien de nouveau dans la matière ? on le rappelle (un clic pour ajouter le cours)
+    after = []
+    for c in sorted(recent, key=lambda c: c["end"], reverse=True):
+        if (c["cancelled"] or not c["course_id"] or c["uid"] in data["dismissed"] or c["end"] > now.isoformat(timespec="minutes")
+                or any(a["course_id"] == c["course_id"] for a in after)):
+            continue
+        course = store.get_course(c["course_id"])
+        if any(max(f.get("added_at") or "", f.get("updated_at") or "") >= c["start"] for f in course["files"]):
+            continue
+        new_files = []
+        if course.get("watch"):
+            from . import watch
+            new_files = watch.scan(course)["new"]
+        part = "ce matin" if c["start"][11:13] < "12" else "cet après-midi" if c["start"][11:13] < "18" else "ce soir"
+        if c["start"][:10] != today.isoformat():
+            part = "hier"
+        after.append({"uid": c["uid"], "course_id": c["course_id"], "course": course["name"], "summary": c["summary"],
+                      "when": part, "new_files": new_files[:3], "watch": bool(course.get("watch"))})
+    due.sort(key=lambda i: (bool(i.get("extra")), -i["late"], i["step"], i["course"]))
     upcoming.sort(key=lambda i: (i["due"], i["course"]))
-    return {"today": due, "done": done, "upcoming": upcoming[:12]}
+    return {"today": due, "done": done, "upcoming": upcoming[:12], "after_class": after}
 
 
 @app.get("/api/revisions")
@@ -2615,6 +2677,7 @@ async def revisions_today() -> dict:
 
 class RevisionDoneIn(BaseModel):
     score: float | None = None  # 0 à 1 ; rien : le cours a juste été relu
+    extra: bool = False         # révision « avant ton cours » : notée, sans changer le rythme du cours
 
 
 @app.post("/api/revisions/{course_id}/{file_id}/done")
@@ -2624,7 +2687,10 @@ async def revision_done(course_id: str, file_id: str, body: RevisionDoneIn) -> d
     if entry is None:
         raise HTTPException(404, "Ce cours n'existe plus.")
     score = None if body.score is None else max(0.0, min(1.0, body.score))
-    spaced.done(entry, date.today(), score)
+    if body.extra and not spaced.view(entry, date.today())["today"]:
+        spaced.ensure(entry, date.today())["pre"] = date.today().isoformat()
+    else:
+        spaced.done(entry, date.today(), score)
     store._save_course(course)
     return spaced.view(entry, date.today())
 
@@ -2681,6 +2747,134 @@ async def open_course_file(course_id: str, file_id: str) -> dict:
     else:
         return {"ok": False, "path": str(path)}
     return {"ok": True}
+
+
+
+# ---------- L'emploi du temps de l'école (voir agenda.py) ----------
+def _agenda() -> Agenda:
+    return Agenda(store.root)
+
+
+def _agenda_view() -> dict:
+    agenda = _agenda()
+    data = agenda.load()
+    courses = [c for c in store.list_courses() if c["id"] in set(store.active_course_ids())]
+    return {"url": data["url"], "fetched_at": data.get("fetched_at"), "error": data.get("error") or "",
+            "count": len(data["events"]), "subjects": agenda_subjects(data, agenda, courses, date.today()),
+            "courses": [{"id": c["id"], "name": c["name"], "color": c.get("color")} for c in courses]}
+
+
+class AgendaIn(BaseModel):
+    url: str = ""
+
+
+class AgendaMapIn(BaseModel):
+    summary: str
+    course_id: str = ""  # une matière, "none" (pas de révision) ou "" (la reconnaître seul)
+
+
+@app.get("/api/agenda")
+async def agenda_get() -> dict:
+    return await run_in_threadpool(_agenda_view)
+
+
+@app.put("/api/agenda")
+async def agenda_set(body: AgendaIn) -> dict:
+    url = body.url.strip()
+    if url and not re.match(r"^(https?|webcal)://", url, re.I):
+        raise HTTPException(400, "Colle le lien complet, qui commence par https://")
+    agenda = _agenda()
+    agenda.set_url(url)
+    if url:
+        await run_in_threadpool(agenda.refresh)
+    return await run_in_threadpool(_agenda_view)
+
+
+@app.post("/api/agenda/refresh")
+async def agenda_refresh() -> dict:
+    await run_in_threadpool(_agenda().refresh)
+    return await run_in_threadpool(_agenda_view)
+
+
+@app.put("/api/agenda/map")
+async def agenda_map(body: AgendaMapIn) -> dict:
+    if body.course_id not in ("", "none"):
+        store.get_course(body.course_id)
+    _agenda().set_map(body.summary, body.course_id)
+    return await run_in_threadpool(_agenda_view)
+
+
+class AgendaDismissIn(BaseModel):
+    uid: str
+
+
+@app.post("/api/agenda/dismiss")
+async def agenda_dismiss(body: AgendaDismissIn) -> dict:
+    """« Pas de nouveau cours » : le rappel de cette séance ne revient plus."""
+    _agenda().mark("dismissed", body.uid)
+    return {"ok": True}
+
+
+AFTER_CLASS = timedelta(minutes=50)  # le temps de rentrer et d'enregistrer ses notes
+
+
+def _agenda_tick(now: datetime | None = None) -> dict:
+    """Toutes les quelques minutes (tant que Pirouette est ouvert) : l'agenda relu s'il date de plus d'une heure, et
+    après chaque séance (une petite heure après), le dossier suivi de la matière est relu. Un cours modifié pendant
+    la séance (les notes prises dedans) est relu et repart de J+0 ; un nouveau fichier est proposé."""
+    now = now or datetime.now()
+    agenda = _agenda()
+    refreshed = False
+    if agenda.stale(now):
+        agenda.refresh(now)
+        refreshed = True
+    data = agenda.load()
+    courses = [c for c in store.list_courses() if c["id"] in set(store.active_course_ids())]
+    scanned = []
+    for c in agenda_classes(data, agenda, courses, now - timedelta(hours=12), now - AFTER_CLASS):
+        if c["cancelled"] or not c["course_id"] or c["uid"] in data["processed"] or c["end"] > (now - AFTER_CLASS).isoformat(timespec="minutes"):
+            continue
+        agenda.mark("processed", c["uid"])
+        if store.get_course(c["course_id"]).get("watch"):
+            found = _watch_scan(c["course_id"], restart_updated=True)
+            scanned.append({"course_id": c["course_id"], "updated": found["updated"], "new": found["new"]})
+    return {"refreshed": refreshed, "scanned": scanned}
+
+
+@app.post("/api/agenda/tick")
+async def agenda_tick() -> dict:
+    return await run_in_threadpool(_agenda_tick)
+
+
+@app.get("/api/agenda/week")
+async def agenda_week(start: str = "") -> dict:
+    """Le planning d'une semaine (du lundi au dimanche) : les séances et, chaque jour, les cours à réviser."""
+    try:
+        monday = date.fromisoformat(start) if start else date.today()
+    except ValueError as exc:
+        raise HTTPException(400, "Date invalide.") from exc
+    monday -= timedelta(days=monday.weekday())
+
+    def build() -> dict:
+        agenda = _agenda()
+        data = agenda.load()
+        courses = [c for c in store.list_courses() if c["id"] in set(store.active_course_ids())]
+        names = {c["id"]: c for c in courses}
+        begin = datetime.combine(monday, datetime.min.time())
+        rows = agenda_classes(data, agenda, courses, begin, begin + timedelta(days=7))
+        week = [{"uid": r["uid"], "summary": r["summary"], "start": r["start"], "end": r["end"], "location": r.get("location", ""),
+                 "cancelled": r["cancelled"], "course_id": r["course_id"],
+                 "color": names[r["course_id"]].get("color") if r["course_id"] in names else None} for r in rows]
+        revs = _revisions()
+        days: dict[str, list] = {}
+        for item in revs["today"] + revs["done"]:
+            days.setdefault(date.today().isoformat(), []).append(item | {"state": "done" if item in revs["done"] else "today"})
+        for item in revs["upcoming"]:
+            if item["due"] > date.today().isoformat():
+                days.setdefault(item["due"], []).append(item | {"state": "later"})
+        return {"monday": monday.isoformat(), "classes": week, "revisions": days, "url": bool(data["url"]),
+                "error": data.get("error") or ""}
+    return await run_in_threadpool(build)
 
 
 # ---------- Quiz ----------

@@ -55,6 +55,13 @@ def ensure(entry: dict, today: date) -> dict:
     return rev
 
 
+def restart(entry: dict, today: date) -> dict:
+    """Le cours vient d'être repris dans le même fichier (les notes prises en cours, après la séance) : il repart de
+    J+0, comme un cours d'aujourd'hui."""
+    entry["rev"] = {"start": today.isoformat(), "step": 0, "due": today.isoformat()}
+    return entry["rev"]
+
+
 def done(entry: dict, today: date, score: float | None = None) -> dict:
     """Une révision faite aujourd'hui (`score` entre 0 et 1, ou None : juste relu) : la date de la suivante."""
     rev = ensure(entry, today)

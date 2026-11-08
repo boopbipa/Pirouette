@@ -161,6 +161,7 @@ async function route() {
     }
     else if (hash.startsWith("#/cours")) await loadCourses();
     else if (hash.startsWith("#/accueil")) await openAccueil();
+    else if (hash.startsWith("#/planning")) await openPlanning();
     else await openStart();
   } catch (err) {
     notify(err.message);
@@ -518,6 +519,7 @@ async function openAccueil() {
   }
   renderTodayBar(profile, progress, revs);
   renderRevisions(revs);
+  renderAfterClass(revs.after_class || []);
   show("accueil");
 }
 
@@ -598,13 +600,14 @@ function nextIn(days) {
 function revRow(r, done) {
   const content = r.cards + (mixQuestions() ? r.questions : 0);
   const chips = [
-    `<span class="rev-chip${r.late || r.reason === "À refaire" ? "" : " hot"}">${escapeHtml(r.late ? `En retard de ${plural(r.late, "jour", "jours")}` : r.reason)}</span>`,
+    r.before && !r.extra ? `<span class="rev-chip hot">${escapeHtml(r.before)}</span>` : "",
+    `<span class="rev-chip${r.late || r.reason === "À refaire" || (r.before && !r.extra) ? "" : " hot"}">${escapeHtml(r.late && !r.extra ? `En retard de ${plural(r.late, "jour", "jours")}` : r.reason)}</span>`,
     content ? `<span class="rev-chip">${plural(Math.min(content, 16), "question", "questions")} · ${r.minutes} min</span>`
       : `<span class="rev-chip">Pas encore de quiz : relis-le</span>`,
   ].join("");
   const read = r.kind !== undefined ? `<button class="ghost small rev-read" type="button" data-open="${r.course_id}:${r.file_id}">${REV_DOC}Relire le cours${r.kind ? `<span class="rev-kind">${escapeHtml(r.kind)}</span>` : ""}</button>` : "";
   const acts = done
-    ? `<span class="rev-ok">✓ ${r.score != null ? `${r.score} %` : "Relu"} · prochaine ${nextIn(r.in_days)}</span>`
+    ? `<span class="rev-ok">✓ ${r.pre && !r.last?.startsWith(r.pre) ? "Prêt pour ton cours" : `${r.score != null ? `${r.score} %` : "Relu"} · prochaine ${nextIn(r.in_days)}`}</span>`
     : `${read}${content ? `<button class="primary small rev-go" type="button" data-rev="${r.course_id}:${r.file_id}">Faire le quiz</button>`
       : `<button class="primary small rev-go" type="button" data-read-done="${r.course_id}:${r.file_id}">C'est relu</button>`}`;
   return `<div class="rev-row${done ? " done" : ""}" style="--c:${subjectColor(r.course_id)}">
@@ -644,9 +647,147 @@ $("#rev-list").addEventListener("click", async (e) => {
   const read = e.target.closest("[data-read-done]");
   if (read) {
     const [c, f] = read.dataset.readDone.split(":");
-    await api(`/api/revisions/${c}/${f}/done`, jsonBody("POST", {})).catch((err) => notify(err.message));
+    const extra = Boolean(state.revisions?.today.find((x) => `${x.course_id}:${x.file_id}` === read.dataset.readDone)?.extra);
+    await api(`/api/revisions/${c}/${f}/done`, jsonBody("POST", { extra })).catch((err) => notify(err.message));
     openAccueil();
   }
+});
+
+// Après une séance (emploi du temps) sans nouveau cours ajouté : « Tu as eu Neurosciences ce matin »
+function renderAfterClass(list) {
+  $("#after-class").innerHTML = list.map((a) => {
+    const file = a.new_files[0];
+    const go = file
+      ? `<button class="primary small" type="button" data-after-add="${a.course_id}" data-name="${escapeHtml(file)}">Ajouter ${escapeHtml(file)}</button>`
+      : `<a class="button primary small" href="#/cours/${a.course_id}/fichiers">Ajouter le cours</a>`;
+    return `<div class="after-row" style="--c:${subjectColor(a.course_id)}">
+      <span class="after-ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+      <span class="after-text"><b>Tu as eu ${escapeHtml(a.course)} ${escapeHtml(a.when)}</b>
+        <small>${file ? `Nouveau dans ton dossier : ${escapeHtml(file)}.` : "Ajoute le cours pour le réviser ce soir."}</small></span>
+      <span class="after-acts">${go}<button class="link-button" type="button" data-after-skip="${escapeHtml(a.uid)}">Pas de nouveau cours</button></span>
+    </div>`;
+  }).join("");
+}
+$("#after-class").addEventListener("click", async (e) => {
+  const skip = e.target.closest("[data-after-skip]");
+  if (skip) {
+    await api("/api/agenda/dismiss", jsonBody("POST", { uid: skip.dataset.afterSkip })).catch(() => {});
+    return openAccueil();
+  }
+  const add = e.target.closest("[data-after-add]");
+  if (add) {
+    add.disabled = true;
+    try {
+      await api(`/api/courses/${add.dataset.afterAdd}/watch/add`, jsonBody("POST", { names: [add.dataset.name] }));
+      go(`#/cours/${add.dataset.afterAdd}/fichiers`);
+    } catch (err) { notify(err.message); add.disabled = false; }
+  }
+});
+
+// Toutes les 10 minutes : l'emploi du temps relu (s'il date de plus d'une heure) et, après chaque séance, le dossier
+// suivi de la matière (le cours modifié pendant la séance est relu)
+async function agendaTick() {
+  const r = await api("/api/agenda/tick", { method: "POST" }).catch(() => null);
+  if (r && (r.refreshed || r.scanned.length) && location.hash.startsWith("#/accueil") && !document.querySelector("dialog[open]")) openAccueil();
+  if (r && r.refreshed && location.hash.startsWith("#/planning")) openPlanning();
+}
+setTimeout(agendaTick, 4000);
+setInterval(agendaTick, 10 * 60 * 1000);
+
+// ---------- Réglages › Emploi du temps ----------
+function agendaAgo(iso) {
+  if (!iso) return "";
+  const min = Math.round((Date.now() - new Date(iso)) / 60000);
+  return min < 1 ? "à l'instant" : min < 60 ? `il y a ${min} min` : `il y a ${plural(Math.round(min / 60), "heure", "heures")}`;
+}
+function renderAgendaView(v) {
+  state.agenda = v;
+  if (document.activeElement !== $("#agenda-url")) $("#agenda-url").value = v.url || "";
+  $("#agenda-refresh").hidden = !v.url;
+  const st = $("#agenda-status");
+  st.hidden = !v.url;
+  st.classList.toggle("bad", Boolean(v.error));
+  st.textContent = v.error ? `Lecture impossible : ${v.error}${v.count ? ` (on garde les ${v.count} cours déjà lus)` : ""}`
+    : `✓ ${plural(v.count, "séance trouvée", "séances trouvées")} · actualisé ${agendaAgo(v.fetched_at)} · relu toutes les heures`;
+  $("#agenda-subjects").hidden = !v.subjects.length;
+  const options = (row) => [...v.courses.map((c) => `<option value="${c.id}"${row.course_id === c.id ? " selected" : ""}>${escapeHtml(c.name)}</option>`),
+    `<option value="none"${row.course_id ? "" : " selected"}>Aucune</option>`].join("");
+  $("#agenda-map").innerHTML = v.subjects.map((row) => `<div class="agenda-row${row.course_id ? "" : " off"}">
+      <span class="agenda-name">${escapeHtml(row.summary)}<small>${plural(row.count, "séance", "séances")}</small></span>
+      <span class="agenda-arrow" aria-hidden="true">→</span>
+      <select data-summary="${escapeHtml(row.summary)}" aria-label="Matière de ${escapeHtml(row.summary)}"${row.course_id ? ` style="--c:${subjectColor(row.course_id)}"` : ""}>${options(row)}</select>
+    </div>`).join("");
+}
+async function renderAgendaSettings() {
+  try { renderAgendaView(await api("/api/agenda")); } catch (err) { notify(err.message); }
+}
+$("#agenda-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const btn = $("#agenda-save");
+  btn.disabled = true;
+  btn.textContent = "Lecture…";
+  try { renderAgendaView(await api("/api/agenda", jsonBody("PUT", { url: $("#agenda-url").value.trim() }))); }
+  catch (err) { notify(err.message); }
+  btn.disabled = false;
+  btn.textContent = "Enregistrer";
+});
+$("#agenda-refresh").addEventListener("click", async () => {
+  $("#agenda-refresh").disabled = true;
+  try { renderAgendaView(await api("/api/agenda/refresh", { method: "POST" })); } catch (err) { notify(err.message); }
+  $("#agenda-refresh").disabled = false;
+});
+$("#agenda-map").addEventListener("change", async (e) => {
+  const sel = e.target.closest("select[data-summary]");
+  if (!sel) return;
+  try { renderAgendaView(await api("/api/agenda/map", jsonBody("PUT", { summary: sel.dataset.summary, course_id: sel.value }))); }
+  catch (err) { notify(err.message); }
+});
+
+// ---------- Planning : la semaine ----------
+const hourText = (iso) => { const h = Number(iso.slice(11, 13)), m = iso.slice(14, 16); return m === "00" ? `${h} h` : `${h} h ${m}`; };
+const PLAN_FROM = 8, PLAN_TO = 20;  // heures montrées (les séances hors de ces heures sont collées au bord)
+function isoDay(d) { return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; }
+async function openPlanning(start = state.planStart) {
+  const data = await api(`/api/agenda/week${start ? `?start=${start}` : ""}`);
+  state.planStart = data.monday;
+  setCrumbs();
+  const monday = new Date(`${data.monday}T12:00:00`);
+  const days = [...Array(7)].map((_, i) => { const d = new Date(monday); d.setDate(d.getDate() + i); return d; });
+  const today = isoDay(new Date());
+  const hasSunday = data.classes.some((c) => c.start.startsWith(isoDay(days[6]))) || (data.revisions[isoDay(days[6])] || []).length;
+  const shown = hasSunday ? days : days.slice(0, 6);
+  const last = days[6];
+  $("#wk-sub").textContent = `Du ${monday.toLocaleDateString("fr-FR", { day: "numeric", month: "long" })} au ${last.toLocaleDateString("fr-FR", { day: "numeric", month: "long" })}`
+    + (data.error ? ` · emploi du temps pas relu : ${data.error}` : "");
+  $("#wk-empty").hidden = data.url;
+  noteColors(Object.values(data.revisions).flat().map((r) => ({ id: r.course_id, color: r.color })));
+  noteColors(data.classes.filter((c) => c.course_id).map((c) => ({ id: c.course_id, color: c.color })));
+  const span = PLAN_TO - PLAN_FROM;
+  const pos = (iso) => {
+    const h = Number(iso.slice(11, 13)) + Number(iso.slice(14, 16)) / 60;
+    return Math.max(0, Math.min(100, ((h - PLAN_FROM) / span) * 100));
+  };
+  $("#wk-week").style.setProperty("--days", shown.length);
+  $("#wk-week").innerHTML = `<div class="wk-hours">${[...Array(span / 2 + 1)].map((_, i) => `<span style="top:${(i * 2 / span) * 100}%">${PLAN_FROM + i * 2} h</span>`).join("")}</div>`
+    + shown.map((d) => {
+      const key = isoDay(d);
+      const revs = data.revisions[key] || [];
+      const cls = data.classes.filter((c) => c.start.startsWith(key));
+      return `<div class="wk-day${key === today ? " now" : ""}${key < today ? " past" : ""}">
+        <div class="wk-dayhd">${d.toLocaleDateString("fr-FR", { weekday: "short" }).replace(".", "")}<b>${d.getDate()}</b></div>
+        <div class="wk-revs">${revs.map((r) => `<button type="button" class="wk-rev ${r.state}" style="--c:${subjectColor(r.course_id)}" data-wk-rev="${r.course_id}:${r.file_id}" title="${escapeHtml(`${r.course} · ${r.title} — ${r.reason}`)}">${r.state === "done" ? "✓ " : ""}${escapeHtml(r.title)}</button>`).join("")}</div>
+        <div class="wk-col">${cls.map((c) => `<div class="wk-class${c.cancelled ? " cancelled" : ""}${c.course_id ? "" : " other"}" style="top:${pos(c.start)}%;height:${Math.max(4, pos(c.end) - pos(c.start))}%;${c.course_id ? `--c:${subjectColor(c.course_id)}` : ""}">
+            <b>${c.cancelled ? "Annulé · " : ""}${escapeHtml(c.summary)}</b><small>${hourText(c.start)}${c.location ? ` · ${escapeHtml(c.location)}` : ""}</small></div>`).join("")}</div>
+      </div>`;
+    }).join("");
+  show("planning");
+}
+$("#wk-prev").addEventListener("click", () => { const d = new Date(`${state.planStart}T12:00:00`); d.setDate(d.getDate() - 7); openPlanning(isoDay(d)); });
+$("#wk-next").addEventListener("click", () => { const d = new Date(`${state.planStart}T12:00:00`); d.setDate(d.getDate() + 7); openPlanning(isoDay(d)); });
+$("#wk-today").addEventListener("click", () => openPlanning(isoDay(new Date())));
+$("#wk-week").addEventListener("click", (e) => {
+  const b = e.target.closest("[data-wk-rev]");
+  if (b && b.classList.contains("today")) startSession({ mode: "revision", pick: b.dataset.wkRev }, { title: b.textContent.trim(), back: "#/planning" });
 });
 
 // Fin d'une révision de cours : chaque cours révisé est noté (cartes sues, réponses justes) et sa prochaine date fixée
@@ -660,7 +801,8 @@ function saveRevisions(s) {
   }
   return Promise.all(Object.entries(by).map(([key, points]) => {
     const [c, f] = key.split(":");
-    return api(`/api/revisions/${c}/${f}/done`, jsonBody("POST", { score: points.reduce((a, b) => a + b, 0) / points.length })).catch(() => {});
+    const extra = Boolean(state.revisions?.today.find((x) => `${x.course_id}:${x.file_id}` === key)?.extra);
+    return api(`/api/revisions/${c}/${f}/done`, jsonBody("POST", { score: points.reduce((a, b) => a + b, 0) / points.length, extra })).catch(() => {});
   }));
 }
 $("#today-bar").addEventListener("click", (e) => {
@@ -1157,6 +1299,8 @@ const PREF_ICON = (d) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentCo
 const PREFS = [
   { id: "revisions", label: "Révisions", desc: "Ton rythme, comment tu réponds, et la voix qui lit les cartes.", cards: ["revision-card", "voice-card", "definitions-card"],
     icon: '<rect x="4" y="6" width="12" height="15" rx="2"/><path d="M8 3h10a2 2 0 0 1 2 2v12"/>' },
+  { id: "agenda", label: "Emploi du temps", desc: "Ton emploi du temps de l'école, pour réviser au bon moment.", cards: ["agenda-card"],
+    icon: '<rect x="4" y="5" width="16" height="15" rx="2"/><path d="M4 10h16M9 3v4M15 3v4"/>' },
   { id: "claude", label: "App Claude", desc: "Branche Claude pour créer quiz et flashcards à partir de tes cours.",
     cards: ["claude-app-card", "settings-key-form", "local-ai"], icon: '<path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z"/>' },
   { id: "appareils", label: "Téléphone et tablette", desc: "Tes quiz et tes flashcards, aussi sur ton iPhone, ton iPad ou ton Android.", cards: ["devices-card"],
@@ -1191,6 +1335,7 @@ function showPref(id) {
   all.forEach((card) => $(`#${card}`)?.classList.toggle("pref-off", !pref.cards.includes(card)));
   if (pref.id === "clavier") $("#keys-card").open = true;
   if (pref.id === "revisions") renderVoiceSettings();
+  if (pref.id === "agenda") renderAgendaSettings();
   // Le titre d'une carte qui répète celui de la rubrique (« Révisions » dans Révisions) est masqué
   pref.cards.forEach((card) => {
     const h2 = $(`#${card}`)?.querySelector("h2, summary h2");
