@@ -148,3 +148,13 @@ def test_a_course_edited_during_class_starts_again_at_day_0(tmp_path, monkeypatc
     assert found["updated"] == ["CM1.txt"]
     rev = store.get_course(neuro["id"])["files"][0]["rev"]
     assert rev["step"] == 0 and rev["due"] == date.today().isoformat()
+
+
+def test_a_warning_from_the_feed_keeps_the_classes(tmp_path, monkeypatch):
+    store = Store(tmp_path)
+    monkeypatch.setattr(main, "store", store)
+    text = agenda.Fetched(ICS.format(d1="20261109", d2="20261110"))
+    text.warning = "Connexion refusée par le site de l'école."
+    monkeypatch.setattr(agenda, "fetch", lambda url, timeout=25: text)
+    view = TestClient(main.app).put("/api/agenda", json={"url": "https://exemple.fr/edt.ics"}).json()
+    assert view["count"] == 4 and view["error"].startswith("Connexion refusée")

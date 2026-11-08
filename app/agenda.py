@@ -12,6 +12,7 @@ import json
 import re
 import threading
 import unicodedata
+import urllib.parse
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
@@ -96,6 +97,12 @@ def parse_ics(text: str) -> list[dict]:
     return sorted(events, key=lambda e: e["start"])
 
 
+class Fetched(str):
+    """Le texte de l'agenda, avec l'alerte éventuelle du site (le script de l'emploi du temps renvoie le dernier
+    planning connu quand l'école refuse la connexion, et le dit dans l'en-tête X-Planning-Erreur)."""
+    warning = ""
+
+
 def fetch(url: str, timeout: float = 25) -> str:
     """Le fichier de l'agenda. Par httpx, comme les autres accès à Internet de Pirouette : il apporte ses propres
     certificats (le Python de l'app empaquetée n'a pas ceux du Mac, et urllib refusait toute connexion https)."""
@@ -115,11 +122,15 @@ def fetch(url: str, timeout: float = 25) -> str:
     text = response.text
     if response.status_code >= 400 and "BEGIN:VCALENDAR" not in text:
         first = text.strip().splitlines()[0][:120] if text.strip() else f"erreur {response.status_code}"
+        if response.status_code >= 500:  # le lien est bon, c'est le site derrière qui a un souci
+            raise ValueError(f"Le site de l'agenda a un problème de son côté (il répond : « {first} »). On garde les cours déjà lus.")
         raise ValueError(f"Le lien est refusé (le site répond : « {first} »). Vérifie qu'il est complet, clé comprise.")
     if "BEGIN:VCALENDAR" not in text:
         first = text.strip().splitlines()[0][:120] if text.strip() else "réponse vide"
         raise ValueError(f"Ce lien ne donne pas un agenda (le site répond : « {first} »).")
-    return text
+    out = Fetched(text)
+    out.warning = urllib.parse.unquote(response.headers.get("X-Planning-Erreur", "")).strip()
+    return out
 
 
 # ---------- Cours de l'agenda ↔ matières ----------
@@ -191,8 +202,10 @@ class Agenda:
         if not data["url"]:
             return data
         try:
-            events = parse_ics(fetch(data["url"]))
-            error = ""
+            text = fetch(data["url"])
+            events = parse_ics(text)
+            warning = getattr(text, "warning", "")
+            error = warning
         except Exception as exc:  # réseau coupé, lien changé… : on garde ce qu'on avait
             events, error = None, str(exc) or exc.__class__.__name__
         with self.lock:
