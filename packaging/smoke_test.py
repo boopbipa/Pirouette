@@ -174,6 +174,11 @@ def main(binary: str) -> None:
             error = json.loads(body)["error"]
             assert error and "CERTIFICATE" not in error.upper() and "SSL" not in error.upper(), error
             print(f"Emploi du temps, lien https : {error}")
+
+            # Calendrier du Mac : EventKit est bien dans l'app (l'autorisation, elle, ne se demande pas ici)
+            calendar = json.loads(request(base + "/api/calendar")[1])
+            assert calendar["available"] is (sys.platform == "darwin"), calendar
+            print(f"Calendrier du Mac disponible : {calendar['available']}")
             print(f"OK : interface servie, PDF/Word/PowerPoint lus ({chars}), données dans {data_dir}")
         finally:
             proc.terminate()

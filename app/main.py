@@ -27,7 +27,7 @@ from pydantic import BaseModel
 
 load_dotenv()
 
-from . import backup, claude_desktop, exchange, figures, local_ai, news, online, plan as plans, reminder, spaced, srs, sync, updater  # noqa: E402
+from . import backup, claude_desktop, exchange, figures, local_ai, news, online, plan as plans, reminder, revplan, spaced, srs, sync, updater  # noqa: E402
 from .agenda import Agenda, classes as agenda_classes, subjects as agenda_subjects  # noqa: E402
 from .grounding import Grounding  # noqa: E402
 from .jobs import Jobs  # noqa: E402
@@ -2692,6 +2692,7 @@ async def revision_done(course_id: str, file_id: str, body: RevisionDoneIn) -> d
     else:
         spaced.done(entry, date.today(), score)
     store._save_course(course)
+    _calendar_soon()
     return spaced.view(entry, date.today())
 
 
@@ -2838,6 +2839,8 @@ def _agenda_tick(now: datetime | None = None) -> dict:
         if store.get_course(c["course_id"]).get("watch"):
             found = _watch_scan(c["course_id"], restart_updated=True)
             scanned.append({"course_id": c["course_id"], "updated": found["updated"], "new": found["new"]})
+    if _calendar_state()["enabled"]:
+        _calendar_sync(now)
     return {"refreshed": refreshed, "scanned": scanned}
 
 
@@ -2875,6 +2878,173 @@ async def agenda_week(start: str = "") -> dict:
         return {"monday": monday.isoformat(), "classes": week, "revisions": days, "url": bool(data["url"]),
                 "error": data.get("error") or ""}
     return await run_in_threadpool(build)
+
+
+
+# ---------- Les révisions dans le Calendrier du Mac (voir revplan.py, apple_calendar.py) ----------
+CALENDAR_DAYS = 14  # révisions écrites à l'avance dans l'agenda
+
+
+def _calendar_path() -> Path:
+    return store.root / "calendar.json"
+
+
+def _calendar_state() -> dict:
+    try:
+        state = json.loads(_calendar_path().read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        state = {}
+    state.setdefault("enabled", False)
+    state.setdefault("hour", "18:00")
+    return state
+
+
+def _calendar_save(state: dict) -> None:
+    _calendar_path().write_text(json.dumps(state, ensure_ascii=False), encoding="utf-8")
+
+
+def _calendar_items(today: date, now: datetime) -> list[dict]:
+    """Les révisions des deux semaines à venir : celles du jour (et « avant ton cours »), puis la prochaine de
+    chaque cours. Une révision en retard est mise aujourd'hui."""
+    revs = _revisions(today, now)
+    items = [{"course_id": r["course_id"], "file_id": r["file_id"], "day": today.isoformat(), "before": bool(r.get("extra")),
+              "course": r["course"], "title": r["title"], "minutes": r["minutes"], "reason": r.get("before") or r["reason"]}
+             for r in revs["today"]]
+    seen = {(i["course_id"], i["file_id"]) for i in items if not i["before"]}
+    active = set(store.active_course_ids())
+    for listed in store.list_courses():
+        if listed["id"] not in active:
+            continue
+        course = store.get_course(listed["id"])
+        contents = None
+        for entry in course["files"]:
+            view = spaced.view(entry, today)
+            if (course["id"], entry["id"]) in seen or view["today"] or view["in_days"] > CALENDAR_DAYS:
+                continue
+            contents = contents or _file_contents(course)
+            has = contents.get(entry["id"], {"cards": [], "questions": []})
+            items.append({"course_id": course["id"], "file_id": entry["id"], "day": view["due"], "before": False,
+                          "course": course["name"], "title": store_file_label(entry), "reason": view["reason"],
+                          "minutes": _revision_minutes(len(has["cards"]), len(has["questions"]))})
+    return items
+
+
+def _calendar_done(key: str) -> bool:
+    course_id, file_id, day, before = revplan.parse_key(key)
+    try:
+        entry = next((f for f in store.get_course(course_id)["files"] if f["id"] == file_id), None)
+    except (NotFound, OSError):
+        return True  # cours supprimé : rien à reporter
+    if entry is None:
+        return True
+    rev = entry.get("rev") or {}
+    return rev.get("last") == day or (before and rev.get("pre") == day)
+
+
+_calendar_lock = threading.Lock()
+
+
+def _postpone(keys: list[str], today: date) -> None:
+    """Révisions supprimées à la main dans Calendrier : remises au lendemain (celles « avant ton cours » sont juste
+    sautées)."""
+    for key in keys:
+        course_id, file_id, day, before = revplan.parse_key(key)
+        if before:
+            continue
+        try:
+            course = store.get_course(course_id)
+        except (NotFound, OSError):
+            continue
+        entry = next((f for f in course["files"] if f["id"] == file_id), None)
+        if entry is not None:
+            rev = spaced.ensure(entry, today)
+            rev["due"] = max(rev["due"], (date.fromisoformat(day) + timedelta(days=1)).isoformat())
+            store._save_course(course)
+
+
+def _calendar_sync(now: datetime | None = None, calendar=None) -> dict:
+    """Écrit les révisions dans le calendrier « Pirouette » (et relit ce que tu y as changé). `calendar` : pour les
+    tests, à la place du vrai Calendrier du Mac."""
+    from . import apple_calendar
+
+    now = now or datetime.now()
+    today = now.date()
+    with _calendar_lock:
+        state = _calendar_state()
+        if not state["enabled"]:
+            return state
+        try:
+            agenda = _agenda()
+            data = agenda.load()
+            courses = [c for c in store.list_courses() if c["id"] in set(store.active_course_ids())]
+            end = datetime.combine(today + timedelta(days=CALENDAR_DAYS + 1), datetime.min.time())
+            busy = [(datetime.fromisoformat(c["start"]), datetime.fromisoformat(c["end"]))
+                    for c in agenda_classes(data, agenda, courses, now - timedelta(hours=1), end) if not c["cancelled"]]
+            accent = (store.get_settings().get("appearance") or {}).get("accent") or "#B4532A"
+
+            def work(cal) -> dict:
+                total = {"postponed": []}
+                for _ in range(2):  # une révision supprimée à la main est reportée, puis écrite au lendemain
+                    slots = revplan.place(_calendar_items(today, now), busy, state["hour"], now)
+                    stats = revplan.sync(cal, slots, state, _calendar_done, now)
+                    if not stats["postponed"]:
+                        break
+                    total["postponed"] += stats["postponed"]
+                    _postpone(stats["postponed"], today)
+                total["count"] = len(slots)
+                return total
+
+            if calendar is not None:
+                stats = work(calendar)
+            elif not apple_calendar.available():
+                raise apple_calendar.CalendarError("Le Calendrier du Mac n'est pas disponible sur cet ordinateur.")
+            else:
+                stats = apple_calendar.run(state, accent, work)
+            state.update(error="", synced_at=now.isoformat(timespec="seconds"), count=stats["count"],
+                         postponed=len(stats["postponed"]))
+        except Exception as exc:  # accès refusé, calendrier en lecture seule… : montré dans les Réglages
+            state["error"] = str(exc) or exc.__class__.__name__
+        _calendar_save(state)
+        return state
+
+
+def _calendar_view() -> dict:
+    from . import apple_calendar
+
+    state = _calendar_state()
+    return {"available": apple_calendar.available(), "enabled": state["enabled"], "hour": state["hour"],
+            "error": state.get("error") or "", "synced_at": state.get("synced_at"), "count": state.get("count", 0)}
+
+
+class CalendarIn(BaseModel):
+    enabled: bool | None = None
+    hour: str | None = None  # « HH:MM »
+
+
+@app.get("/api/calendar")
+async def calendar_get() -> dict:
+    return _calendar_view()
+
+
+@app.put("/api/calendar")
+async def calendar_set(body: CalendarIn) -> dict:
+    state = _calendar_state()
+    if body.hour is not None:
+        if not re.fullmatch(r"([01]\d|2[0-3]):[0-5]\d", body.hour):
+            raise HTTPException(400, "Heure invalide.")
+        state["hour"] = body.hour
+    if body.enabled is not None:
+        state["enabled"] = body.enabled
+    _calendar_save(state)
+    if state["enabled"]:
+        await run_in_threadpool(_calendar_sync)
+    return _calendar_view()
+
+
+def _calendar_soon() -> None:
+    """Après une révision faite : l'agenda est remis à jour en arrière-plan (cochée, la suivante ajoutée)."""
+    if _calendar_state()["enabled"]:
+        threading.Thread(target=_calendar_sync, daemon=True).start()
 
 
 # ---------- Quiz ----------

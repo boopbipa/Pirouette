@@ -4,6 +4,8 @@ pywebview>=6.0
 pyinstaller>=6.10
 # Lecture des PDF scannés : la reconnaissance de texte du système (Vision sur Mac, Windows.Media.Ocr sur Windows)
 pyobjc-framework-Vision; sys_platform == "darwin"
+# Les révisions dans le Calendrier du Mac (calendrier « Pirouette »)
+pyobjc-framework-EventKit; sys_platform == "darwin"
 winrt-runtime; sys_platform == "win32"
 winrt-Windows.Foundation; sys_platform == "win32"
 winrt-Windows.Foundation.Collections; sys_platform == "win32"

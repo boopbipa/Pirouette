@@ -721,7 +721,38 @@ function renderAgendaView(v) {
 }
 async function renderAgendaSettings() {
   try { renderAgendaView(await api("/api/agenda")); } catch (err) { notify(err.message); }
+  try { renderCalendarView(await api("/api/calendar")); } catch { $("#cal-sync").hidden = true; }
 }
+
+// Les révisions dans le Calendrier du Mac (calendrier « Pirouette »)
+function renderCalendarView(v) {
+  $("#cal-sync").hidden = !v.available;
+  $("#cal-on").checked = v.enabled;
+  const sel = $("#cal-hour");
+  if (!sel.options.length) {
+    const hours = [];
+    for (let h = 7; h <= 22; h++) for (const m of ["00", "30"]) hours.push(`${String(h).padStart(2, "0")}:${m}`);
+    sel.innerHTML = hours.map((x) => `<option value="${x}">${x.replace(":", " h ").replace(" h 00", " h")}</option>`).join("");
+  }
+  sel.value = v.hour;
+  $(".cal-hour").hidden = !v.enabled;
+  const st = $("#cal-status");
+  st.hidden = !v.enabled;
+  st.classList.toggle("bad", Boolean(v.error));
+  st.textContent = v.error || `✓ ${plural(v.count, "révision prévue", "révisions prévues")} dans les deux semaines · à jour ${agendaAgo(v.synced_at)}`;
+}
+$("#cal-on").addEventListener("change", async () => {
+  const st = $("#cal-status");
+  st.hidden = false;
+  st.classList.remove("bad");
+  st.textContent = $("#cal-on").checked ? "Le Mac va te demander l'autorisation d'accéder à Calendrier…" : "";
+  try { renderCalendarView(await api("/api/calendar", jsonBody("PUT", { enabled: $("#cal-on").checked }))); }
+  catch (err) { notify(err.message); }
+});
+$("#cal-hour").addEventListener("change", async () => {
+  try { renderCalendarView(await api("/api/calendar", jsonBody("PUT", { hour: $("#cal-hour").value }))); }
+  catch (err) { notify(err.message); }
+});
 $("#agenda-form").addEventListener("submit", async (e) => {
   e.preventDefault();
   const btn = $("#agenda-save");

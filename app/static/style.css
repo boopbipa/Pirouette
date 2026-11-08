@@ -3193,3 +3193,9 @@ p, li, h1, h2, h3, h4, blockquote, td, th, dd, dt, pre, code, .feedback, .msg-bu
   .wk-col { position: static; background: none; display: grid; gap: 4px; }
   .wk-class { position: static; height: auto !important; }
 }
+
+/* Réglages › Emploi du temps › Dans ton Calendrier */
+.cal-sync { margin-top: 22px; padding-top: 4px; }
+.cal-sync h3 { font-size: 15px; margin: 0 0 6px; }
+.cal-hour { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 0 4px; }
+.cal-hour select { width: auto; min-width: 110px; }

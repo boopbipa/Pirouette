@@ -25,6 +25,8 @@ a = Analysis(
                    *collect_submodules("pypdfium2"), "pypdfium2_raw",
                    # PDF scannés : la reconnaissance de texte du système (importée à la demande, dans app/ocr.py)
                    *(["Vision", "Foundation", "objc"] if sys.platform == "darwin" else []),
+                   # Les révisions dans le Calendrier du Mac (app/apple_calendar.py)
+                   *(["EventKit", "AppKit"] if sys.platform == "darwin" else []),
                    *([*collect_submodules("winrt")] if sys.platform == "win32" else [])],
     excludes=["tkinter", "pytest", "playwright", "IPython"],
     noarchive=False,
@@ -58,6 +60,9 @@ if sys.platform == "darwin":
             "NSHighResolutionCapable": True,
             # Demandé par macOS pour convertir les fichiers Pages / Keynote via ces apps
             "NSAppleEventsUsageDescription": "Pirouette utilise Pages et Keynote pour lire tes cours enregistrés dans ces formats.",
+            # Demandé par macOS pour écrire tes révisions dans Calendrier (et relire celles que tu déplaces)
+            "NSCalendarsUsageDescription": "Pirouette ajoute tes révisions dans un calendrier « Pirouette » et tient compte de celles que tu déplaces.",
+            "NSCalendarsFullAccessUsageDescription": "Pirouette ajoute tes révisions dans un calendrier « Pirouette » et tient compte de celles que tu déplaces.",
             "NSHumanReadableCopyright": "Pirouette — tes cours deviennent des quiz.",
         },
     )

@@ -860,6 +860,16 @@
           <button class="ghost small" type="button" id="agenda-refresh" hidden>Actualiser</button>
         </form>
         <p class="agenda-status" id="agenda-status" hidden></p>
+        <div class="cal-sync" id="cal-sync" hidden>
+          <h3>Dans ton Calendrier</h3>
+          <label class="toggle-row first">
+            <input type="checkbox" id="cal-on">
+            <span><strong>Mettre mes révisions dans Calendrier</strong>
+              <small class="muted">Dans un calendrier « Pirouette », qui arrive aussi sur ton iPhone par iCloud. Déplace une révision : elle reste où tu la mets. Supprime-la : elle passe au lendemain.</small></span>
+          </label>
+          <div class="cal-hour"><label for="cal-hour">Heure de tes révisions</label><select id="cal-hour"></select></div>
+          <p class="agenda-status" id="cal-status" hidden></p>
+        </div>
         <div id="agenda-subjects" hidden>
           <h3>Quel cours va avec quelle matière</h3>
           <p class="muted small-text">Reconnu d'après les noms. Corrige si besoin : c'est retenu. « Aucune » pour les réunions et ce qui ne se révise pas.</p>
