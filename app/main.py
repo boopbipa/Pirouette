@@ -27,7 +27,7 @@ from pydantic import BaseModel
 
 load_dotenv()
 
-from . import backup, claude_desktop, exchange, figures, local_ai, news, online, plan as plans, reminder, srs, sync, updater  # noqa: E402
+from . import backup, claude_desktop, exchange, figures, local_ai, news, online, plan as plans, reminder, spaced, srs, sync, updater  # noqa: E402
 from .grounding import Grounding  # noqa: E402
 from .jobs import Jobs  # noqa: E402
 from .chapters import (CHAPTERS_SCHEMA, CHAPTERS_SYSTEM, ai_candidates, build_chapters_prompt,  # noqa: E402
@@ -1859,6 +1859,8 @@ SESSION_QUESTIONS = 10
 @app.get("/api/session")
 async def session(mode: str = "today", course: str = "", folder: str = "", filter: str = "review",
                   questions: bool = True, minutes: int = 15, chapter: str = "", file: str = "", pick: str = "") -> dict:
+    if mode == "revision":  # la révision espacée d'un ou plusieurs cours (accueil)
+        return await run_in_threadpool(_revision_session, pick, questions)
     if pick:  # une sélection de cours et de fichiers, de matières différentes (Réviser → « Choisir »)
         ids, keep = _pick(pick)
         result = _session(mode, "", "", filter, questions, minutes, chapter, ids=ids, keep=keep)
@@ -2544,6 +2546,141 @@ async def progress(course: str = "", folder: str = "") -> dict:
         "hard": _hard_cards(ids),
         "new_per_day": store.new_per_day(),
     }
+
+
+
+# ---------- Les révisions espacées de chaque cours (accueil) ----------
+REVISION_QUESTIONS = 8   # une révision de cours : quelques questions de ses quiz…
+REVISION_SIZE = 16       # … et des cartes, en tout au plus ceci
+
+
+def _file_contents(course: dict) -> dict[str, dict]:
+    """Par fichier de la matière : ses cartes et les questions de ses quiz."""
+    found = {f["id"]: {"cards": [], "questions": []} for f in course["files"]}
+    for card in (store.get_doc(course["id"], "cards") or {}).get("cards", []):
+        fid = _file_of(course, card)
+        if fid in found:
+            found[fid]["cards"].append(card)
+    for summary in store.list_quizzes(course["id"]):
+        fid = _file_of(course, summary)
+        if fid in found:
+            quiz = store.get_quiz(summary["id"])
+            stats = quiz.get("stats") or {}
+            found[fid]["questions"] += [{"quiz": quiz, "index": i, "stat": stats.get(str(i))} for i in range(len(quiz["questions"]))]
+    return found
+
+
+def _revision_minutes(cards: int, questions: int) -> int:
+    asked = min(questions, REVISION_QUESTIONS)
+    return max(2, round(min(cards, REVISION_SIZE - asked) * 0.3 + asked * 0.6))
+
+
+def _revisions(today: date | None = None) -> dict:
+    """Les révisions de cours : celles du jour (en retard d'abord), celles faites aujourd'hui, et les prochaines."""
+    today = today or date.today()
+    due, done, upcoming = [], [], []
+    active = set(store.active_course_ids())
+    for listed in store.list_courses():
+        if listed["id"] not in active or not listed.get("files"):
+            continue
+        course = store.get_course(listed["id"])  # tel qu'enregistré (sans les compteurs ajoutés par la liste)
+        changed = any(not isinstance(f.get("rev"), dict) for f in course["files"])  # suivi créé : à enregistrer
+        contents = _file_contents(course)
+        for entry in course["files"]:
+            view = spaced.view(entry, today)
+            has = contents.get(entry["id"], {"cards": [], "questions": []})
+            item = view | {"course_id": course["id"], "course": course["name"], "color": course.get("color"),
+                           "file_id": entry["id"], "title": store_file_label(entry), "kind": spaced.kind(entry["name"]),
+                           "cards": len(has["cards"]), "questions": len(has["questions"]),
+                           "minutes": _revision_minutes(len(has["cards"]), len(has["questions"]))}
+            if view["done_today"]:
+                done.append(item)
+                if 0 < view["in_days"] <= 14:  # fait aujourd'hui : il revient dans les prochaines
+                    upcoming.append(item)
+            elif view["today"]:
+                due.append(item)
+            elif view["in_days"] <= 14:
+                upcoming.append(item)
+        if changed:
+            store._save_course(course)
+    due.sort(key=lambda i: (-i["late"], i["step"], i["course"]))
+    upcoming.sort(key=lambda i: (i["due"], i["course"]))
+    return {"today": due, "done": done, "upcoming": upcoming[:12]}
+
+
+@app.get("/api/revisions")
+async def revisions_today() -> dict:
+    return await run_in_threadpool(_revisions)
+
+
+class RevisionDoneIn(BaseModel):
+    score: float | None = None  # 0 à 1 ; rien : le cours a juste été relu
+
+
+@app.post("/api/revisions/{course_id}/{file_id}/done")
+async def revision_done(course_id: str, file_id: str, body: RevisionDoneIn) -> dict:
+    course = store.get_course(course_id)
+    entry = next((f for f in course["files"] if f["id"] == file_id), None)
+    if entry is None:
+        raise HTTPException(404, "Ce cours n'existe plus.")
+    score = None if body.score is None else max(0.0, min(1.0, body.score))
+    spaced.done(entry, date.today(), score)
+    store._save_course(course)
+    return spaced.view(entry, date.today())
+
+
+def _revision_session(pick: str, questions: bool) -> dict:
+    """La révision d'un ou plusieurs cours (« cours:fichier;… ») : par cours, d'abord ce qu'on rate, puis ce qui est à
+    revoir ou jamais vu, puis le reste au hasard ; quelques questions de quiz et des cartes."""
+    chosen = _parse_pick(pick)
+    cards_all, asked_all = [], []
+    for course_id, files in chosen.items():
+        try:
+            course = store.get_course(course_id)
+        except NotFound:
+            continue
+        contents = _file_contents(course)
+        for fid, has in contents.items():
+            if files is not None and fid not in files:
+                continue
+            today = date.today()
+            order = lambda card: (not srs.is_weak(card), not (srs.is_new(card) or srs.is_due(card, today)), random.random())  # noqa: E731
+            picked_q = []
+            if questions:
+                rank = lambda e: (not (e["stat"] and (e["stat"].get("last") is False or e["stat"]["wrong"] > e["stat"]["right"])),  # noqa: E731
+                                  e["stat"] is not None, random.random())
+                picked_q = [_question_item(e) for e in sorted(has["questions"], key=rank)[:REVISION_QUESTIONS]]
+            picked_c = [_card_item({"course": course, "card": c}) for c in sorted(has["cards"], key=order)[:REVISION_SIZE - len(picked_q)]]
+            for item in picked_c + picked_q:
+                item["revision"] = f"{course_id}:{fid}"
+            cards_all += picked_c
+            asked_all += picked_q
+    random.shuffle(cards_all)
+    random.shuffle(asked_all)
+    return {"mode": "revision", "items": _interleave(cards_all, asked_all), "cards": len(cards_all), "questions": len(asked_all)}
+
+
+@app.post("/api/courses/{course_id}/files/{file_id}/open")
+async def open_course_file(course_id: str, file_id: str) -> dict:
+    """« Relire le cours » : le fichier tel que déposé, ouvert dans son app (Aperçu, Word…)."""
+    original = store.original_file(course_id, file_id)
+    if original is None:
+        raise HTTPException(404, "Le fichier d'origine de ce cours n'est plus là.")
+    name, data = original
+    folder = store.root / "a-relire"
+    folder.mkdir(exist_ok=True)
+    path = folder / Path(name).name
+    if not path.exists() or path.read_bytes() != data:
+        path.write_bytes(data)
+    if sys.platform == "darwin":
+        done = await run_in_threadpool(subprocess.run, ["open", str(path)], capture_output=True, timeout=15)
+        if done.returncode != 0:
+            raise HTTPException(500, "Impossible d'ouvrir le fichier sur ce Mac.")
+    elif os.name == "nt":
+        os.startfile(str(path))  # noqa: S606 — un fichier de nos données, pas un lien reçu
+    else:
+        return {"ok": False, "path": str(path)}
+    return {"ok": True}
 
 
 # ---------- Quiz ----------

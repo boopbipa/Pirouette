@@ -132,7 +132,7 @@ async function route() {
   else foldJobs();
   const match = hash.match(/^#\/cours\/([0-9a-f]{12})(?:\/(nouveau\/)?([a-z]+))?/);
   // Lien actif du menu du haut
-  const section = !hash || hash === "#/" ? "cours"
+  const section = !hash || hash === "#/" ? "accueil"
     : hash.startsWith("#/cours") || hash.startsWith("#/nouveau-cours") || hash.startsWith("#/reviser") ? "cours"
       : hash.startsWith("#/social/defis") ? "defis" : hash.slice(2).split("/")[0];
   document.querySelectorAll("[data-nav]").forEach((a) => a.classList.toggle("on", a.dataset.nav === section));
@@ -160,6 +160,7 @@ async function route() {
       openNewCourse();
     }
     else if (hash.startsWith("#/cours")) await loadCourses();
+    else if (hash.startsWith("#/accueil")) await openAccueil();
     else await openStart();
   } catch (err) {
     notify(err.message);
@@ -437,10 +438,11 @@ $("#home-guide").addEventListener("click", async (e) => {
   }
 });
 
-// L'app s'ouvre sur les matières ; l'ancien accueil ne sert plus qu'au tout premier lancement (le guide).
+// L'app s'ouvre sur l'accueil (le quiz du jour, les cours à réviser) ; l'ancien accueil ne sert plus qu'au tout
+// premier lancement (le guide).
 async function openStart() {
   const stats = await api("/api/stats").catch(() => ({ courses: 1 }));
-  return stats.courses ? loadCourses() : openHome();
+  return stats.courses ? openAccueil() : openHome();
 }
 // « Bonjour, Pierre-Louis » le jour, « Bonsoir » le soir
 function helloText(name) {
@@ -480,17 +482,10 @@ async function loadCourses() {
     api("/api/profile").catch(() => ({ name: "", asked: true })),
   ]);
   state.profile = profile;
-  renderTodayBar(profile, progress);
   state.course = null;
   state.newCards = null;
   state.courseProgress = Object.fromEntries(progress.courses.map((c) => [c.id, c]));
   setCrumbs();
-  $("#review-home-exam").hidden = !stats.next_exam;
-  if (stats.next_exam) {  // court, à droite de « Bonjour » ; la phrase entière au survol
-    const x = stats.next_exam, box = $("#review-home-exam");
-    box.innerHTML = x.days <= 0 ? "<b>Partiels en cours</b>" : `<b>Partiels dans ${plural(x.days, "jour", "jours")}</b>`;
-    box.title = `${x.course ? `${x.course} : ` : ""}${x.days <= 0 ? "semaine de partiels en cours" : `partiels le ${dayLong(x.date)}`}`;
-  }
   renderReviewSets();
 
   $("#course-count").textContent = courses.length ? `· ${courses.length}` : "";
@@ -503,14 +498,65 @@ async function loadCourses() {
   show("courses");
 }
 
-// En haut des matières : la salutation, puis la révision du jour de toutes les matières et la maîtrise d'ensemble
-function renderTodayBar(profile, progress) {
+// ---------- Accueil : le quiz du jour et les révisions de chaque cours ----------
+async function openAccueil() {
+  await state.revisionSaving;  // une révision qui vient de finir : sa note est enregistrée avant de relire la liste
+  const [profile, progress, stats, revs] = await Promise.all([
+    api("/api/profile").catch(() => ({ name: "", asked: true })), api("/api/progress").catch(() => ({ courses: [] })),
+    api("/api/stats").catch(() => ({})), api("/api/revisions").catch(() => ({ today: [], done: [], upcoming: [] })),
+  ]);
+  state.profile = profile;
+  state.course = null;
+  state.revisions = revs;
+  noteColors([...revs.today, ...revs.done, ...revs.upcoming].map((r) => ({ id: r.course_id, color: r.color })));
+  setCrumbs();
+  $("#review-home-exam").hidden = !stats.next_exam;
+  if (stats.next_exam) {  // court, à droite de « Bonjour » ; la phrase entière au survol
+    const x = stats.next_exam, box = $("#review-home-exam");
+    box.innerHTML = x.days <= 0 ? "<b>Partiels en cours</b>" : `<b>Partiels dans ${plural(x.days, "jour", "jours")}</b>`;
+    box.title = `${x.course ? `${x.course} : ` : ""}${x.days <= 0 ? "semaine de partiels en cours" : `partiels le ${dayLong(x.date)}`}`;
+  }
+  renderTodayBar(profile, progress, revs);
+  renderRevisions(revs);
+  show("accueil");
+}
+
+// Les cours à réviser aujourd'hui qui ont de quoi faire un quiz (cartes ou questions)
+const quizzable = (r) => r.cards + (mixQuestions() ? r.questions : 0) > 0;
+const revPick = (list) => {
+  const by = {};
+  for (const r of list) (by[r.course_id] ||= []).push(r.file_id);
+  return Object.entries(by).map(([c, files]) => `${c}:${files.join(",")}`).join(";");
+};
+
+// Le quiz du jour : les cours à réviser aujourd'hui s'il y en a, sinon les cartes du jour (comme avant)
+function renderTodayBar(profile, progress, revs) {
   $("#hello").textContent = helloText(profile.name);
   $("#name-prompt").hidden = profile.asked;
+  const pending = revs.today.filter(quizzable);
   const today = progress.today || { cards: 0, questions: 0 };
   const list = progress.courses || [];
-  const total = list.reduce((n, c) => n + (c.cards || 0), 0), known = list.reduce((n, c) => n + (c.known || 0), 0);
-  $("#today-bar").hidden = !total && !today.questions;
+  const total = list.reduce((n, c) => n + (c.cards || 0), 0);
+  $("#today-bar").hidden = !pending.length && !revs.done.length && !total && !today.questions;
+  if (pending.length || (revs.done.length && !revs.today.length)) {
+    const all = pending.length + revs.done.length;
+    const ring = todayRing(revs.done.length, pending.length);
+    $("#today-ring").style.setProperty("--m", `${pending.length ? Math.round((100 * revs.done.length) / all) : 100}%`);
+    $("#today-ring").classList.toggle("done", !pending.length);
+    $("#today-ring span").textContent = pending.length ? `${revs.done.length}/${all}` : ring.text;
+    $("#today-ring").title = "Cours révisés aujourd'hui";
+    const minutes = pending.reduce((n, r) => n + r.minutes, 0);
+    const subjects = new Set(pending.map((r) => r.course_id)).size;
+    $("#today-title").textContent = pending.length ? `Quiz du jour · ${plural(pending.length, "cours à réviser", "cours à réviser")}` : "Tes cours du jour sont révisés";
+    const toRead = revs.today.length - pending.length;
+    $("#today-sub").textContent = pending.length
+      ? `${subjects > 1 ? `${subjects} matières · ` : ""}environ ${minutes} min${toRead ? ` · ${plural(toRead, "autre cours", "autres cours")} à relire, juste en dessous` : ""}`
+      : "Bravo ! Tu peux continuer avec tes cartes du jour, ou souffler.";
+    state.todayQuiz = pending.length ? "revision" : (today.cards + (mixQuestions() ? today.questions : 0) ? "today" : null);
+    $("#today-go").textContent = pending.length ? "Commencer" : "Mes cartes du jour";
+    $("#today-go").hidden = !state.todayQuiz;
+    return;
+  }
   const due = today.cards + (mixQuestions() ? today.questions : 0);
   const doneAll = (progress.done_today?.cards || 0) + (mixQuestions() ? progress.done_today?.questions || 0 : 0);
   const ring = todayRing(doneAll, due);
@@ -521,12 +567,102 @@ function renderTodayBar(profile, progress) {
   const subjects = list.filter((c) => c.today).length;
   const parts = [today.cards ? plural(today.cards, "carte", "cartes") : "",
     mixQuestions() && today.questions ? plural(today.questions, "question", "questions") : ""].filter(Boolean);
-  $("#today-title").textContent = due ? `${parts.join(" et ")} aujourd'hui` : "Tout est à jour aujourd'hui";
+  $("#today-title").textContent = due ? `Quiz du jour · ${parts.join(" et ")}` : "Tout est à jour aujourd'hui";
   const minutes = Math.max(1, Math.round(today.cards * 0.2 + (mixQuestions() ? today.questions * 0.5 : 0)));
-  $("#today-sub").textContent = due ? `${subjects > 1 ? `${subjects} matières · ` : ""}environ ${minutes} min` : "Reviens demain, ou révise une matière en particulier";
+  $("#today-sub").textContent = due ? `Rien de prévu aujourd'hui : des cartes à revoir ou pas vues depuis longtemps · environ ${minutes} min`
+    : "Reviens demain, ou révise une matière en particulier";
+  state.todayQuiz = due ? "today" : null;
+  $("#today-go").textContent = "Commencer";
   $("#today-go").hidden = !due;
 }
-$("#today-go").addEventListener("click", () => startSession({ mode: "today" }, { title: "Révision du jour", back: "#/cours" }));
+$("#today-go").addEventListener("click", () => {
+  if (state.todayQuiz === "revision") {
+    const pending = (state.revisions?.today || []).filter(quizzable);
+    return startSession({ mode: "revision", pick: revPick(pending) }, { title: "Quiz du jour", back: "#/accueil" });
+  }
+  startSession({ mode: "today" }, { title: "Révision du jour", back: "#/accueil" });
+});
+
+// « Relire le cours » : le fichier d'origine (PDF, Word…) s'ouvre dans son app
+async function openCourseFile(courseId, fileId) {
+  try {
+    const r = await api(`/api/courses/${courseId}/files/${fileId}/open`, { method: "POST" });
+    if (!r.ok) notify("Ouvre Pirouette sur ton Mac ou ton PC pour relire le fichier.");
+  } catch (err) { notify(err.message); }
+}
+
+const REV_DOC = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6"/></svg>';
+function nextIn(days) {
+  return days <= 0 ? "aujourd'hui" : days === 1 ? "demain" : `dans ${days} jours`;
+}
+function revRow(r, done) {
+  const content = r.cards + (mixQuestions() ? r.questions : 0);
+  const chips = [
+    `<span class="rev-chip${r.late || r.reason === "À refaire" ? "" : " hot"}">${escapeHtml(r.late ? `En retard de ${plural(r.late, "jour", "jours")}` : r.reason)}</span>`,
+    content ? `<span class="rev-chip">${plural(Math.min(content, 16), "question", "questions")} · ${r.minutes} min</span>`
+      : `<span class="rev-chip">Pas encore de quiz : relis-le</span>`,
+  ].join("");
+  const read = r.kind !== undefined ? `<button class="ghost small rev-read" type="button" data-open="${r.course_id}:${r.file_id}">${REV_DOC}Relire le cours${r.kind ? `<span class="rev-kind">${escapeHtml(r.kind)}</span>` : ""}</button>` : "";
+  const acts = done
+    ? `<span class="rev-ok">✓ ${r.score != null ? `${r.score} %` : "Relu"} · prochaine ${nextIn(r.in_days)}</span>`
+    : `${read}${content ? `<button class="primary small rev-go" type="button" data-rev="${r.course_id}:${r.file_id}">Faire le quiz</button>`
+      : `<button class="primary small rev-go" type="button" data-read-done="${r.course_id}:${r.file_id}">C'est relu</button>`}`;
+  return `<div class="rev-row${done ? " done" : ""}" style="--c:${subjectColor(r.course_id)}">
+    <span class="rev-bar"></span>
+    <div class="rev-main"><div class="rev-title">${escapeHtml(r.course)} <span>· ${escapeHtml(r.title)}</span></div>
+      ${done ? "" : `<div class="rev-chips">${chips}</div>`}</div>
+    <div class="rev-acts">${acts}</div>
+  </div>`;
+}
+function renderRevisions(revs) {
+  const none = !revs.today.length && !revs.done.length && !revs.upcoming.length;
+  $("#acc-grid").hidden = none;
+  const minutes = revs.today.reduce((n, r) => n + r.minutes, 0);
+  $("#rev-sub").textContent = revs.today.length
+    ? `${plural(revs.today.length, "cours", "cours")} · environ ${minutes} min. Le jour du cours, puis 1, 3, 7, 15 et 30 jours après.`
+    : revs.done.length ? "Tout est fait pour aujourd'hui." : "Rien à réviser aujourd'hui.";
+  $("#rev-list").innerHTML = [...revs.today.map((r) => revRow(r, false)), ...revs.done.map((r) => revRow(r, true))].join("")
+    || `<p class="muted rev-empty">Chaque cours ajouté revient ici le jour même, puis 1, 3, 7, 15 et 30 jours après.</p>`;
+  const groups = {};
+  for (const r of revs.upcoming) (groups[r.due] ||= []).push(r);
+  $("#rev-next").innerHTML = Object.entries(groups).map(([day, list]) => {
+    const d = new Date(`${day}T12:00:00`);
+    return `<div class="rev-next">
+      <div class="rev-when">${d.toLocaleDateString("fr-FR", { weekday: "short" }).replace(".", "").toUpperCase()}<b>${d.getDate()}</b></div>
+      <div class="rev-next-list">${list.map((r) => `<div><span class="rev-dot" style="--c:${subjectColor(r.course_id)}"></span><b>${escapeHtml(r.course)}</b> · ${escapeHtml(r.title)}<small>${escapeHtml(r.reason)}</small></div>`).join("")}</div>
+    </div>`;
+  }).join("") || `<p class="muted rev-empty">Rien de prévu dans les deux semaines.</p>`;
+}
+$("#rev-list").addEventListener("click", async (e) => {
+  const open = e.target.closest("[data-open]");
+  if (open) return openCourseFile(...open.dataset.open.split(":"));
+  const go = e.target.closest("[data-rev]");
+  if (go) {
+    const r = state.revisions.today.find((x) => `${x.course_id}:${x.file_id}` === go.dataset.rev);
+    return startSession({ mode: "revision", pick: go.dataset.rev }, { title: r ? `${r.course} · ${r.title}` : "Révision", back: "#/accueil" });
+  }
+  const read = e.target.closest("[data-read-done]");
+  if (read) {
+    const [c, f] = read.dataset.readDone.split(":");
+    await api(`/api/revisions/${c}/${f}/done`, jsonBody("POST", {})).catch((err) => notify(err.message));
+    openAccueil();
+  }
+});
+
+// Fin d'une révision de cours : chaque cours révisé est noté (cartes sues, réponses justes) et sa prochaine date fixée
+function saveRevisions(s) {
+  const by = {};
+  for (const r of s.results) {
+    const key = r.item.revision;
+    if (!key) continue;
+    const point = r.kind === "card" ? ({ easy: 1, good: 1, hard: 0.5 }[r.rating] || 0) : (r.correct ? 1 : 0);
+    (by[key] ||= []).push(point);
+  }
+  return Promise.all(Object.entries(by).map(([key, points]) => {
+    const [c, f] = key.split(":");
+    return api(`/api/revisions/${c}/${f}/done`, jsonBody("POST", { score: points.reduce((a, b) => a + b, 0) / points.length })).catch(() => {});
+  }));
+}
 $("#today-bar").addEventListener("click", (e) => {
   if (e.target.closest("button, a") || $("#today-go").hidden) return;
   $("#today-go").click();
@@ -4489,6 +4625,7 @@ const isMistake = (r) => (r.kind === "card" ? r.rating !== "good" && r.rating !=
 function finishSession() {
   syncSoon();
   const s = state.session;
+  if (s.params?.mode === "revision" && !s.revisionSaved) { s.revisionSaved = true; state.revisionSaving = saveRevisions(s); }
   const cards = s.results.filter((r) => r.kind === "card");
   const questions = s.results.filter((r) => r.kind === "question");
   const count = (rating) => cards.filter((r) => r.rating === rating).length;
