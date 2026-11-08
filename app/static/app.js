@@ -611,7 +611,8 @@ function revRow(r, done) {
     : `${read}${content ? `<button class="primary small rev-go" type="button" data-rev="${r.course_id}:${r.file_id}">Faire le quiz</button>`
       : `<button class="primary small rev-go" type="button" data-read-done="${r.course_id}:${r.file_id}">C'est relu</button>`}`;
   return `<div class="rev-row${done ? " done" : ""}" style="--c:${subjectColor(r.course_id)}">
-    <span class="rev-bar"></span>
+    <span class="card-glare"></span>
+    <span class="subject-dot"></span>
     <div class="rev-main"><div class="rev-title">${escapeHtml(r.course)} <span>· ${escapeHtml(r.title)}</span></div>
       ${done ? "" : `<div class="rev-chips">${chips}</div>`}</div>
     <div class="rev-acts">${acts}</div>
@@ -982,6 +983,15 @@ $("#view-courses").addEventListener("pointermove", (e) => {
   const box = card.getBoundingClientRect();
   card.style.setProperty("--gx", `${((e.clientX - box.left) / box.width) * 100}%`);
   card.style.setProperty("--gy", `${((e.clientY - box.top) / box.height) * 100}%`);
+});
+
+// Accueil : la même lumière sur les cours à réviser
+$("#rev-list").addEventListener("pointermove", (e) => {
+  const row = e.target.closest(".rev-row");
+  if (!row || e.pointerType === "touch") return;
+  const box = row.getBoundingClientRect();
+  row.style.setProperty("--gx", `${((e.clientX - box.left) / box.width) * 100}%`);
+  row.style.setProperty("--gy", `${((e.clientY - box.top) / box.height) * 100}%`);
 });
 
 $("#view-courses").addEventListener("click", async (e) => {
