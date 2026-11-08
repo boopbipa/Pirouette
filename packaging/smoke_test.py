@@ -166,6 +166,14 @@ def main(binary: str) -> None:
                 print(f"Fichier Pages sans l'app Pages : {detail}")
 
             scanned_pdf(base, course_id)
+
+            # Emploi du temps : l'app empaquetée sait ouvrir un lien https (certificats inclus). Une page qui n'est pas
+            # un agenda doit donner « ne donne pas un agenda », pas une erreur de certificat.
+            status, body = request(base + "/api/agenda", "PUT", json.dumps({"url": "https://github.com/"}).encode(),
+                                   {"Content-Type": "application/json"})
+            error = json.loads(body)["error"]
+            assert error and "CERTIFICATE" not in error.upper() and "SSL" not in error.upper(), error
+            print(f"Emploi du temps, lien https : {error}")
             print(f"OK : interface servie, PDF/Word/PowerPoint lus ({chars}), données dans {data_dir}")
         finally:
             proc.terminate()

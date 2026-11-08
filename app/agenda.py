@@ -12,7 +12,6 @@ import json
 import re
 import threading
 import unicodedata
-import urllib.request
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
@@ -98,15 +97,25 @@ def parse_ics(text: str) -> list[dict]:
 
 
 def fetch(url: str, timeout: float = 25) -> str:
+    """Le fichier de l'agenda. Par httpx, comme les autres accès à Internet de Pirouette : il apporte ses propres
+    certificats (le Python de l'app empaquetée n'a pas ceux du Mac, et urllib refusait toute connexion https)."""
+    import httpx
+
     url = url.strip()
-    if url.startswith("webcal://"):
+    if url.lower().startswith("webcal://"):
         url = "https://" + url[len("webcal://"):]
-    if not url.startswith(("https://", "http://")):
+    if not url.lower().startswith(("https://", "http://")):
         raise ValueError("Ce lien ne commence pas par https://")
-    request = urllib.request.Request(url, headers={"User-Agent": "Pirouette (emploi du temps)"})
-    with urllib.request.urlopen(request, timeout=timeout) as response:  # noqa: S310 — le lien donné par l'utilisateur
-        data = response.read(5_000_000)
-    text = data.decode("utf-8", errors="replace")
+    try:
+        response = httpx.get(url, timeout=timeout, follow_redirects=True, headers={"User-Agent": "Pirouette (emploi du temps)"})
+    except httpx.TimeoutException as exc:
+        raise ValueError("Le site de l'agenda ne répond pas (réessaie plus tard).") from exc
+    except httpx.HTTPError as exc:
+        raise ValueError(f"Impossible de joindre le site de l'agenda (connexion Internet ?) : {exc}") from exc
+    text = response.text
+    if response.status_code >= 400 and "BEGIN:VCALENDAR" not in text:
+        first = text.strip().splitlines()[0][:120] if text.strip() else f"erreur {response.status_code}"
+        raise ValueError(f"Le lien est refusé (le site répond : « {first} »). Vérifie qu'il est complet, clé comprise.")
     if "BEGIN:VCALENDAR" not in text:
         first = text.strip().splitlines()[0][:120] if text.strip() else "réponse vide"
         raise ValueError(f"Ce lien ne donne pas un agenda (le site répond : « {first} »).")
