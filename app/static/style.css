@@ -3310,3 +3310,16 @@ p, li, h1, h2, h3, h4, blockquote, td, th, dd, dt, pre, code, .feedback, .msg-bu
 .cloud-item.file { color: var(--muted); font-size: 13px; padding: 4px 10px 4px 30px; }
 .cloud-book { margin: 8px 0 2px; font-size: 12px; font-weight: 650; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
 .cloud-error { color: var(--ko); }
+
+/* Pendant la séance : pourquoi une carte revient */
+.retry-tag { margin-left: 8px; padding: 1px 8px; border-radius: 99px; background: var(--ko-soft);
+  color: var(--ko); font-weight: 600; font-size: 12px; white-space: nowrap; }
+/* Page d'une matière : les notions qu'on rate le plus, en une ligne sous la révision du jour */
+.weak-row { display: flex; align-items: center; gap: 12px; width: 100%; margin: 10px 0 4px; padding: 10px 14px; border: 1px solid var(--border);
+  border-radius: 14px; background: var(--surface); color: var(--text); text-align: left; font: inherit; cursor: pointer; }
+.weak-row:hover { border-color: color-mix(in srgb, var(--ko) 45%, var(--border)); }
+.weak-ic { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 50%; flex: none; font-size: 16px;
+  background: var(--ko-soft); color: var(--ko); }
+.weak-text { display: grid; flex: 1; min-width: 0; }
+.weak-text small { color: var(--muted); font-size: 12.5px; }
+.weak-go { color: var(--ko); font-weight: 600; font-size: 13.5px; white-space: nowrap; }

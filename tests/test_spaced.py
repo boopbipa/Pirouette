@@ -116,3 +116,20 @@ def test_reading_a_course_never_overwrites_your_edits(tmp_path, monkeypatch):
     store._save_course(c)
     r = client.post(f"/api/courses/{course['id']}/files/{fid}/open").json()
     assert r["copy"] is False and r["path"].endswith("Neuro/CM1.txt")
+
+
+def test_a_failed_card_says_why_it_comes_back(tmp_path, monkeypatch):
+    store = Store(tmp_path)
+    monkeypatch.setattr(main, "store", store)
+    course = store.create_course("Neurosciences")
+    store.add_card(course["id"], "Neurone ?", "Cellule excitable")
+    store.add_card(course["id"], "Axone ?", "Conduit le potentiel d'action")
+    deck = store.get_doc(course["id"], "cards")
+    deck["cards"][0].update(reviews=2, last_rating="again", status="review", lapses=1, interval=0, due=date.today().isoformat())
+    store.save_doc(course["id"], "cards", deck)
+    client = TestClient(main.app)
+    assert client.get(f"/api/progress?course={course['id']}").json()["weak"]["cards"] == 1
+    items = client.get(f"/api/session?mode=weak&course={course['id']}").json()["items"]
+    assert [(i["card"]["front"], i["retry"]) for i in items] == [("Neurone ?", "Ratée la dernière fois")]
+    assert main._question_retry({"right": 1, "wrong": 3, "last": True}) == "À retravailler"
+    assert main._question_retry({"right": 2, "wrong": 0, "last": True}) == ""

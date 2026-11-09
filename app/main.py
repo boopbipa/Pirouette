@@ -1848,14 +1848,29 @@ def _scope(course: str, folder: str) -> list[str]:
 def _card_item(entry: dict) -> dict:
     course, card = entry["course"], entry["card"]
     return {"kind": "card", "course_id": course["id"], "course_name": course["name"], "card": card,
-            "next": srs.preview(card)}
+            "next": srs.preview(card), "retry": _card_retry(card)}
+
+
+def _card_retry(card: dict) -> str:
+    """Pourquoi la carte revient, à afficher pendant la séance (vide : rien de spécial)."""
+    if card.get("reviews") and card.get("last_rating") == "again":
+        return "Ratée la dernière fois"
+    return "À retravailler" if srs.is_weak(card) else ""
+
+
+def _question_retry(stat: dict | None) -> str:
+    if not stat:
+        return ""
+    if stat.get("last") is False:
+        return "Ratée la dernière fois"
+    return "À retravailler" if stat.get("wrong", 0) > stat.get("right", 0) else ""
 
 
 def _question_item(entry: dict) -> dict:
     quiz = entry["quiz"]
     return {"kind": "question", "course_id": quiz.get("course_id"), "course_name": quiz.get("course_name") or "",
             "quiz_id": quiz["id"], "quiz_title": quiz["title"], "index": entry["index"],
-            "question": quiz["questions"][entry["index"]], "stat": entry["stat"]}
+            "question": quiz["questions"][entry["index"]], "stat": entry["stat"], "retry": _question_retry(entry["stat"])}
 
 
 DAILY_SIZE = 30

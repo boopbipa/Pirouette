@@ -4354,6 +4354,9 @@ document.addEventListener("click", (e) => {
 // La révision du jour mêle toujours cartes et questions de quiz (l'option pour les séparer a été retirée)
 const mixQuestions = () => true;
 
+$("#weak-start").addEventListener("click", () => startSession({ mode: "weak", ...reviewScope() },
+  { title: "À retravailler", back: state.reviewScope.hash }));
+
 // Lance une séance. `params` : mode (today / weak / cards), course, folder, filter.
 async function startSession(params, { title, back }) {
   const query = new URLSearchParams({ questions: mixQuestions() ? "1" : "0", ...params });
@@ -4391,6 +4394,9 @@ function showItem() {
   $("#cards-bar").style.width = `${(s.index / s.items.length) * 100}%`;
   // Juste la matière, pour le contexte (ni « Question de quiz » ni le cours ou le chapitre), cartes comprises
   $("#session-origin").textContent = item.course_name || "";
+  // Une carte ou une question ratée revient plus tôt : on le dit, pour que ce ne soit pas une surprise
+  $("#session-retry").hidden = !item.retry;
+  $("#session-retry").textContent = item.retry ? `↺ ${item.retry}` : "";
   const after = s.items[s.index - 1]?.kind;
   $("#card-stage").hidden = item.kind !== "card";
   $("#question-stage").hidden = item.kind !== "question";
@@ -5499,6 +5505,9 @@ async function renderScopeMain() {
     : (today.cards || today.questions ? `${$("#today-summary").innerHTML} · environ ${Math.max(1, Math.round(today.cards * 0.2
       + (mixQuestions() ? today.questions * 0.5 : 0)))} min` : "Tout est à jour pour aujourd'hui");
   $("#hero-start").disabled = planned ? false : $("#start-today").disabled;
+  const weak = data.weak.cards + (mixQuestions() ? data.weak.questions : 0);
+  $("#weak-start").hidden = !weak;
+  $("#weak-count").textContent = `${plural(weak, "notion", "notions")} à retravailler`;
   $("#hero-start").textContent = planned && plan.status.done_today ? "Refaire une séance" : "Commencer";
   if (state.reviewFile) {
     // Un seul cours de la matière : sa révision du jour (cartes à revoir et questions à reposer de ce cours)
