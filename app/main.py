@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 from html import escape as html_escape
 import json
 import os
@@ -2898,26 +2899,58 @@ async def general_rev_minutes(body: MinutesIn) -> dict:
 
 @app.post("/api/courses/{course_id}/files/{file_id}/open")
 async def open_course_file(course_id: str, file_id: str) -> dict:
-    """« Relire le cours » : le fichier tel que déposé, ouvert dans son app (Aperçu, Word…)."""
-    original = store.original_file(course_id, file_id)
-    if original is None:
-        raise HTTPException(404, "Le fichier d'origine de ce cours n'est plus là.")
-    name, data = original
-    folder = store.root / "a-relire"
-    folder.mkdir(exist_ok=True)
-    path = folder / Path(name).name
-    if not path.exists() or path.read_bytes() != data:
-        path.write_bytes(data)
+    """« Relire le cours » : ton vrai fichier s'il est dans le dossier suivi de la matière (tes modifications y vont,
+    et Pirouette les reprend toute seule). Sinon une copie du fichier déposé, qui n'est jamais écrasée pendant que tu
+    la modifies (Pages, Word… avertissaient « le fichier a été modifié par une autre application »)."""
+    from . import watch
+
+    course = store.get_course(course_id)
+    entry = next((f for f in course["files"] if f["id"] == file_id), None)
+    if entry is None:
+        raise HTTPException(404, "Ce cours n'existe plus.")
+    path, copy = None, False
+    if course.get("watch"):
+        found, _ = watch._course_files(Path(course["watch"]["path"]))
+        path = found.get(entry["name"].lower())
+    if path is None:
+        original = store.original_file(course_id, file_id)
+        if original is None:
+            raise HTTPException(404, "Le fichier d'origine de ce cours n'est plus là.")
+        name, data = original
+        folder = store.root / "a-relire"
+        folder.mkdir(exist_ok=True)
+        path, copy = folder / Path(name).name, True
+        written_log = folder / ".ecrits.json"
+        try:
+            written = json.loads(written_log.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            written = {}
+        digest = hashlib.sha256(data).hexdigest()
+
+        def current() -> str | None:
+            if path.is_dir():  # un .pages enregistré en dossier par Pages : modifié
+                return "dossier"
+            try:
+                return hashlib.sha256(path.read_bytes()).hexdigest()
+            except OSError:
+                return None
+
+        now = current()
+        # On (ré)écrit la copie seulement si elle n'existe pas, ou si elle n'a pas bougé depuis notre dernière copie
+        # (le cours a eu une nouvelle version). Modifiée par toi : on l'ouvre telle quelle.
+        if now is None or (now == written.get(path.name) and now != digest):
+            path.write_bytes(data)
+            written[path.name] = digest
+            written_log.write_text(json.dumps(written), encoding="utf-8")
     if sys.platform == "darwin":
         done = await run_in_threadpool(subprocess.run, ["open", str(path)], capture_output=True, timeout=15)
         if done.returncode != 0:
             raise HTTPException(500, "Impossible d'ouvrir le fichier sur ce Mac.")
     elif os.name == "nt":
-        os.startfile(str(path))  # noqa: S606 — un fichier de nos données, pas un lien reçu
+        os.startfile(str(path))  # noqa: S606 — un fichier de nos données ou du dossier suivi
     else:
-        return {"ok": False, "path": str(path)}
-    return {"ok": True}
-
+        return {"ok": False, "path": str(path), "copy": copy}
+    return {"ok": True, "copy": copy}
 
 
 # ---------- L'emploi du temps de l'école (voir agenda.py) ----------

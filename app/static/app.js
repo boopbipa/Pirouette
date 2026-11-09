@@ -554,6 +554,15 @@ async function openCourseFile(courseId, fileId) {
   try {
     const r = await api(`/api/courses/${courseId}/files/${fileId}/open`, { method: "POST" });
     if (!r.ok) notify("Ouvre Pirouette sur ton Mac ou ton PC pour relire le fichier.");
+    else if (r.copy) {  // pas de dossier suivi : une copie s'ouvre (on le dit, une fois par matière)
+      let told = {};
+      try { told = JSON.parse(localStorage.getItem("pirouette.copyTold") || "{}"); } catch {}
+      if (!told[courseId]) {
+        notify("C'est une copie de ton cours : ce que tu y changes ne va pas dans ton fichier. Pour ouvrir ton vrai fichier, choisis son dossier dans les Réglages de la matière (Dossier suivi).");
+        told[courseId] = 1;
+        try { localStorage.setItem("pirouette.copyTold", JSON.stringify(told)); } catch {}
+      }
+    }
   } catch (err) { notify(err.message); }
 }
 

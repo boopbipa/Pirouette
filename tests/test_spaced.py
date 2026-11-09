@@ -87,3 +87,28 @@ def test_postpone_to_tomorrow(tmp_path, monkeypatch):
     client.post(f"/api/revisions/{course['id']}/{fid}/postpone", json={})
     data = client.get("/api/revisions").json()
     assert data["today"] == [] and data["upcoming"][0]["due"] == (date.today() + timedelta(days=1)).isoformat()
+
+
+def test_reading_a_course_never_overwrites_your_edits(tmp_path, monkeypatch):
+    store = Store(tmp_path)
+    monkeypatch.setattr(main, "store", store)
+    course = store.create_course("Neurosciences")
+    store.add_file(course["id"], "CM1.txt", b"version 1", "version 1")
+    fid = store.get_course(course["id"])["files"][0]["id"]
+    client = TestClient(main.app)
+    r = client.post(f"/api/courses/{course['id']}/files/{fid}/open").json()
+    copy = tmp_path / "a-relire" / "CM1.txt"
+    assert r["copy"] and copy.read_bytes() == b"version 1"
+    copy.write_bytes(b"version 1 + mes notes")  # tu modifies la copie (Pages, Word…)
+    client.post(f"/api/courses/{course['id']}/files/{fid}/open")
+    assert copy.read_bytes() == b"version 1 + mes notes"  # jamais écrasée
+    # Avec un dossier suivi : c'est ton vrai fichier qui s'ouvre
+    folder = tmp_path / "Neuro"
+    folder.mkdir()
+    (folder / "CM1.txt").write_bytes(b"version 1")
+    from app import watch
+    c = store.get_course(course["id"])
+    watch.link(c, str(folder))
+    store._save_course(c)
+    r = client.post(f"/api/courses/{course['id']}/files/{fid}/open").json()
+    assert r["copy"] is False and r["path"].endswith("Neuro/CM1.txt")
