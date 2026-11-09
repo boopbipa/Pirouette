@@ -90,8 +90,12 @@ def test_postpone_to_tomorrow(tmp_path, monkeypatch):
 
 
 def test_reading_a_course_never_overwrites_your_edits(tmp_path, monkeypatch):
+    import subprocess
     store = Store(tmp_path)
     monkeypatch.setattr(main, "store", store)
+    # (sur le Mac des tests : ne rien ouvrir pour de vrai)
+    monkeypatch.setattr(main.subprocess, "run", lambda *a, **k: subprocess.CompletedProcess(a, 0))
+    monkeypatch.setattr(main.os, "startfile", lambda *a: None, raising=False)
     course = store.create_course("Neurosciences")
     store.add_file(course["id"], "CM1.txt", b"version 1", "version 1")
     fid = store.get_course(course["id"])["files"][0]["id"]

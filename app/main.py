@@ -2950,7 +2950,7 @@ async def open_course_file(course_id: str, file_id: str) -> dict:
         os.startfile(str(path))  # noqa: S606 — un fichier de nos données ou du dossier suivi
     else:
         return {"ok": False, "path": str(path), "copy": copy}
-    return {"ok": True, "copy": copy}
+    return {"ok": True, "path": str(path), "copy": copy}
 
 
 # ---------- L'emploi du temps de l'école (voir agenda.py) ----------
