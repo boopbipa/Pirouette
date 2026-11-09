@@ -143,6 +143,17 @@ def sync(calendar, slots: list[Slot], state: dict, is_done, now: datetime) -> di
         return stats
 
     wanted = {s.key for s in slots}
+    # Une révision pas faite qui change de jour (en retard, reportée) : on déplace son événement plutôt que d'en créer
+    # un second (sinon : un la veille, pas fait, et un nouveau le jour d'après)
+    def same(k):
+        course_id, file_id, _, before = parse_key(k)
+        return course_id, file_id, before
+    stale: dict = {}
+    for k, event in found.items():
+        if k not in wanted and not is_done(k):
+            stale.setdefault(same(k), []).append(k)
+    for keys in stale.values():
+        keys.sort(key=lambda k: found[k]["start"])
     for slot in slots:
         if slot.key in skipped:
             continue
@@ -169,11 +180,35 @@ def sync(calendar, slots: list[Slot], state: dict, is_done, now: datetime) -> di
                 in_calendar = wanted_len
             lens[slot.key] = in_calendar
             continue
+        old = stale.get(same(slot.key))
+        if old:  # l'événement d'avant (le plus récent) part au nouveau jour, avec la nouvelle clé
+            k = old.pop()
+            event = found.pop(k)
+            calendar.move(event["id"], slot.start, slot.end)
+            calendar.renote(event["id"], (event.get("notes") or "").replace(marker(k), marker(slot.key)))
+            event.update(start=slot.start, end=slot.end)
+            found[slot.key] = event
+            for book in (created, starts, lens):
+                book.pop(k, None)
+            starts[slot.key] = slot.start.strftime("%H:%M")
+            lens[slot.key] = round((slot.end - slot.start).total_seconds() / 60)
+            created[slot.key] = slot.start.isoformat(timespec="minutes")
+            stats["moved_late"] = stats.get("moved_late", 0) + 1
+            continue
         calendar.create(slot)
         starts[slot.key] = slot.start.strftime("%H:%M")
         lens[slot.key] = round((slot.end - slot.start).total_seconds() / 60)
         created[slot.key] = slot.start.isoformat(timespec="minutes")
         stats["created"] += 1
+    wanted_files = {same(w) for w in wanted}
+    # Les doublons déjà là (révision pas faite restée à son ancien jour alors qu'elle a un événement ailleurs) : retirés
+    for keys in stale.values():
+        for k in keys:
+            if same(k) in wanted_files and k in found:
+                calendar.delete(found.pop(k)["id"])
+                for book in (created, starts, lens):
+                    book.pop(k, None)
+                stats["deleted"] += 1
     for k, event in found.items():
         if k in wanted:
             continue

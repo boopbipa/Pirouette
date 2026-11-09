@@ -202,3 +202,29 @@ def test_moving_in_pirouette_and_in_calendar(tmp_path, monkeypatch):
     week = client.get(f"/api/agenda/week?start={later.isoformat()}").json()
     assert any(r["start"].endswith("07:00") for r in week["revisions"].get(later.isoformat(), []))
     assert client.put(f"/api/revisions/{cid}/{fid}/move", json={"from_day": later.isoformat(), "day": "2000-01-01", "time": "10:00"}).status_code == 400
+
+
+def test_a_missed_revision_moves_its_event_instead_of_duplicating_it(tmp_path, monkeypatch):
+    store, cid, fid = _setup(tmp_path, monkeypatch)
+    cal = FakeCalendar()
+    today = date.today()
+    main._calendar_sync(datetime.combine(today, datetime.min.time()) + timedelta(hours=9), cal)
+    assert len(cal.items) == 1
+    # Pas faite : le lendemain, elle est en retard ; son événement part au nouveau jour (pas de second événement)
+    tomorrow = today + timedelta(days=1)
+    main._calendar_sync(datetime.combine(tomorrow, datetime.min.time()) + timedelta(hours=9), cal)
+    [event] = cal.items.values()
+    assert event["start"].date() == tomorrow and revplan.key_in(event["notes"]).endswith(tomorrow.isoformat())
+
+
+def test_an_existing_duplicate_of_a_missed_revision_is_removed():
+    cal = FakeCalendar()
+    now = datetime(2026, 11, 10, 9, 0)
+    a, f = "a" * 12, "b" * 8
+    old = revplan.Slot(revplan.key_of(a, f, "2026-11-09"), "Réviser Neuro", revplan.marker(revplan.key_of(a, f, "2026-11-09")),
+                       datetime(2026, 11, 9, 18), datetime(2026, 11, 9, 18, 30))
+    new = revplan.Slot(revplan.key_of(a, f, "2026-11-11"), "Réviser Neuro", revplan.marker(revplan.key_of(a, f, "2026-11-11")),
+                       datetime(2026, 11, 11, 18), datetime(2026, 11, 11, 18, 30))
+    cal.create(old), cal.create(new)
+    revplan.sync(cal, [new], {}, lambda k: False, now)
+    assert [e["start"].date().isoformat() for e in cal.items.values()] == ["2026-11-11"]
