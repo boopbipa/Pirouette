@@ -24,9 +24,29 @@ iconutil -c icns "$ICONSET" -o packaging/Pirouette.icns
 echo "→ Application"
 "$PY" -m PyInstaller --noconfirm --clean packaging/Pirouette.spec
 
-echo "→ Signature ad hoc (sans certificat Apple ; indispensable sur Apple Silicon)"
-codesign --force --deep --sign - dist/Pirouette.app
+# Signature. Avec le certificat de Pirouette (secret MAC_SIGN_P12) : la même signature d'une version à l'autre, et
+# macOS se souvient des autorisations données (Calendrier, Pages…) après une mise à jour. Sans lui : signature
+# « ad hoc », différente à chaque version (macOS redemande alors les autorisations).
+if [ -n "${MAC_SIGN_P12:-}" ]; then
+  echo "→ Signature avec le certificat de Pirouette"
+  KEYCHAIN="$PWD/build/signature.keychain-db"
+  KEYPASS="$(uuidgen)"
+  rm -f "$KEYCHAIN"
+  security create-keychain -p "$KEYPASS" "$KEYCHAIN"
+  security set-keychain-settings -lut 3600 "$KEYCHAIN"
+  security unlock-keychain -p "$KEYPASS" "$KEYCHAIN"
+  echo "$MAC_SIGN_P12" | base64 --decode > build/signature.p12
+  security import build/signature.p12 -k "$KEYCHAIN" -P "${MAC_SIGN_PASSWORD:-}" -T /usr/bin/codesign
+  rm -f build/signature.p12
+  security set-key-partition-list -S apple-tool:,apple: -s -k "$KEYPASS" "$KEYCHAIN" >/dev/null
+  security list-keychains -d user -s "$KEYCHAIN" $(security list-keychains -d user | tr -d '"')
+  codesign --force --deep --keychain "$KEYCHAIN" --sign "Pirouette" dist/Pirouette.app
+else
+  echo "→ Signature ad hoc (sans certificat ; indispensable sur Apple Silicon)"
+  codesign --force --deep --sign - dist/Pirouette.app
+fi
 codesign --verify --deep dist/Pirouette.app
+codesign -dr - dist/Pirouette.app 2>&1 | tail -1  # l'exigence que macOS retient pour les autorisations
 
 echo "→ Image disque"
 STAGE="build/dmg"

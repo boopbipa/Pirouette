@@ -3292,3 +3292,21 @@ p, li, h1, h2, h3, h4, blockquote, td, th, dd, dt, pre, code, .feedback, .msg-bu
 .next-widget h3 { margin: 0 0 10px; font-size: 12px; font-weight: 650; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
 .next-row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
 @media (max-width: 640px) { .next-row { grid-template-columns: 1fr; } }
+
+/* OneDrive / OneNote : choisir ce que la matière suit */
+.cloud-picker { position: fixed; inset: 0; z-index: 60; display: grid; place-items: center; background: rgba(0, 0, 0, .28); }
+.cloud-card { position: relative; width: min(460px, calc(100vw - 32px)); max-height: min(560px, calc(100vh - 60px)); overflow: auto;
+  background: var(--surface); border-radius: 18px; box-shadow: 0 30px 60px -20px rgba(0, 0, 0, .45); padding: 22px 22px 18px; }
+.cloud-close { position: absolute; top: 10px; right: 12px; border: 0; background: none; font-size: 22px; color: var(--muted); padding: 4px 8px; }
+.cloud-body h3 { margin: 0 0 6px; }
+.cloud-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin: 0 26px 12px 0; }
+.cloud-tabs { display: inline-flex; gap: 4px; background: var(--sunken); border-radius: 99px; padding: 3px; }
+.cloud-tabs button { border: 0; background: none; border-radius: 99px; padding: 6px 14px; font-size: 13.5px; color: var(--text); }
+.cloud-tabs button.on { background: var(--surface); box-shadow: 0 1px 3px rgba(0, 0, 0, .12); font-weight: 600; }
+.cloud-path { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+.cloud-list { display: grid; gap: 4px; margin-bottom: 14px; max-height: 300px; overflow: auto; }
+.cloud-item { text-align: left; border: 0; background: none; border-radius: 10px; padding: 8px 10px; font: inherit; font-size: 14px; color: var(--text); }
+.cloud-item.folder:hover { background: var(--sunken); }
+.cloud-item.file { color: var(--muted); font-size: 13px; padding: 4px 10px 4px 30px; }
+.cloud-book { margin: 8px 0 2px; font-size: 12px; font-weight: 650; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
+.cloud-error { color: var(--ko); }

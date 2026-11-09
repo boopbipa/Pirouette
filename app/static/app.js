@@ -3448,16 +3448,100 @@ async function scanWatch(courseId) {
   renderWatchNew(courseId, found.new);
 }
 function renderWatchRow(course) {
-  const watch = course.watch;
+  const watch = course.watch, cloud = course.cloud;
   const desktop = Boolean(window.pywebview?.api?.pick_folder);
-  $("#watch-row").hidden = !desktop && !watch;
-  $("#watch-path").textContent = watch ? watch.path.replace(/^\/Users\/[^/]+/, "~") : "Aucun";
+  $("#watch-row").hidden = !desktop && !watch && !cloud && !state.msAvailable;
+  $("#watch-path").textContent = cloud ? `${cloud.kind === "onenote" ? "OneNote" : "OneDrive"} : ${cloud.name}`
+    : watch ? watch.path.replace(/^\/Users\/[^/]+/, "~") : "Aucun";
   $("#watch-path").title = watch?.path || "";
   $("#watch-pick").textContent = watch ? "Changer…" : "Choisir…";
   $("#watch-pick").hidden = !desktop;
-  $("#watch-stop").hidden = !watch;
-  $("#watch-refresh").hidden = !watch;
+  $("#watch-stop").hidden = !watch && !cloud;
+  $("#watch-refresh").hidden = !watch && !cloud;
+  // « Se connecter avec Microsoft » : seulement si cette version de Pirouette est inscrite chez Microsoft
+  api("/api/microsoft").then((ms) => {
+    state.msAvailable = ms.available;
+    $("#cloud-pick").hidden = !ms.available;
+    if (ms.available) $("#watch-row").hidden = false;
+  }).catch(() => {});
 }
+
+// ---------- OneDrive / OneNote : choisir un dossier ou une section à suivre (voir microsoft.py) ----------
+async function openCloudPicker() {
+  document.querySelector(".cloud-picker")?.remove();
+  const box = document.createElement("div");
+  box.className = "cloud-picker";
+  box.innerHTML = `<div class="cloud-card" role="dialog" aria-label="OneDrive et OneNote"><button class="cloud-close" type="button" aria-label="Fermer">×</button><div class="cloud-body"></div></div>`;
+  document.body.append(box);
+  const body = box.querySelector(".cloud-body");
+  const close = () => { clearInterval(box.poll); box.remove(); };
+  box.querySelector(".cloud-close").addEventListener("click", close);
+  box.addEventListener("click", (e) => { if (e.target === box) close(); });
+  const follow = async (kind, id, name) => {
+    body.innerHTML = `<p class="muted">Lecture de « ${escapeHtml(name)} »…</p>`;
+    try {
+      const found = await api(`/api/courses/${state.course.id}/cloud`, jsonBody("PUT", { kind, id, name }));
+      state.course.cloud = { kind, name };
+      delete state.course.watch;
+      close();
+      renderWatchRow(state.course);
+      if (found.job) followImport(found.job);
+      renderWatchNew(state.course.id, found.new);
+      notify(found.new.length ? `${plural(found.new.length, "cours", "cours")} à ajouter, juste en dessous` : "C'est suivi : les cours modifiés se mettront à jour tout seuls.");
+    } catch (err) { body.innerHTML = `<p class="cloud-error">${escapeHtml(err.message)}</p>`; }
+  };
+  const drive = async (id = "") => {
+    body.innerHTML = `<p class="muted">Ouverture de ton OneDrive…</p>`;
+    try {
+      const d = await api(`/api/microsoft/drive${id ? `?id=${encodeURIComponent(id)}` : ""}`);
+      body.innerHTML = `${tabs("drive")}<div class="cloud-path">${d.parent !== null && id ? `<button class="link-button" type="button" data-up="${escapeHtml(d.parent || "")}">← Retour</button>` : ""}<b>${escapeHtml(d.name)}</b></div>
+        <div class="cloud-list">${d.items.map((i) => i.folder ? `<button type="button" class="cloud-item folder" data-open="${escapeHtml(i.id)}">📁 ${escapeHtml(i.name)}</button>`
+          : `<div class="cloud-item file">${escapeHtml(i.name)}</div>`).join("") || `<p class="muted">Ce dossier est vide.</p>`}</div>
+        ${id ? `<button class="primary" type="button" data-follow>Suivre ce dossier</button>` : `<p class="muted small-text">Ouvre le dossier où sont les cours de cette matière.</p>`}`;
+      body.querySelectorAll("[data-open]").forEach((b) => b.addEventListener("click", () => drive(b.dataset.open)));
+      body.querySelector("[data-up]")?.addEventListener("click", (e) => drive(e.target.dataset.up === d.parent && d.parent ? d.parent : ""));
+      body.querySelector("[data-follow]")?.addEventListener("click", () => follow("drive", d.id, d.name));
+      bindTabs();
+    } catch (err) { body.innerHTML = `${tabs("drive")}<p class="cloud-error">${escapeHtml(err.message)}</p>`; bindTabs(); }
+  };
+  const onenote = async () => {
+    body.innerHTML = `<p class="muted">Ouverture de tes carnets OneNote…</p>`;
+    try {
+      const { notebooks } = await api("/api/microsoft/onenote");
+      body.innerHTML = `${tabs("onenote")}<div class="cloud-list">${notebooks.map((nb) => `<p class="cloud-book">${escapeHtml(nb.name)}</p>${nb.sections.map((sec) =>
+        `<button type="button" class="cloud-item folder" data-section="${escapeHtml(sec.id)}" data-name="${escapeHtml(sec.name)}">📒 ${escapeHtml(sec.name)}</button>`).join("")}`).join("")
+        || `<p class="muted">Aucun carnet OneNote sur ce compte.</p>`}</div><p class="muted small-text">Choisis la section de cette matière : chaque page devient un cours.</p>`;
+      body.querySelectorAll("[data-section]").forEach((b) => b.addEventListener("click", () => follow("onenote", b.dataset.section, b.dataset.name)));
+      bindTabs();
+    } catch (err) { body.innerHTML = `${tabs("onenote")}<p class="cloud-error">${escapeHtml(err.message)}</p>`; bindTabs(); }
+  };
+  const tabs = (on) => `<div class="cloud-head"><div class="cloud-tabs"><button type="button" data-tab="drive" class="${on === "drive" ? "on" : ""}">OneDrive</button><button type="button" data-tab="onenote" class="${on === "onenote" ? "on" : ""}">OneNote</button></div>
+    <button class="link-button small-text" type="button" data-logout>Se déconnecter</button></div>`;
+  const bindTabs = () => {
+    body.querySelectorAll("[data-tab]").forEach((b) => b.addEventListener("click", () => (b.dataset.tab === "drive" ? drive() : onenote())));
+    body.querySelector("[data-logout]")?.addEventListener("click", async () => { await api("/api/microsoft/disconnect", { method: "POST" }).catch(() => {}); start(); });
+  };
+  const start = async () => {
+    const ms = await api("/api/microsoft").catch(() => ({ available: false }));
+    if (ms.connected) return drive();
+    body.innerHTML = `<h3>OneDrive et OneNote</h3><p class="muted">Connecte ton compte Microsoft (celui de l'école) : Pirouette suivra un dossier OneDrive ou une section OneNote, comme un dossier de ton ordinateur. Pirouette ne fait que lire tes cours.</p>
+      <button class="primary" type="button" data-login>Se connecter avec Microsoft</button>`;
+    body.querySelector("[data-login]").addEventListener("click", async () => {
+      try { await api("/api/microsoft/connect", { method: "POST" }); }
+      catch (err) { body.innerHTML = `<p class="cloud-error">${escapeHtml(err.message)}</p>`; return; }
+      body.innerHTML = `<p class="muted">Termine la connexion dans ton navigateur, puis reviens ici…</p>`;
+      let tries = 0;
+      clearInterval(box.poll);
+      box.poll = setInterval(async () => {
+        const now = await api("/api/microsoft").catch(() => ({}));
+        if (now.connected) { clearInterval(box.poll); drive(); }
+        else if (++tries > 120) { clearInterval(box.poll); start(); }
+      }, 2000);
+    });
+  };
+  start();
+}
+$("#cloud-pick").addEventListener("click", openCloudPicker);
 $("#watch-refresh").addEventListener("click", async () => {
   const found = await api(`/api/courses/${state.course.id}/watch/scan`, { method: "POST" }).catch((err) => ({ error: err.message }));
   if (found.error) return notify(found.error);
@@ -3485,8 +3569,9 @@ $("#watch-pick").addEventListener("click", async () => {
 });
 $("#watch-stop").addEventListener("click", async () => {
   if (!await askConfirm("Ne plus suivre ce dossier ? Les cours déjà ajoutés restent dans la matière.", { ok: "Ne plus suivre" })) return;
-  await api(`/api/courses/${state.course.id}/watch`, { method: "DELETE" }).catch(() => {});
+  await api(`/api/courses/${state.course.id}/${state.course.cloud ? "cloud" : "watch"}`, { method: "DELETE" }).catch(() => {});
   delete state.course.watch;
+  delete state.course.cloud;
   renderWatchRow(state.course);
   renderWatchNew(state.course.id, []);
 });

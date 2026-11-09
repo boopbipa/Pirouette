@@ -68,6 +68,10 @@ jobs:
 
       - name: Fabrication de l'app et du .dmg
         run: packaging/build_macos.sh
+        env:
+          # Le certificat de Pirouette (facultatif) : la même signature à chaque version, les autorisations restent
+          MAC_SIGN_P12: ${{ secrets.MAC_SIGN_P12 }}
+          MAC_SIGN_PASSWORD: ${{ secrets.MAC_SIGN_PASSWORD }}
 
       - name: Test de l'app empaquetée (serveur, PDF/Word/PowerPoint)
         run: python packaging/smoke_test.py dist/Pirouette.app/Contents/MacOS/Pirouette

@@ -28,7 +28,7 @@ from pydantic import BaseModel
 
 load_dotenv()
 
-from . import backup, claude_desktop, exchange, figures, local_ai, news, online, plan as plans, reminder, revplan, spaced, srs, sync, updater  # noqa: E402
+from . import backup, claude_desktop, exchange, figures, local_ai, news, online, microsoft, plan as plans, reminder, revplan, spaced, srs, sync, updater  # noqa: E402
 from .agenda import Agenda, classes as agenda_classes, subjects as agenda_subjects  # noqa: E402
 from .grounding import Grounding  # noqa: E402
 from .jobs import Jobs  # noqa: E402
@@ -129,7 +129,19 @@ async def brand_icon() -> Response:
 
 
 @app.get("/")
-async def index() -> HTMLResponse:
+async def index(request: Request) -> HTMLResponse:
+    code, state = request.query_params.get("code"), request.query_params.get("state")
+    if microsoft.is_callback(state) or request.query_params.get("error"):  # retour de « Se connecter avec Microsoft »
+        try:
+            if not code:
+                raise microsoft.MicrosoftError(request.query_params.get("error_description") or "Connexion annulée.")
+            account = await run_in_threadpool(microsoft.finish, store, code, state)
+            text = f"<h1>C'est bon ✓</h1><p>Pirouette est connecté à ton compte Microsoft{f' ({html_escape(account)})' if account else ''}.</p>"
+        except microsoft.MicrosoftError as exc:
+            text = f"<h1>Connexion impossible</h1><p>{html_escape(str(exc))}</p>"
+        return HTMLResponse(f"""<!doctype html><meta charset="utf-8"><title>Pirouette</title>
+            <body style="font:16px -apple-system,system-ui,sans-serif;background:#F6F4F0;color:#1D1D1F;display:grid;place-items:center;height:90vh">
+            <div style="max-width:420px;text-align:center">{text}<p style="color:#86868B">Tu peux fermer cet onglet et revenir dans Pirouette.</p></div>""")
     # La couleur choisie est insérée directement dans la page : pas de « flash » de la couleur par défaut.
     html = (ROOT / "static" / "index.html").read_text(encoding="utf-8")
     html = html.replace("/*APPEARANCE*/", appearance_css(store.get_settings().get("appearance")))
@@ -822,10 +834,16 @@ def _watch_scan(course_id: str, restart_updated: bool = False) -> dict:
     from . import watch
 
     course = store.get_course(course_id)
-    found = watch.scan(course)
+    source = microsoft if course.get("cloud") else watch  # un dossier OneDrive / une section OneNote, ou un dossier du Mac
+    found = source.scan(store, course) if source is microsoft else watch.scan(course)
     job = None
     busy = import_jobs().active(course_id)
-    files = watch.take(course, found["updated"]) if found["updated"] and not (busy and busy["status"] == "running") else []
+    files = []
+    if found["updated"] and not (busy and busy["status"] == "running"):
+        try:
+            files = microsoft.take(store, course, found["updated"]) if source is microsoft else watch.take(course, found["updated"])
+        except microsoft.MicrosoftError as exc:
+            found = found | {"error": str(exc)}
     if restart_updated and files:  # repris pendant la séance : c'est le cours d'aujourd'hui, J+0
         names = {name.lower() for name, _ in files}
         for entry in course["files"]:
@@ -836,7 +854,7 @@ def _watch_scan(course_id: str, restart_updated: bool = False) -> dict:
     store._save_course(course)
     if files:
         job = import_jobs().start(course_id, files, similar=False)
-    return found | {"job": job, "watch": course.get("watch")}
+    return found | {"job": job, "watch": course.get("watch"), "cloud": _cloud_view(course)}
 
 
 @app.post("/api/courses/{course_id}/watch")
@@ -844,6 +862,7 @@ async def watch_folder(course_id: str, body: WatchIn) -> dict:
     from . import watch
 
     course = store.get_course(course_id)
+    course.pop("cloud", None)  # un dossier de l'ordinateur remplace un dossier OneDrive / une section OneNote
     try:
         watch.link(course, body.path)
     except ValueError as exc:
@@ -871,9 +890,13 @@ async def watch_add(course_id: str, body: WatchIn) -> dict:
     from . import watch
 
     course = store.get_course(course_id)
-    if not course.get("watch"):
+    if not course.get("watch") and not course.get("cloud"):
         raise HTTPException(400, "Cette matière ne suit aucun dossier.")
-    files = await run_in_threadpool(watch.take, course, body.names)
+    try:
+        files = await run_in_threadpool(microsoft.take, store, course, body.names) if course.get("cloud") \
+            else await run_in_threadpool(watch.take, course, body.names)
+    except microsoft.MicrosoftError as exc:
+        raise HTTPException(400, str(exc)) from exc
     store._save_course(course)
     if not files:
         raise HTTPException(400, "Ces fichiers ne sont plus dans le dossier.")
@@ -888,10 +911,83 @@ async def watch_ignore(course_id: str, body: WatchIn) -> dict:
     from . import watch
 
     course = store.get_course(course_id)
-    if course.get("watch"):
+    if course.get("cloud"):
+        microsoft.ignore(course, body.names)
+        store._save_course(course)
+    elif course.get("watch"):
         watch.ignore(course, body.names)
         store._save_course(course)
     return {"watch": course.get("watch")}
+
+
+# ---------- « Se connecter avec Microsoft » : OneDrive et OneNote (voir microsoft.py) ----------
+def _cloud_view(course: dict) -> dict | None:
+    cloud = course.get("cloud")
+    return {"kind": cloud["kind"], "name": cloud["name"]} if cloud else None
+
+
+def _ms(call, *args):
+    try:
+        return call(*args)
+    except microsoft.MicrosoftError as exc:
+        raise HTTPException(400, str(exc)) from exc
+
+
+@app.get("/api/microsoft")
+async def microsoft_status() -> dict:
+    return microsoft.status(store)
+
+
+@app.post("/api/microsoft/connect")
+async def microsoft_connect(request: Request) -> dict:
+    """La page de connexion de Microsoft s'ouvre dans le navigateur ; Microsoft revient ensuite sur Pirouette."""
+    redirect = f"http://localhost:{request.url.port}/"  # l'adresse déclarée chez Microsoft : http://localhost (tout port)
+    url = _ms(microsoft.begin, store, redirect)
+    if sys.platform == "darwin":
+        await run_in_threadpool(subprocess.run, ["open", url], capture_output=True, timeout=15)
+    elif os.name == "nt":
+        os.startfile(url)  # noqa: S606 — l'adresse de connexion fabriquée ici
+    return {"url": url}
+
+
+@app.post("/api/microsoft/disconnect")
+async def microsoft_disconnect() -> dict:
+    microsoft.disconnect(store)
+    return microsoft.status(store)
+
+
+@app.get("/api/microsoft/drive")
+async def microsoft_drive(id: str = "") -> dict:
+    return await run_in_threadpool(_ms, microsoft.browse_drive, store, id)
+
+
+@app.get("/api/microsoft/onenote")
+async def microsoft_onenote() -> dict:
+    return {"notebooks": await run_in_threadpool(_ms, microsoft.notebooks, store)}
+
+
+class CloudIn(BaseModel):
+    kind: str  # « drive » (dossier OneDrive) ou « onenote » (section)
+    id: str
+    name: str
+
+
+@app.put("/api/courses/{course_id}/cloud")
+async def course_cloud(course_id: str, body: CloudIn) -> dict:
+    """La matière suit ce dossier OneDrive ou cette section OneNote (à la place d'un dossier de l'ordinateur)."""
+    course = store.get_course(course_id)
+    await run_in_threadpool(_ms, microsoft.link, store, course, body.kind, body.id, body.name)
+    course.pop("watch", None)
+    store._save_course(course)
+    return await run_in_threadpool(_watch_scan, course_id)
+
+
+@app.delete("/api/courses/{course_id}/cloud")
+async def course_cloud_stop(course_id: str) -> dict:
+    course = store.get_course(course_id)
+    course.pop("cloud", None)
+    store._save_course(course)
+    return {"cloud": None}
 
 
 @app.post("/api/watch/scan-all")
@@ -900,7 +996,7 @@ async def watch_scan_all() -> dict:
     fichiers à proposer et l'import lancé pour les cours modifiés."""
     out = {}
     for course in store.list_courses():
-        if course.get("watch"):
+        if course.get("watch") or course.get("cloud"):
             found = await run_in_threadpool(_watch_scan, course["id"])
             out[course["id"]] = {"new": found["new"], "job": found["job"]["id"] if found["job"] else None}
     return {"courses": out}
