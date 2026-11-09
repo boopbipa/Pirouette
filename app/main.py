@@ -2996,9 +2996,12 @@ async def agenda_week(start: str = "") -> dict:
         for slot in revplan.place(items, busy, cal["hour"], now):
             item = by_key[slot.key]
             start, end = slot.start, slot.end
-            if cal.get("enabled") and slot.key in (cal.get("created") or {}):
+            # L'heure de Calendrier (s'il y est et n'a pas été déplacé dans Pirouette entre-temps) ; la durée, elle,
+            # est toujours celle de Pirouette (qui suit déjà ce que tu as étiré dans Calendrier). Sinon, juste après
+            # un déplacement ou un étirement, le planning remontrait l'ancienne heure le temps que Calendrier suive.
+            if cal.get("enabled") and not slot.fixed and slot.key in (cal.get("created") or {}):
                 start = datetime.fromisoformat(cal["created"][slot.key])
-                end = start + timedelta(minutes=(cal.get("lens") or {}).get(slot.key, item["minutes"]))
+                end = start + (slot.end - slot.start)
             extra = info.get((item["course_id"], item["file_id"])) or {}
             days.setdefault(item["day"], []).append({
                 "course_id": item["course_id"], "file_id": item["file_id"], "course": item["course"], "title": item["title"],

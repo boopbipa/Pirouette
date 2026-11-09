@@ -703,7 +703,7 @@ $("#after-class").addEventListener("click", async (e) => {
 async function agendaTick() {
   const r = await api("/api/agenda/tick", { method: "POST" }).catch(() => null);
   if (r && (r.refreshed || r.scanned.length) && location.hash.startsWith("#/accueil") && !document.querySelector("dialog[open]")) openAccueil();
-  if (r && r.refreshed && location.hash.startsWith("#/planning")) openPlanning();
+  if (r && r.refreshed && location.hash.startsWith("#/planning")) openPlanning(undefined, true);
 }
 setTimeout(agendaTick, 4000);
 setInterval(agendaTick, 10 * 60 * 1000);
@@ -818,7 +818,8 @@ $("#agenda-map").addEventListener("change", async (e) => {
 
 // ---------- Planning : la semaine ----------
 const hourText = (iso) => { const h = Number(iso.slice(11, 13)), m = iso.slice(14, 16); return m === "00" ? `${h} h` : `${h} h ${m}`; };
-const PLAN_FROM = 8, PLAN_TO = 22, PLAN_H = 700;  // (PLAN_H : la hauteur de la grille, comme dans style.css)
+const PLAN_FROM = 8, PLAN_TO = 22;
+let PLAN_H = 700;  // la hauteur de la grille : ajustée à la fenêtre (toute la journée visible sans défiler)
 // Les révisions d'un jour, à leur heure ; si deux se touchent à l'écran, la suivante est posée juste en dessous
 // (une révision de 5 min ferait sinon 4 px de haut, sous la suivante : impossible à attraper)
 function wkBlocks(revs) {
@@ -835,8 +836,12 @@ function wkBlocks(revs) {
   });
 }  // heures montrées (les séances hors de ces heures sont collées au bord)
 function isoDay(d) { return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; }
-async function openPlanning(start = state.planStart) {
+async function openPlanning(start = state.planStart, keepScroll = false) {
+  const scrolled = keepScroll ? pageScroll().scrollTop : 0;
   const data = await api(`/api/agenda/week${start ? `?start=${start}` : ""}`);
+  // La journée entière tient dans la fenêtre : la grille prend la hauteur qui reste sous les en-têtes des jours
+  PLAN_H = Math.round(Math.max(380, Math.min(760, window.innerHeight - 300)));
+  $("#wk-week").style.setProperty("--wk-h", `${PLAN_H}px`);
   state.planStart = data.monday;
   setCrumbs();
   const monday = new Date(`${data.monday}T12:00:00`);
@@ -872,7 +877,8 @@ async function openPlanning(start = state.planStart) {
               <span class="wk-grip" aria-hidden="true"></span></div>`).join("")}</div>
       </div>`;
     }).join("");
-  show("planning");
+  if (!keepScroll || $("#view-planning").hidden) show("planning");  // déjà affiché : juste redessiné, sans remonter
+  if (keepScroll) pageScroll().scrollTop = scrolled;  // après un déplacement : on reste où on était
 }
 $("#wk-prev").addEventListener("click", () => { const d = new Date(`${state.planStart}T12:00:00`); d.setDate(d.getDate() - 7); openPlanning(isoDay(d)); });
 $("#wk-next").addEventListener("click", () => { const d = new Date(`${state.planStart}T12:00:00`); d.setDate(d.getDate() + 7); openPlanning(isoDay(d)); });
@@ -880,8 +886,32 @@ $("#wk-today").addEventListener("click", () => openPlanning(isoDay(new Date())))
 $("#wk-week").addEventListener("click", (e) => {
   if (wkDrag.justResized) return;
   const b = e.target.closest("[data-wk-rev]");
-  if (b && b.classList.contains("is-today")) startSession({ mode: "revision", pick: b.dataset.wkRev }, { title: b.querySelector("b")?.textContent || b.textContent.trim(), back: "#/planning" });
+  if (b && b.classList.contains("is-today")) askRevision(b);
 });
+// « Lancer la révision de Neurosciences ? » : une petite bulle à côté de la révision
+function askRevision(el) {
+  document.querySelector(".wk-ask")?.remove();
+  const name = el.querySelector("b")?.textContent || el.textContent.trim();
+  const ask = document.createElement("div");
+  ask.className = "wk-ask";
+  ask.innerHTML = `<p>Lancer la révision de <b>${escapeHtml(name)}</b> ?</p>
+    <div><button class="primary small" type="button" data-ask="go">Lancer</button><button class="ghost small" type="button" data-ask="no">Plus tard</button></div>`;
+  document.body.append(ask);
+  const box = el.getBoundingClientRect(), w = ask.offsetWidth, h = ask.offsetHeight;
+  const left = box.right + 8 + w < window.innerWidth ? box.right + 8 : Math.max(8, box.left - w - 8);
+  Object.assign(ask.style, { left: `${left}px`, top: `${Math.max(8, Math.min(window.innerHeight - h - 8, box.top))}px` });
+  const close = () => { ask.remove(); document.removeEventListener("pointerdown", outside, true); document.removeEventListener("keydown", esc); };
+  const outside = (e) => { if (!ask.contains(e.target)) close(); };
+  const esc = (e) => { if (e.key === "Escape") close(); };
+  setTimeout(() => { document.addEventListener("pointerdown", outside, true); document.addEventListener("keydown", esc); });
+  ask.addEventListener("click", (e) => {
+    const b = e.target.closest("[data-ask]");
+    if (!b) return;
+    close();
+    if (b.dataset.ask === "go") startSession({ mode: "revision", pick: el.dataset.wkRev }, { title: name, back: "#/planning" });
+  });
+  ask.querySelector("[data-ask=go]").focus();
+}
 // Étirer une révision (sa poignée en bas) : sa durée change, dans Pirouette et dans l'agenda du Mac
 const wkDrag = { justResized: false };
 // Déplacer une révision (en la faisant glisser) : à une autre heure, ou à un autre jour. La souris est « tenue » dès
@@ -919,18 +949,16 @@ $("#wk-week").addEventListener("pointerdown", (e) => {
     block.removeEventListener("pointercancel", up);
     wkDrag.justResized = true;  // le « clic » qui suit est déjà traité ici
     setTimeout(() => { wkDrag.justResized = false; }, 250);
-    if (!dragging) {  // un simple clic : la révision du jour se lance
-      if (block.classList.contains("is-today")) {
-        startSession({ mode: "revision", pick: block.dataset.wkRev }, { title: block.querySelector("b")?.textContent || "Révision", back: "#/planning" });
-      }
+    if (!dragging) {  // un simple clic : on demande avant de lancer la révision
+      if (block.classList.contains("is-today")) askRevision(block);
       return;
     }
     block.classList.remove("moving");
-    if (!target || target.past) return openPlanning();
+    if (!target || target.past) return openPlanning(undefined, true);
     const [c, f] = block.dataset.wkRev.split(":");
     try { await api(`/api/revisions/${c}/${f}/move`, jsonBody("PUT", { from_day: block.dataset.day, day: target.day, time: target.time })); }
     catch (err) { notify(err.message); }
-    openPlanning();
+    openPlanning(undefined, true);
   };
   block.addEventListener("pointermove", move);
   block.addEventListener("pointerup", up);
@@ -960,7 +988,7 @@ $("#wk-week").addEventListener("pointerdown", (e) => {
     const [c, f] = block.dataset.wkRev.split(":");
     try { await api(`/api/revisions/${c}/${f}/minutes`, jsonBody("PUT", { minutes, day: block.dataset.day })); }
     catch (err) { notify(err.message); }
-    openPlanning();
+    openPlanning(undefined, true);
   };
   grip.addEventListener("pointermove", move);
   grip.addEventListener("pointerup", up, { once: true });
