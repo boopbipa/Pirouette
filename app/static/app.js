@@ -160,7 +160,19 @@ async function route() {
       openNewCourse();
     }
     else if (hash.startsWith("#/cours")) await loadCourses();
-    else if (hash.startsWith("#/accueil")) await openAccueil();
+    else if (hash.startsWith("#/accueil")) {
+      await openAccueil();
+      // Depuis la barre des menus du Mac : le quiz du jour (#/accueil/quiz) ou une révision (#/accueil/r/<cours>)
+      const [, , go, pick] = hash.slice(1).split("/");
+      if (go === "quiz" || go === "r") {
+        history.replaceState(null, "", "#/accueil");
+        if (go === "quiz" && !$("#today-go").hidden) $("#today-go").click();
+        else if (go === "r" && pick) {
+          const r = (state.revisions?.today || []).find((x) => `${x.course_id}:${x.file_id}` === pick);
+          startSession({ mode: "revision", pick }, { title: r ? `${r.course} · ${r.title}` : "Révision", back: "#/accueil" });
+        }
+      }
+    }
     else if (hash.startsWith("#/planning")) await openPlanning();
     else await openStart();
   } catch (err) {

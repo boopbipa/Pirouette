@@ -354,6 +354,9 @@ def main() -> None:
         except Exception:
             pass
         window.load_url(url)
+        if sys.platform == "darwin":  # l'icône dans la barre des menus : les révisions du jour, en un clic
+            from app import menubar
+            menubar.start(window, url)
         # Filet : si la page ne dit rien (erreur de chargement), la fenêtre apparaît quand même
         threading.Timer(8, lambda: SHOWN.is_set() or (SHOWN.set(), window.show())).start()
         # Après l'ouverture, en fond : le chemin de l'app Claude et la sauvegarde automatique
