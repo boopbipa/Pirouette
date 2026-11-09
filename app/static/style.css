@@ -3157,7 +3157,7 @@ p, li, h1, h2, h3, h4, blockquote, td, th, dd, dt, pre, code, .feedback, .msg-bu
 .wk-sub { margin: 4px 0 16px; }
 .wk-empty { background: var(--surface); border-radius: 16px; box-shadow: var(--shadow); padding: 16px 18px; margin-bottom: 16px; display: flex; gap: 14px; align-items: center; justify-content: space-between; flex-wrap: wrap; }
 .wk-empty p { margin: 0; }
-.wk-week { --days: 6; display: grid; grid-template-columns: 34px repeat(var(--days), minmax(0, 1fr)); grid-template-rows: auto auto 520px; column-gap: 6px;
+.wk-week { --days: 6; display: grid; grid-template-columns: 34px repeat(var(--days), minmax(0, 1fr)); grid-template-rows: auto auto 700px; column-gap: 6px;
   background: var(--surface); border-radius: var(--radius); box-shadow: var(--shadow); padding: 14px 14px 16px 6px; }
 .wk-hours { grid-row: 3; position: relative; }
 .wk-hours span { position: absolute; right: 4px; transform: translateY(-50%); font-size: 11px; color: var(--muted); }
@@ -3168,9 +3168,9 @@ p, li, h1, h2, h3, h4, blockquote, td, th, dd, dt, pre, code, .feedback, .msg-bu
 .wk-revs { display: grid; gap: 4px; align-content: start; padding-bottom: 8px; min-height: 8px; }
 .wk-rev { font: inherit; font-size: 11.5px; line-height: 1.25; text-align: left; border: 1px dashed color-mix(in srgb, var(--c) 45%, transparent); border-radius: 999px; padding: 4px 9px; cursor: default;
   background: transparent; color: color-mix(in srgb, var(--c) 80%, var(--text)); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.wk-rev.today { background: var(--c); border-color: transparent; color: #fff; cursor: pointer; box-shadow: 0 6px 14px -8px var(--c); }
-.wk-rev.done { background: var(--ok-soft); border-color: transparent; color: var(--ok); }
-.wk-col { position: relative; border-radius: 10px; background: repeating-linear-gradient(to bottom, transparent 0, transparent calc(100% / 6 - 1px), var(--border) calc(100% / 6 - 1px), var(--border) calc(100% / 6)); }
+.wk-rev.is-today { background: var(--c); border-color: transparent; color: #fff; cursor: pointer; box-shadow: 0 6px 14px -8px var(--c); }
+.wk-rev.is-done { background: var(--ok-soft); border-color: transparent; color: var(--ok); }
+.wk-col { position: relative; border-radius: 10px; background: repeating-linear-gradient(to bottom, transparent 0, transparent calc(100% / 7 - 1px), var(--border) calc(100% / 7 - 1px), var(--border) calc(100% / 7)); }
 .wk-day.now .wk-col { background-color: color-mix(in srgb, var(--accent) 4%, transparent); }
 .wk-day.past .wk-class { opacity: .6; }
 .wk-class { position: absolute; left: 2px; right: 2px; border-radius: 10px; padding: 5px 7px; overflow: hidden; font-size: 11.5px; line-height: 1.25;
@@ -3199,3 +3199,17 @@ p, li, h1, h2, h3, h4, blockquote, td, th, dd, dt, pre, code, .feedback, .msg-bu
 .cal-sync h3 { font-size: 15px; margin: 0 0 6px; }
 .cal-hour { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 0 4px; }
 .cal-hour select { width: auto; min-width: 110px; }
+
+/* Planning : les révisions à leur heure, à étirer par le bas */
+.wk-block { position: absolute; left: 6px; right: 2px; z-index: 1; border-radius: 10px; padding: 4px 7px 8px; overflow: hidden; font-size: 11.5px; line-height: 1.25;
+  border: 1px dashed color-mix(in srgb, var(--c) 55%, transparent); background: color-mix(in srgb, var(--c) 8%, var(--surface)); color: color-mix(in srgb, var(--c) 80%, var(--text)); }
+.wk-block b { display: block; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wk-block small { opacity: .8; font-size: 11px; white-space: nowrap; }
+.wk-block.tiny small { display: none; } .wk-block.tiny { padding-top: 5px; }
+.wk-block.is-today { border: 0; background: var(--c); color: #fff; cursor: pointer; box-shadow: 0 6px 14px -8px var(--c); }
+.wk-block.resizing { box-shadow: 0 0 0 2px var(--c), 0 10px 24px -10px var(--c); z-index: 2; }
+.wk-grip { position: absolute; left: 0; right: 0; bottom: 0; height: 9px; cursor: ns-resize; touch-action: none; }
+.wk-grip::after { content: ""; position: absolute; left: 50%; bottom: 3px; width: 22px; height: 3px; margin-left: -11px; border-radius: 3px; background: currentColor; opacity: .45; }
+.wk-block:hover .wk-grip::after { opacity: .9; }
+#rev-length label small, .cal-hour label small { display: block; font-size: 12.5px; }
+@media (max-width: 760px) { .wk-block { position: static; height: auto !important; margin-top: 4px; } .wk-grip { display: none; } }

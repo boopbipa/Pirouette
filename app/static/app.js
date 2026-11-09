@@ -751,8 +751,17 @@ for (const [id, field] of [["#mac-menubar", "menubar_keep"], ["#mac-login", "log
   });
 }
 
+const DURATIONS = [5, 10, 15, 20, 25, 30, 45, 60, 90];
+const minLabel = (m) => (m >= 60 ? `${Math.floor(m / 60)} h${m % 60 ? ` ${m % 60}` : ""}` : `${m} min`);
+function durationOptions(first) {
+  return [`<option value="0">${first}</option>`, ...DURATIONS.map((m) => `<option value="${m}">${minLabel(m)}</option>`)].join("");
+}
+
 // Les révisions dans le Calendrier du Mac (calendrier « Pirouette »)
 function renderCalendarView(v) {
+  const all = $("#rev-minutes-all");
+  if (!all.options.length) all.innerHTML = durationOptions("Automatique");
+  all.value = String(v.rev_minutes || 0);
   $("#cal-sync").hidden = !v.available;
   $("#cal-on").checked = v.enabled;
   const sel = $("#cal-hour");
@@ -774,6 +783,10 @@ $("#cal-on").addEventListener("change", async () => {
   st.classList.remove("bad");
   st.textContent = $("#cal-on").checked ? "Le Mac va te demander l'autorisation d'accéder à Calendrier…" : "";
   try { renderCalendarView(await api("/api/calendar", jsonBody("PUT", { enabled: $("#cal-on").checked }))); }
+  catch (err) { notify(err.message); }
+});
+$("#rev-minutes-all").addEventListener("change", async () => {
+  try { await api("/api/rev-minutes", jsonBody("PUT", { minutes: Number($("#rev-minutes-all").value) })); }
   catch (err) { notify(err.message); }
 });
 $("#cal-hour").addEventListener("change", async () => {
@@ -804,7 +817,22 @@ $("#agenda-map").addEventListener("change", async (e) => {
 
 // ---------- Planning : la semaine ----------
 const hourText = (iso) => { const h = Number(iso.slice(11, 13)), m = iso.slice(14, 16); return m === "00" ? `${h} h` : `${h} h ${m}`; };
-const PLAN_FROM = 8, PLAN_TO = 20;  // heures montrées (les séances hors de ces heures sont collées au bord)
+const PLAN_FROM = 8, PLAN_TO = 22, PLAN_H = 700;  // (PLAN_H : la hauteur de la grille, comme dans style.css)
+// Les révisions d'un jour, à leur heure ; si deux se touchent à l'écran, la suivante est posée juste en dessous
+// (une révision de 5 min ferait sinon 4 px de haut, sous la suivante : impossible à attraper)
+function wkBlocks(revs) {
+  const px = (iso) => {
+    const h = Number(iso.slice(11, 13)) + Number(iso.slice(14, 16)) / 60;
+    return Math.max(0, Math.min(PLAN_H, ((h - PLAN_FROM) / (PLAN_TO - PLAN_FROM)) * PLAN_H));
+  };
+  let bottom = -1;
+  return revs.filter((r) => r.start).sort((a, b) => a.start.localeCompare(b.start)).map((r) => {
+    const top = Math.max(px(r.start), bottom + 2);
+    const height = Math.max(26, px(r.end) - px(r.start));
+    bottom = top + height;
+    return { ...r, top, height };
+  });
+}  // heures montrées (les séances hors de ces heures sont collées au bord)
 function isoDay(d) { return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; }
 async function openPlanning(start = state.planStart) {
   const data = await api(`/api/agenda/week${start ? `?start=${start}` : ""}`);
@@ -834,9 +862,13 @@ async function openPlanning(start = state.planStart) {
       const cls = data.classes.filter((c) => c.start.startsWith(key));
       return `<div class="wk-day${key === today ? " now" : ""}${key < today ? " past" : ""}">
         <div class="wk-dayhd">${d.toLocaleDateString("fr-FR", { weekday: "short" }).replace(".", "")}<b>${d.getDate()}</b></div>
-        <div class="wk-revs">${revs.map((r) => `<button type="button" class="wk-rev ${r.state}" style="--c:${subjectColor(r.course_id)}" data-wk-rev="${r.course_id}:${r.file_id}" title="${escapeHtml(`${r.course} · ${r.title} — ${r.reason}`)}">${r.state === "done" ? "✓ " : ""}${escapeHtml(r.title)}</button>`).join("")}</div>
+        <div class="wk-revs">${revs.filter((r) => !r.start).map((r) => `<button type="button" class="wk-rev is-${r.state}" style="--c:${subjectColor(r.course_id)}" data-wk-rev="${r.course_id}:${r.file_id}" title="${escapeHtml(`${r.course} · ${r.title} — ${r.reason}`)}">${r.state === "done" ? "✓ " : ""}${escapeHtml(r.title)}</button>`).join("")}</div>
         <div class="wk-col">${cls.map((c) => `<div class="wk-class${c.cancelled ? " cancelled" : ""}${c.course_id ? "" : " other"}" style="top:${pos(c.start)}%;height:${Math.max(4, pos(c.end) - pos(c.start))}%;${c.course_id ? `--c:${subjectColor(c.course_id)}` : ""}">
-            <b>${c.cancelled ? "Annulé · " : ""}${escapeHtml(c.summary)}</b><small>${hourText(c.start)}${c.location ? ` · ${escapeHtml(c.location)}` : ""}</small></div>`).join("")}</div>
+            <b>${c.cancelled ? "Annulé · " : ""}${escapeHtml(c.summary)}</b><small>${hourText(c.start)}${c.location ? ` · ${escapeHtml(c.location)}` : ""}</small></div>`).join("")}
+          ${wkBlocks(revs).map((r) => `<div class="wk-block is-${r.state}${r.height < 36 ? " tiny" : ""}" style="top:${r.top}px;height:${r.height}px;--c:${subjectColor(r.course_id)}"
+              data-wk-rev="${r.course_id}:${r.file_id}" data-day="${key}" data-minutes="${r.minutes}" title="${escapeHtml(`${r.course} · ${r.title} — ${r.reason}`)}">
+              <b>${escapeHtml(r.title)}</b><small><span class="wk-len">${minLabel(r.minutes)}</span> · ${escapeHtml(r.course)}</small>
+              <span class="wk-grip" aria-label="Étirer pour changer la durée" title="Étirer pour changer la durée"></span></div>`).join("")}</div>
       </div>`;
     }).join("");
   show("planning");
@@ -845,8 +877,41 @@ $("#wk-prev").addEventListener("click", () => { const d = new Date(`${state.plan
 $("#wk-next").addEventListener("click", () => { const d = new Date(`${state.planStart}T12:00:00`); d.setDate(d.getDate() + 7); openPlanning(isoDay(d)); });
 $("#wk-today").addEventListener("click", () => openPlanning(isoDay(new Date())));
 $("#wk-week").addEventListener("click", (e) => {
+  if (wkDrag.justResized) return;
   const b = e.target.closest("[data-wk-rev]");
-  if (b && b.classList.contains("today")) startSession({ mode: "revision", pick: b.dataset.wkRev }, { title: b.textContent.trim(), back: "#/planning" });
+  if (b && b.classList.contains("is-today")) startSession({ mode: "revision", pick: b.dataset.wkRev }, { title: b.querySelector("b")?.textContent || b.textContent.trim(), back: "#/planning" });
+});
+// Étirer une révision (sa poignée en bas) : sa durée change, dans Pirouette et dans l'agenda du Mac
+const wkDrag = { justResized: false };
+$("#wk-week").addEventListener("pointerdown", (e) => {
+  const grip = e.target.closest(".wk-grip");
+  if (!grip) return;
+  e.preventDefault();
+  const block = grip.closest(".wk-block"), col = block.parentElement;
+  const perMinute = col.getBoundingClientRect().height / ((PLAN_TO - PLAN_FROM) * 60);
+  const from = Number(block.dataset.minutes), startY = e.clientY, startH = from * perMinute;
+  let minutes = from;
+  grip.setPointerCapture(e.pointerId);
+  block.classList.add("resizing");
+  const move = (ev) => {
+    minutes = Math.max(5, Math.min(240, Math.round((startH + ev.clientY - startY) / perMinute / 5) * 5));
+    block.style.height = `${Math.max(26, minutes * perMinute)}px`;
+    block.querySelector(".wk-len").textContent = minLabel(minutes);
+  };
+  const up = async () => {
+    grip.removeEventListener("pointermove", move);
+    block.classList.remove("resizing");
+    wkDrag.justResized = true;
+    setTimeout(() => { wkDrag.justResized = false; }, 250);
+    if (minutes === from) return;
+    const [c, f] = block.dataset.wkRev.split(":");
+    try { await api(`/api/revisions/${c}/${f}/minutes`, jsonBody("PUT", { minutes, day: block.dataset.day })); }
+    catch (err) { notify(err.message); }
+    openPlanning();
+  };
+  grip.addEventListener("pointermove", move);
+  grip.addEventListener("pointerup", up, { once: true });
+  grip.addEventListener("pointercancel", up, { once: true });
 });
 
 // Fin d'une révision de cours : chaque cours révisé est noté (cartes sues, réponses justes) et sa prochaine date fixée
@@ -2315,6 +2380,9 @@ async function openCourse(id, tab, { keepScroll = false } = {}) {
   $("#course-name").textContent = course.name;
   // Réglages de la matière, en bas de la page
   $("#set-name").textContent = course.name;
+  const revMin = $("#course-rev-minutes");
+  revMin.innerHTML = durationOptions("Comme dans les Réglages");
+  revMin.value = String(course.rev_minutes || 0);
   const exam = course.exam?.date;
   $("#set-exam").textContent = exam ? examLabel(exam) + (course.exam.from === "dossier" ? " (date du semestre)" : "") : "Pas encore de date";
   $("#course-exam").textContent = exam ? "Changer" : "Choisir la date";
@@ -3640,6 +3708,12 @@ function fillNotes(course = state.course) {
     if (document.activeElement !== box) box.value = course?.claude_notes || "";
   });
 }
+$("#course-rev-minutes").addEventListener("change", async () => {
+  const course = state.course;
+  if (!course) return;
+  try { course.rev_minutes = (await api(`/api/courses/${course.id}/rev-minutes`, jsonBody("PUT", { minutes: Number($("#course-rev-minutes").value) }))).rev_minutes; }
+  catch (err) { notify(err.message); }
+});
 let notesTimer;
 document.querySelectorAll(".claude-notes").forEach((box) => box.addEventListener("input", () => {
   const course = state.course;

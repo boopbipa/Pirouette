@@ -860,6 +860,11 @@
           <button class="ghost small" type="button" id="agenda-refresh" hidden>Actualiser</button>
         </form>
         <p class="agenda-status" id="agenda-status" hidden></p>
+        <div class="cal-sync" id="rev-length">
+          <h3>Durée d'une révision</h3>
+          <div class="cal-hour"><label for="rev-minutes-all">Pour toutes les matières<small class="muted">Automatique : d'après le nombre de questions du cours. Le quiz s'adapte à la durée choisie.</small></label>
+            <select id="rev-minutes-all"></select></div>
+        </div>
         <div class="cal-sync" id="cal-sync" hidden>
           <h3>Dans ton Calendrier</h3>
           <label class="toggle-row first">
@@ -1080,6 +1085,8 @@
             <button class="ghost small" type="button" id="watch-refresh" hidden>Actualiser</button>
             <button class="ghost small" type="button" id="watch-pick">Choisir…</button>
             <button class="ghost small" type="button" id="watch-stop" hidden>Ne plus suivre</button></div>
+          <div class="set-row"><label class="set-label" for="course-rev-minutes">Durée d'une révision<small>Le quiz de chaque révision s'adapte à cette durée.</small></label>
+            <select id="course-rev-minutes" class="chip set-select"></select></div>
           <div class="set-row set-notes"><label class="set-label" for="course-notes">Consignes pour Claude<small>Ajoutées à chaque création de quiz et de flashcards de cette matière.</small></label>
             <textarea id="course-notes" class="claude-notes" rows="2" maxlength="1000" placeholder="ex. ignore l&#39;introduction de chaque chapitre ; seulement les cours à partir du 12 mars ; pas de questions sur les dates"></textarea></div>
           <div class="set-row"><span class="set-label">Quiz et flashcards</span><span class="set-value muted">D'un paquet .zip, d'un tableau ou d'un .txt</span>

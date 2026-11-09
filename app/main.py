@@ -2581,6 +2581,23 @@ def _revision_minutes(cards: int, questions: int) -> int:
     return max(2, round(min(cards, REVISION_SIZE - asked) * 0.3 + asked * 0.6))
 
 
+DURATIONS = (5, 10, 15, 20, 25, 30, 45, 60, 90)  # durées proposées (minutes)
+
+
+def _minutes_for(course: dict, entry: dict, day: str, estimate: int) -> tuple[int, str]:
+    """La durée d'une révision de cours, et d'où elle vient : étirée pour ce jour-là (planning ou Calendrier), réglée
+    pour la matière, réglée pour toutes, sinon l'estimation d'après le nombre de cartes et de questions."""
+    chosen = (entry.get("rev") or {}).get("len") or {}
+    if chosen.get("day") == day and chosen.get("minutes"):
+        return int(chosen["minutes"]), "revision"
+    if course.get("rev_minutes"):
+        return int(course["rev_minutes"]), "course"
+    general = int(store.get_settings().get("rev_minutes") or 0)
+    if general:
+        return general, "general"
+    return estimate, "auto"
+
+
 def _hour(text: str) -> str:
     h, m = int(text[11:13]), int(text[14:16])
     return f"{h} h {m:02d}" if m else f"{h} h"
@@ -2599,7 +2616,7 @@ def _revisions(today: date | None = None, now: datetime | None = None) -> dict:
     data = agenda.load()
     soon = agenda_classes(data, agenda, courses, now, datetime.combine(today + timedelta(days=2), datetime.min.time()))
     recent = agenda_classes(data, agenda, courses, now - timedelta(hours=20), now)
-    by_file = {}
+    by_file, objs = {}, {}
     for listed in courses:
         if not listed.get("files"):
             continue
@@ -2609,10 +2626,14 @@ def _revisions(today: date | None = None, now: datetime | None = None) -> dict:
         for entry in course["files"]:
             view = spaced.view(entry, today)
             has = contents.get(entry["id"], {"cards": [], "questions": []})
+            day = today.isoformat() if view["today"] or view["done_today"] else view["due"]
+            estimate = _revision_minutes(len(has["cards"]), len(has["questions"]))
+            objs[(course["id"], entry["id"])] = (course, entry, estimate)
+            minutes, source = _minutes_for(course, entry, day, estimate)
             item = view | {"course_id": course["id"], "course": course["name"], "color": course.get("color"),
                            "file_id": entry["id"], "title": store_file_label(entry), "kind": spaced.kind(entry["name"]),
                            "cards": len(has["cards"]), "questions": len(has["questions"]),
-                           "minutes": _revision_minutes(len(has["cards"]), len(has["questions"])),
+                           "minutes": minutes, "minutes_from": source,
                            "added_at": entry.get("added_at") or "", "pre": (entry.get("rev") or {}).get("pre")}
             by_file[(course["id"], entry["id"])] = item
             if view["done_today"]:
@@ -2644,7 +2665,9 @@ def _revisions(today: date | None = None, now: datetime | None = None) -> dict:
                 last["done_today"] = True
                 done.append(last)
         else:
-            due.append(last | {"reason": before, "extra": True, "today": True})
+            course_, entry_, estimate = objs[(last["course_id"], last["file_id"])]
+            minutes, source = _minutes_for(course_, entry_, today.isoformat(), estimate)
+            due.append(last | {"reason": before, "extra": True, "today": True, "minutes": minutes, "minutes_from": source})
             if last in upcoming:
                 upcoming.remove(last)
     # Après une séance : rien de nouveau dans la matière ? on le rappelle (un clic pour ajouter le cours)
@@ -2711,13 +2734,18 @@ def _revision_session(pick: str, questions: bool) -> dict:
             if files is not None and fid not in files:
                 continue
             today = date.today()
+            entry = next((f for f in course["files"] if f["id"] == fid), {})
+            minutes, source = _minutes_for(course, entry, today.isoformat(), 0)
+            # Une durée choisie : le quiz a la taille qui va avec (≈ 0,6 min par question, 0,3 par carte)
+            n_questions = REVISION_QUESTIONS if source == "auto" else max(3, round(minutes * 0.6))
+            n_total = REVISION_SIZE if source == "auto" else max(6, round(minutes * 1.8))
             order = lambda card: (not srs.is_weak(card), not (srs.is_new(card) or srs.is_due(card, today)), random.random())  # noqa: E731
             picked_q = []
             if questions:
                 rank = lambda e: (not (e["stat"] and (e["stat"].get("last") is False or e["stat"]["wrong"] > e["stat"]["right"])),  # noqa: E731
                                   e["stat"] is not None, random.random())
-                picked_q = [_question_item(e) for e in sorted(has["questions"], key=rank)[:REVISION_QUESTIONS]]
-            picked_c = [_card_item({"course": course, "card": c}) for c in sorted(has["cards"], key=order)[:REVISION_SIZE - len(picked_q)]]
+                picked_q = [_question_item(e) for e in sorted(has["questions"], key=rank)[:n_questions]]
+            picked_c = [_card_item({"course": course, "card": c}) for c in sorted(has["cards"], key=order)[:max(0, n_total - len(picked_q))]]
             for item in picked_c + picked_q:
                 item["revision"] = f"{course_id}:{fid}"
             cards_all += picked_c
@@ -2725,6 +2753,50 @@ def _revision_session(pick: str, questions: bool) -> dict:
     random.shuffle(cards_all)
     random.shuffle(asked_all)
     return {"mode": "revision", "items": _interleave(cards_all, asked_all), "cards": len(cards_all), "questions": len(asked_all)}
+
+
+class MinutesIn(BaseModel):
+    minutes: int = 0   # 0 : revenir à la durée par défaut
+    day: str = ""      # pour une seule révision : son jour
+
+
+@app.put("/api/revisions/{course_id}/{file_id}/minutes")
+async def revision_minutes(course_id: str, file_id: str, body: MinutesIn) -> dict:
+    """Étirer une révision (planning, ou Calendrier) : cette révision-là dure ce temps (la suivante revient à la durée
+    par défaut)."""
+    course = store.get_course(course_id)
+    entry = next((f for f in course["files"] if f["id"] == file_id), None)
+    if entry is None:
+        raise HTTPException(404, "Ce cours n'existe plus.")
+    rev = spaced.ensure(entry, date.today())
+    if body.minutes:
+        rev["len"] = {"day": body.day or rev["due"], "minutes": max(5, min(body.minutes, 240))}
+    else:
+        rev.pop("len", None)
+    store._save_course(course)
+    _calendar_soon()
+    return {"ok": True}
+
+
+@app.put("/api/courses/{course_id}/rev-minutes")
+async def course_rev_minutes(course_id: str, body: MinutesIn) -> dict:
+    """La durée des révisions de cette matière (0 : comme dans les Réglages)."""
+    course = store.get_course(course_id)
+    if body.minutes:
+        course["rev_minutes"] = max(5, min(body.minutes, 240))
+    else:
+        course.pop("rev_minutes", None)
+    store._save_course(course)
+    _calendar_soon()
+    return {"rev_minutes": course.get("rev_minutes") or 0}
+
+
+@app.put("/api/rev-minutes")
+async def general_rev_minutes(body: MinutesIn) -> dict:
+    """La durée de toutes les révisions (0 : automatique, d'après le nombre de questions)."""
+    store.save_settings(rev_minutes=max(0, min(body.minutes, 240)) or None)
+    _calendar_soon()
+    return {"rev_minutes": int(store.get_settings().get("rev_minutes") or 0)}
 
 
 @app.post("/api/courses/{course_id}/files/{file_id}/open")
@@ -2868,13 +2940,33 @@ async def agenda_week(start: str = "") -> dict:
         week = [{"uid": r["uid"], "summary": r["summary"], "start": r["start"], "end": r["end"], "location": r.get("location", ""),
                  "cancelled": r["cancelled"], "course_id": r["course_id"],
                  "color": names[r["course_id"]].get("color") if r["course_id"] in names else None} for r in rows]
-        revs = _revisions()
+        # Les révisions, à leur heure : celle de l'agenda du Mac si elles y sont (déplacées, étirées…), sinon l'heure
+        # où Pirouette les placerait (après les cours, à l'heure choisie)
+        now = datetime.now()
+        today = now.date()
+        cal = _calendar_state()
+        revs = _revisions(today, now)
+        busy = [(datetime.fromisoformat(c["start"]), datetime.fromisoformat(c["end"]))
+                for c in agenda_classes(data, agenda, courses, now - timedelta(hours=1), now + timedelta(days=CALENDAR_DAYS + 1))
+                if not c["cancelled"]]
+        items = _calendar_items(today, now)
+        info = {(r["course_id"], r["file_id"]): r for r in revs["today"] + revs["upcoming"]}
         days: dict[str, list] = {}
-        for item in revs["today"] + revs["done"]:
-            days.setdefault(date.today().isoformat(), []).append(item | {"state": "done" if item in revs["done"] else "today"})
-        for item in revs["upcoming"]:
-            if item["due"] > date.today().isoformat():
-                days.setdefault(item["due"], []).append(item | {"state": "later"})
+        by_key = {revplan.key_of(i["course_id"], i["file_id"], i["day"], i.get("before", False)): i for i in items}
+        for slot in revplan.place(items, busy, cal["hour"], now):
+            item = by_key[slot.key]
+            start, end = slot.start, slot.end
+            if cal.get("enabled") and slot.key in (cal.get("created") or {}):
+                start = datetime.fromisoformat(cal["created"][slot.key])
+                end = start + timedelta(minutes=(cal.get("lens") or {}).get(slot.key, item["minutes"]))
+            extra = info.get((item["course_id"], item["file_id"])) or {}
+            days.setdefault(item["day"], []).append({
+                "course_id": item["course_id"], "file_id": item["file_id"], "course": item["course"], "title": item["title"],
+                "reason": item["reason"], "color": extra.get("color"), "minutes": round((end - start).total_seconds() / 60),
+                "start": start.isoformat(timespec="minutes"), "end": end.isoformat(timespec="minutes"),
+                "state": "today" if item["day"] == today.isoformat() else "later", "before": bool(item.get("before"))})
+        for item in revs["done"]:
+            days.setdefault(today.isoformat(), []).append(item | {"state": "done"})
         return {"monday": monday.isoformat(), "classes": week, "revisions": days, "url": bool(data["url"]),
                 "error": data.get("error") or ""}
     return await run_in_threadpool(build)
@@ -2925,7 +3017,7 @@ def _calendar_items(today: date, now: datetime) -> list[dict]:
             has = contents.get(entry["id"], {"cards": [], "questions": []})
             items.append({"course_id": course["id"], "file_id": entry["id"], "day": view["due"], "before": False,
                           "course": course["name"], "title": store_file_label(entry), "reason": view["reason"],
-                          "minutes": _revision_minutes(len(has["cards"]), len(has["questions"]))})
+                          "minutes": _minutes_for(course, entry, view["due"], _revision_minutes(len(has["cards"]), len(has["questions"])))[0]})
     return items
 
 
@@ -2957,6 +3049,20 @@ def _follow_moves(moves: list[tuple[str, str]], today: date) -> None:
         entry = next((f for f in course["files"] if f["id"] == file_id), None)
         if entry is not None:
             spaced.ensure(entry, today)["due"] = new_day
+            store._save_course(course)
+
+
+def _follow_resizes(resized: list[tuple[str, int]]) -> None:
+    """Révisions étirées (ou raccourcies) dans Calendrier : cette révision-là dure ce temps dans Pirouette aussi."""
+    for key, minutes in resized:
+        course_id, file_id, day, _ = revplan.parse_key(key)
+        try:
+            course = store.get_course(course_id)
+        except (NotFound, OSError):
+            continue
+        entry = next((f for f in course["files"] if f["id"] == file_id), None)
+        if entry is not None and minutes > 0:
+            spaced.ensure(entry, date.today())["len"] = {"day": day, "minutes": max(5, min(minutes, 240))}
             store._save_course(course)
 
 
@@ -3003,6 +3109,7 @@ def _calendar_sync(now: datetime | None = None, calendar=None) -> dict:
                 for _ in range(3):  # d'abord ce que tu as changé dans Calendrier (reporté, déplacé), puis le reste
                     slots = revplan.place(_calendar_items(today, now), busy, state["hour"], now)
                     stats = revplan.sync(cal, slots, state, _calendar_done, now)
+                    _follow_resizes(stats["resized"])
                     if not stats["postponed"] and not stats["moved"]:
                         break
                     total["postponed"] += stats["postponed"]
@@ -3032,7 +3139,8 @@ def _calendar_view() -> dict:
     state = _calendar_state()
     return {"available": apple_calendar.available(), "enabled": state["enabled"], "hour": state["hour"],
             "error": state.get("error") or "", "synced_at": state.get("synced_at"), "count": state.get("count", 0),
-            "where": state.get("where") or ""}
+            "where": state.get("where") or "", "rev_minutes": int(store.get_settings().get("rev_minutes") or 0),
+            "durations": list(DURATIONS)}
 
 
 class CalendarIn(BaseModel):

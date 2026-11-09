@@ -13,7 +13,7 @@ class FakeCalendar:
         self.items, self.n = {}, 0
 
     def events(self, start, end):
-        return [{"id": i, "key": revplan.key_in(e["notes"]), "title": e["title"], "notes": e["notes"], "start": e["start"]}
+        return [{"id": i, "key": revplan.key_in(e["notes"]), "title": e["title"], "notes": e["notes"], "start": e["start"], "end": e["end"]}
                 for i, e in self.items.items() if start.isoformat() <= e["start"].date().isoformat() < end.isoformat()]
 
     def create(self, slot):
@@ -23,6 +23,9 @@ class FakeCalendar:
 
     def retitle(self, event_id, title):
         self.items[event_id]["title"] = title
+
+    def resize(self, event_id, end):
+        self.items[event_id]["end"] = end
 
     def renote(self, event_id, notes):
         self.items[event_id]["notes"] = notes
@@ -41,7 +44,7 @@ def test_placed_at_the_chosen_hour_after_classes():
     busy = [(datetime(2026, 11, 9, 17, 30), datetime(2026, 11, 9, 19, 0))]
     a, b = revplan.place(items, busy, "18:00", now)
     assert a.start == datetime(2026, 11, 9, 19, 5) and a.end == datetime(2026, 11, 9, 19, 15)
-    assert b.start == datetime(2026, 11, 9, 19, 20) and (b.end - b.start) == timedelta(minutes=10)
+    assert b.start == datetime(2026, 11, 9, 19, 20) and (b.end - b.start) == timedelta(minutes=5)
     assert revplan.key_in(a.notes) == a.key
 
 
@@ -137,3 +140,29 @@ def test_moving_a_revision_to_another_day_moves_it_in_pirouette(tmp_path, monkey
     # Le lendemain : toujours un seul événement, au jour choisi
     main._calendar_sync(now + timedelta(days=1), cal)
     assert len(cal.items) == 1 and cal.items[event_id]["start"].date() == later
+
+
+def test_durations_both_ways(tmp_path, monkeypatch):
+    store, cid, fid = _setup(tmp_path, monkeypatch)
+    cal = FakeCalendar()
+    today = date.today()
+    now = datetime.combine(today, datetime.min.time()) + timedelta(hours=9)
+    client = TestClient(main.app)
+    client.put("/api/rev-minutes", json={"minutes": 20})  # toutes les révisions : 20 min
+    main._calendar_sync(now, cal)
+    event_id, event = cal.by_key(revplan.key_of(cid, fid, today.isoformat()))
+    assert event["end"] - event["start"] == timedelta(minutes=20)
+    client.put(f"/api/courses/{cid}/rev-minutes", json={"minutes": 30})  # cette matière : 30 min
+    main._calendar_sync(now, cal)
+    assert cal.items[event_id]["end"] - cal.items[event_id]["start"] == timedelta(minutes=30)
+    # Étirée dans Pirouette (planning) : l'agenda suit
+    client.put(f"/api/revisions/{cid}/{fid}/minutes", json={"minutes": 45, "day": today.isoformat()})
+    main._calendar_sync(now, cal)
+    assert cal.items[event_id]["end"] - cal.items[event_id]["start"] == timedelta(minutes=45)
+    # Étirée dans Calendrier : Pirouette suit (et le quiz s'allonge)
+    cal.items[event_id]["end"] = cal.items[event_id]["start"] + timedelta(minutes=60)
+    main._calendar_sync(now, cal)
+    assert store.get_course(cid)["files"][0]["rev"]["len"] == {"day": today.isoformat(), "minutes": 60}
+    assert main._revisions(today, now)["today"][0]["minutes"] == 60
+    main._calendar_sync(now, cal)
+    assert cal.items[event_id]["end"] - cal.items[event_id]["start"] == timedelta(minutes=60)
