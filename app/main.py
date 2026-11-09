@@ -2715,12 +2715,15 @@ def _revisions_with_times() -> dict:
     data = agenda.load()
     courses = [c for c in store.list_courses() if c["id"] in set(store.active_course_ids())]
     today = date.today().isoformat()
-    times = {(r["course_id"], r["file_id"]): r for r in _timed_revisions(data, agenda, courses).get(today, []) if r.get("start")}
+    days = _timed_revisions(data, agenda, courses, revs)
+    times = {(r["course_id"], r["file_id"]): r for r in days.get(today, []) if r.get("start")}
     for r in revs["today"]:
         t = times.get((r["course_id"], r["file_id"]))
         if t:
             r["start"], r["end"], r["minutes"] = t["start"], t["end"], t["minutes"]
     revs["today"].sort(key=lambda r: (-(r.get("late") or 0) if not r.get("extra") else 0, r.get("start") or "~"))  # les retards d'abord
+    later = sorted((r for day, items in days.items() if day > today for r in items if r.get("start")), key=lambda r: r["start"])
+    revs["next"] = later[:3]  # l'accueil : les trois prochaines, même dans plusieurs jours
     return revs
 
 
@@ -3015,7 +3018,7 @@ async def agenda_tick() -> dict:
     return await run_in_threadpool(_agenda_tick)
 
 
-def _timed_revisions(data: dict, agenda, courses: list[dict]) -> dict[str, list]:
+def _timed_revisions(data: dict, agenda, courses: list[dict], revs: dict | None = None) -> dict[str, list]:
     """Les révisions des deux semaines à venir, jour par jour, à leur heure (la même que dans le Planning et
     Calendrier), et celles faites aujourd'hui."""
     # Les révisions, à leur heure : celle de l'agenda du Mac si elles y sont (déplacées, étirées…), sinon l'heure
@@ -3023,11 +3026,11 @@ def _timed_revisions(data: dict, agenda, courses: list[dict]) -> dict[str, list]
     now = datetime.now()
     today = now.date()
     cal = _calendar_state()
-    revs = _revisions(today, now)
+    revs = revs or _revisions(today, now)
     busy = [(datetime.fromisoformat(c["start"]), datetime.fromisoformat(c["end"]))
             for c in agenda_classes(data, agenda, courses, now - timedelta(hours=1), now + timedelta(days=CALENDAR_DAYS + 1))
             if not c["cancelled"]]
-    items = _calendar_items(today, now)
+    items = _calendar_items(today, now, revs)
     info = {(r["course_id"], r["file_id"]): r for r in revs["today"] + revs["upcoming"]}
     days: dict[str, list] = {}
     by_key = {revplan.key_of(i["course_id"], i["file_id"], i["day"], i.get("before", False)): i for i in items}
@@ -3126,10 +3129,10 @@ def _chosen_time(course_id: str, file_id: str, day: str) -> str | None:
     return at.get("time") if at.get("day") == day else None
 
 
-def _calendar_items(today: date, now: datetime) -> list[dict]:
+def _calendar_items(today: date, now: datetime, revs: dict | None = None) -> list[dict]:
     """Les révisions des deux semaines à venir : celles du jour (et « avant ton cours »), puis la prochaine de
     chaque cours. Une révision en retard est mise aujourd'hui."""
-    revs = _revisions(today, now)
+    revs = revs or _revisions(today, now)
     items = [{"course_id": r["course_id"], "file_id": r["file_id"], "day": today.isoformat(), "before": bool(r.get("extra")),
               "course": r["course"], "title": r["title"], "minutes": r["minutes"], "reason": r.get("before") or r["reason"]}
              for r in revs["today"]]

@@ -489,6 +489,7 @@ $("#home-start").addEventListener("click", () => {
 });
 
 async function loadCourses() {
+  if (state.coursesReady && $("#view-courses").hidden) show("courses");  // tout de suite, puis mise à jour
   const [courses, orphans, folders, progress, stats, profile] = await Promise.all([
     api("/api/courses"), api("/api/quizzes?orphans=true"), api("/api/folders"),
     api("/api/progress").catch(() => ({ courses: [] })), api("/api/stats").catch(() => ({})),
@@ -508,11 +509,13 @@ async function loadCourses() {
 
   $("#orphans").hidden = orphans.length === 0;
   $("#orphan-list").innerHTML = orphans.map((q) => quizItem(q, null, null, { play: true })).join("");
-  show("courses");
+  if ($("#view-courses").hidden) show("courses");
+  state.coursesReady = true;
 }
 
 // ---------- Accueil : le quiz du jour et les révisions de chaque cours ----------
 async function openAccueil() {
+  if (state.accueilReady && $("#view-accueil").hidden) show("accueil");  // tout de suite, puis mise à jour
   await state.revisionSaving;  // une révision qui vient de finir : sa note est enregistrée avant de relire la liste
   const [profile, progress, stats, revs] = await Promise.all([
     api("/api/profile").catch(() => ({ name: "", asked: true })), api("/api/progress").catch(() => ({ courses: [] })),
@@ -532,9 +535,10 @@ async function openAccueil() {
   $("#hello").textContent = helloText(profile.name);
   $("#name-prompt").hidden = profile.asked;
   renderQueue(revs, progress);
-  api("/api/revisions/days?n=4").then(renderNextDays).catch(() => {});
+  renderNextDays(revs.next || []);
   renderAfterClass(revs.after_class || []);
-  show("accueil");
+  if ($("#view-accueil").hidden) show("accueil");
+  state.accueilReady = true;
 }
 
 // Les cours à réviser aujourd'hui qui ont de quoi faire un quiz (cartes ou questions)
@@ -621,16 +625,19 @@ function renderQueue(revs, progress) {
   $("#rev-queue").innerHTML = `${top.replace('class="q-hero"', `class="q-hero${rise ? " rise" : ""}"`)}
     ${rows ? `<div class="q-list"><div class="q-sect">Ensuite</div>${rows}</div>` : ""}${doneRow}<div class="q-next" id="q-next"></div>`;
 }
-function renderNextDays(data) {
+function renderNextDays(next) {
   const box = $("#q-next");
   if (!box) return;
-  noteColors(data.days.flatMap((d) => d.items).map((r) => ({ id: r.course_id, color: r.color })));
-  box.innerHTML = data.days.slice(1).map((d, i) => {
-    const date = new Date(`${d.day}T12:00:00`);
-    const name = i === 0 ? "Demain" : date.toLocaleDateString("fr-FR", { weekday: "long" }).replace(/^./, (c) => c.toUpperCase());
-    const items = d.items.filter((r) => r.start).map((r) => `<span class="q-chip" style="--c:${subjectColor(r.course_id)}"><i></i>${escapeHtml(r.course)} ${hourText(r.start)}</span>`).join("");
-    return `<span><b>${name}</b>${items || "rien de prévu"}</span>`;
-  }).join("");
+  noteColors(next.map((r) => ({ id: r.course_id, color: r.color })));
+  const today = new Date(); today.setHours(12, 0, 0, 0);
+  const when = (iso) => {
+    const d = new Date(`${iso.slice(0, 10)}T12:00:00`), n = Math.round((d - today) / 86400000);
+    if (n === 1) return "Demain";
+    if (n < 7) return d.toLocaleDateString("fr-FR", { weekday: "long" }).replace(/^./, (c) => c.toUpperCase());
+    return d.toLocaleDateString("fr-FR", { weekday: "short", day: "numeric", month: "short" }).replace(/\./g, "");
+  };
+  box.innerHTML = next.length ? `<span class="q-next-title">Prochaines</span>${next.map((r) => `<span class="q-chip" style="--c:${subjectColor(r.course_id)}"><i></i><b>${when(r.start)}</b>${escapeHtml(r.course)} · ${hourText(r.start)}</span>`).join("")}`
+    : "";
 }
 $("#rev-queue").addEventListener("click", async (e) => {
   const b = e.target.closest("[data-q]");

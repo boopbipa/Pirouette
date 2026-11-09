@@ -1805,7 +1805,7 @@ body { letter-spacing: -.008em; }
 /* Boutons : un léger enfoncement au clic */
 button:not(:disabled):active, .button:active { transform: scale(.97); }
 /* Les pages apparaissent en fondu */
-.view:not([hidden]) { animation: view-in .18s ease-out; }
+.view:not([hidden]) { animation: view-in .12s ease-out; }
 @keyframes view-in { from { opacity: 0; transform: translateY(4px); } }
 /* Réglages : la page n'est pas animée en entrant, seul le contenu de droite apparaît. Sur Mac (WebKit), une page animée
    laissait la barre de gauche (collante, position: sticky) invisible jusqu'au premier défilement. */
@@ -3274,6 +3274,7 @@ p, li, h1, h2, h3, h4, blockquote, td, th, dd, dt, pre, code, .feedback, .msg-bu
 .q-next { display: flex; flex-wrap: wrap; gap: 6px 24px; padding: 12px 22px; border-top: 1px solid var(--border); color: var(--muted); font-size: 13px; }
 .q-next:empty { display: none; }
 .q-next b { color: var(--text); font-weight: 600; margin-right: 6px; }
+.q-next-title { font-size: 11.5px; font-weight: 650; text-transform: uppercase; letter-spacing: .05em; margin-right: 4px; }
 @media (max-width: 640px) { .q-row { grid-template-columns: 10px minmax(0, 1fr); } .q-h { display: none; } .q-icons { grid-column: 2; opacity: 1; flex-wrap: wrap; } }
 @media (prefers-reduced-motion: reduce) { .q-hero.rise { animation: none; } }
 
