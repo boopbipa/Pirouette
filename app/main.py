@@ -2582,6 +2582,13 @@ def _revision_minutes(cards: int, questions: int) -> int:
 
 
 DURATIONS = (5, 10, 15, 20, 25, 30, 45, 60, 90)  # durées proposées (minutes)
+DEFAULT_MINUTES = 30  # une révision de cours (relire puis se tester) : 30 min, sauf réglage contraire
+
+
+def _general_minutes() -> int:
+    """La durée réglée pour toutes les matières ; 0 : automatique (d'après le nombre de questions)."""
+    value = store.get_settings().get("rev_minutes")
+    return DEFAULT_MINUTES if value is None else int(value)
 
 
 def _minutes_for(course: dict, entry: dict, day: str, estimate: int) -> tuple[int, str]:
@@ -2592,7 +2599,7 @@ def _minutes_for(course: dict, entry: dict, day: str, estimate: int) -> tuple[in
         return int(chosen["minutes"]), "revision"
     if course.get("rev_minutes"):
         return int(course["rev_minutes"]), "course"
-    general = int(store.get_settings().get("rev_minutes") or 0)
+    general = _general_minutes()
     if general:
         return general, "general"
     return estimate, "auto"
@@ -2736,9 +2743,10 @@ def _revision_session(pick: str, questions: bool) -> dict:
             today = date.today()
             entry = next((f for f in course["files"] if f["id"] == fid), {})
             minutes, source = _minutes_for(course, entry, today.isoformat(), 0)
-            # Une durée choisie : le quiz a la taille qui va avec (≈ 0,6 min par question, 0,3 par carte)
-            n_questions = REVISION_QUESTIONS if source == "auto" else max(3, round(minutes * 0.6))
-            n_total = REVISION_SIZE if source == "auto" else max(6, round(minutes * 1.8))
+            # Une durée choisie : le quiz a la taille qui va avec, en gardant à peu près la moitié du temps pour relire
+            # le cours (30 min : 9 questions et 18 cartes)
+            n_questions = REVISION_QUESTIONS if source == "auto" else max(3, round(minutes * 0.3))
+            n_total = REVISION_SIZE if source == "auto" else max(6, round(minutes * 0.9))
             order = lambda card: (not srs.is_weak(card), not (srs.is_new(card) or srs.is_due(card, today)), random.random())  # noqa: E731
             picked_q = []
             if questions:
@@ -2826,9 +2834,9 @@ async def course_rev_minutes(course_id: str, body: MinutesIn) -> dict:
 @app.put("/api/rev-minutes")
 async def general_rev_minutes(body: MinutesIn) -> dict:
     """La durée de toutes les révisions (0 : automatique, d'après le nombre de questions)."""
-    store.save_settings(rev_minutes=max(0, min(body.minutes, 240)) or None)
+    store.save_settings(rev_minutes=max(0, min(body.minutes, 240)))  # 0 : automatique (gardé tel quel)
     _calendar_soon()
-    return {"rev_minutes": int(store.get_settings().get("rev_minutes") or 0)}
+    return {"rev_minutes": _general_minutes()}
 
 
 @app.post("/api/courses/{course_id}/files/{file_id}/open")
@@ -3198,7 +3206,7 @@ def _calendar_view() -> dict:
     state = _calendar_state()
     return {"available": apple_calendar.available(), "enabled": state["enabled"], "hour": state["hour"],
             "error": state.get("error") or "", "synced_at": state.get("synced_at"), "count": state.get("count", 0),
-            "where": state.get("where") or "", "rev_minutes": int(store.get_settings().get("rev_minutes") or 0),
+            "where": state.get("where") or "", "rev_minutes": _general_minutes(),
             "durations": list(DURATIONS)}
 
 

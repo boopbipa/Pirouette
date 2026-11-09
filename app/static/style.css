@@ -3208,10 +3208,8 @@ p, li, h1, h2, h3, h4, blockquote, td, th, dd, dt, pre, code, .feedback, .msg-bu
 .wk-block.tiny small { display: none; } .wk-block.tiny { padding-top: 5px; }
 .wk-block.is-today { border: 0; background: var(--c); color: #fff; cursor: pointer; box-shadow: 0 6px 14px -8px var(--c); }
 .wk-block.resizing { box-shadow: 0 0 0 2px var(--c), 0 10px 24px -10px var(--c); z-index: 2; }
-.wk-grip { position: absolute; left: 0; right: 0; bottom: 0; height: 9px; cursor: ns-resize; touch-action: none; }
-.wk-grip::after { content: ""; position: absolute; left: 50%; bottom: 3px; width: 22px; height: 3px; margin-left: -11px; border-radius: 3px; background: currentColor; opacity: .45; }
-.wk-block:hover .wk-grip::after { opacity: .9; }
+.wk-grip { position: absolute; left: 0; right: 0; bottom: 0; height: 7px; cursor: ns-resize; touch-action: none; }  /* le bord du bas : on étire */
 #rev-length label small, .cal-hour label small { display: block; font-size: 12.5px; }
 @media (max-width: 760px) { .wk-block { position: static; height: auto !important; margin-top: 4px; } .wk-grip { display: none; } }
-.wk-block { cursor: grab; touch-action: none; user-select: none; -webkit-user-select: none; }
-.wk-block.moving { cursor: grabbing; z-index: 3; opacity: .92; box-shadow: 0 0 0 2px var(--c), 0 14px 30px -12px var(--c); transition: none; }
+.wk-block, .wk-block.is-today { cursor: grab; touch-action: none; user-select: none; -webkit-user-select: none; }
+.wk-block.moving, .wk-block.moving.is-today { cursor: grabbing; z-index: 3; opacity: .92; box-shadow: 0 0 0 2px var(--c), 0 14px 30px -12px var(--c); transition: none; }
