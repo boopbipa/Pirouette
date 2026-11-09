@@ -531,6 +531,7 @@ async function openAccueil() {
   }
   renderTodayBar(profile, progress, revs);
   renderRevisions(revs);
+  api("/api/revisions/days?n=3").then(renderDays).catch(() => {});
   renderAfterClass(revs.after_class || []);
   show("accueil");
 }
@@ -640,16 +641,30 @@ function renderRevisions(revs) {
   const shown = [...revs.today, ...revs.done];
   $("#rev-list").innerHTML = [...revs.today.map((r) => revRow(r, false, shown)), ...revs.done.map((r) => revRow(r, true, shown))].join("")
     || `<p class="muted rev-empty">Chaque cours ajouté revient ici le jour même, puis 1, 3, 7, 15 et 30 jours après.</p>`;
-  const groups = {};
-  for (const r of revs.upcoming) (groups[r.due] ||= []).push(r);
-  $("#rev-next").innerHTML = Object.entries(groups).map(([day, list]) => {
-    const d = new Date(`${day}T12:00:00`);
-    return `<div class="rev-next">
-      <div class="rev-when">${d.toLocaleDateString("fr-FR", { weekday: "short" }).replace(".", "").toUpperCase()}<b>${d.getDate()}</b></div>
-      <div class="rev-next-list">${list.map((r) => `<div><span class="rev-dot" style="--c:${subjectColor(r.course_id)}"></span><b>${revName(r, list)}</b></div>`).join("")}</div>
-    </div>`;
-  }).join("") || `<p class="muted rev-empty">Rien de prévu dans les deux semaines.</p>`;
 }
+
+// Les trois prochains jours (comme le widget Calendrier du Mac) : chaque révision à son heure, à la couleur de sa
+// matière ; celle en cours est entourée, celles faites sont grisées
+function renderDays(data) {
+  const now = new Date(), today = isoDay(now);
+  const hm = (iso) => iso.slice(11, 16);
+  noteColors(data.days.flatMap((d) => d.items).map((r) => ({ id: r.course_id, color: r.color })));
+  $("#rev-next").innerHTML = data.days.map((d, i) => {
+    const date = new Date(`${d.day}T12:00:00`);
+    const name = i === 0 ? "Aujourd'hui" : i === 1 ? "Demain" : date.toLocaleDateString("fr-FR", { weekday: "long" }).replace(/^./, (c) => c.toUpperCase());
+    const small = i < 2 ? date.toLocaleDateString("fr-FR", { weekday: "short", day: "numeric" }).replace(".", "") : String(date.getDate());
+    const items = d.items.map((r) => {
+      const live = r.start && d.day === today && new Date(r.start) <= now && now < new Date(r.end);
+      return `<div class="day-ev${r.state === "done" ? " done" : ""}${live ? " now" : ""}${r.state === "today" ? " is-today" : ""}" style="--c:${subjectColor(r.course_id)}"
+          data-wk-rev="${r.course_id}:${r.file_id}"><i></i><div><b>${revName(r, d.items)}</b><small>${r.state === "done" ? "Faite" : `${hm(r.start)} – ${hm(r.end)}`}</small></div></div>`;
+    }).join("");
+    return `<div class="rev-day${i === 0 ? " first" : ""}"><h4>${name} <span>${small}</span></h4>${items || `<p class="day-empty">Rien de prévu</p>`}</div>`;
+  }).join("");
+}
+$("#rev-next").addEventListener("click", (e) => {
+  const ev = e.target.closest(".day-ev.is-today:not(.done)");
+  if (ev) askRevision(ev);
+});
 $("#rev-list").addEventListener("click", async (e) => {
   const open = e.target.closest("[data-open]");
   if (open) return openCourseFile(...open.dataset.open.split(":"));

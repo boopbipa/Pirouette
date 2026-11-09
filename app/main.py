@@ -2961,6 +2961,59 @@ async def agenda_tick() -> dict:
     return await run_in_threadpool(_agenda_tick)
 
 
+def _timed_revisions(data: dict, agenda, courses: list[dict]) -> dict[str, list]:
+    """Les révisions des deux semaines à venir, jour par jour, à leur heure (la même que dans le Planning et
+    Calendrier), et celles faites aujourd'hui."""
+    # Les révisions, à leur heure : celle de l'agenda du Mac si elles y sont (déplacées, étirées…), sinon l'heure
+    # où Pirouette les placerait (après les cours, à l'heure choisie)
+    now = datetime.now()
+    today = now.date()
+    cal = _calendar_state()
+    revs = _revisions(today, now)
+    busy = [(datetime.fromisoformat(c["start"]), datetime.fromisoformat(c["end"]))
+            for c in agenda_classes(data, agenda, courses, now - timedelta(hours=1), now + timedelta(days=CALENDAR_DAYS + 1))
+            if not c["cancelled"]]
+    items = _calendar_items(today, now)
+    info = {(r["course_id"], r["file_id"]): r for r in revs["today"] + revs["upcoming"]}
+    days: dict[str, list] = {}
+    by_key = {revplan.key_of(i["course_id"], i["file_id"], i["day"], i.get("before", False)): i for i in items}
+    for slot in revplan.place(items, busy, cal["hour"], now):
+        item = by_key[slot.key]
+        start, end = slot.start, slot.end
+        # L'heure de Calendrier (s'il y est et n'a pas été déplacé dans Pirouette entre-temps) ; la durée, elle,
+        # est toujours celle de Pirouette (qui suit déjà ce que tu as étiré dans Calendrier). Sinon, juste après
+        # un déplacement ou un étirement, le planning remontrait l'ancienne heure le temps que Calendrier suive.
+        if cal.get("enabled") and not slot.fixed and slot.key in (cal.get("created") or {}):
+            start = datetime.fromisoformat(cal["created"][slot.key])
+            end = start + (slot.end - slot.start)
+        extra = info.get((item["course_id"], item["file_id"])) or {}
+        days.setdefault(item["day"], []).append({
+            "course_id": item["course_id"], "file_id": item["file_id"], "course": item["course"], "title": item["title"],
+            "reason": item["reason"], "color": extra.get("color"), "minutes": round((end - start).total_seconds() / 60),
+            "start": start.isoformat(timespec="minutes"), "end": end.isoformat(timespec="minutes"),
+            "state": "today" if item["day"] == today.isoformat() else "later", "before": bool(item.get("before"))})
+    for item in revs["done"]:
+        days.setdefault(today.isoformat(), []).append(item | {"state": "done"})
+    return days
+
+
+@app.get("/api/revisions/days")
+async def revisions_days(n: int = 3) -> dict:
+    """L'accueil : les révisions des `n` prochains jours (aujourd'hui compris), à leur heure."""
+    def build() -> dict:
+        agenda = _agenda()
+        data = agenda.load()
+        courses = [c for c in store.list_courses() if c["id"] in set(store.active_course_ids())]
+        days = _timed_revisions(data, agenda, courses)
+        today = date.today()
+        out = []
+        for i in range(max(1, min(n, 7))):
+            day = (today + timedelta(days=i)).isoformat()
+            out.append({"day": day, "items": sorted(days.get(day, []), key=lambda r: r.get("start") or "")})
+        return {"days": out}
+    return await run_in_threadpool(build)
+
+
 @app.get("/api/agenda/week")
 async def agenda_week(start: str = "") -> dict:
     """Le planning d'une semaine (du lundi au dimanche) : les séances et, chaque jour, les cours à réviser."""
@@ -2980,36 +3033,7 @@ async def agenda_week(start: str = "") -> dict:
         week = [{"uid": r["uid"], "summary": r["summary"], "start": r["start"], "end": r["end"], "location": r.get("location", ""),
                  "cancelled": r["cancelled"], "course_id": r["course_id"],
                  "color": names[r["course_id"]].get("color") if r["course_id"] in names else None} for r in rows]
-        # Les révisions, à leur heure : celle de l'agenda du Mac si elles y sont (déplacées, étirées…), sinon l'heure
-        # où Pirouette les placerait (après les cours, à l'heure choisie)
-        now = datetime.now()
-        today = now.date()
-        cal = _calendar_state()
-        revs = _revisions(today, now)
-        busy = [(datetime.fromisoformat(c["start"]), datetime.fromisoformat(c["end"]))
-                for c in agenda_classes(data, agenda, courses, now - timedelta(hours=1), now + timedelta(days=CALENDAR_DAYS + 1))
-                if not c["cancelled"]]
-        items = _calendar_items(today, now)
-        info = {(r["course_id"], r["file_id"]): r for r in revs["today"] + revs["upcoming"]}
-        days: dict[str, list] = {}
-        by_key = {revplan.key_of(i["course_id"], i["file_id"], i["day"], i.get("before", False)): i for i in items}
-        for slot in revplan.place(items, busy, cal["hour"], now):
-            item = by_key[slot.key]
-            start, end = slot.start, slot.end
-            # L'heure de Calendrier (s'il y est et n'a pas été déplacé dans Pirouette entre-temps) ; la durée, elle,
-            # est toujours celle de Pirouette (qui suit déjà ce que tu as étiré dans Calendrier). Sinon, juste après
-            # un déplacement ou un étirement, le planning remontrait l'ancienne heure le temps que Calendrier suive.
-            if cal.get("enabled") and not slot.fixed and slot.key in (cal.get("created") or {}):
-                start = datetime.fromisoformat(cal["created"][slot.key])
-                end = start + (slot.end - slot.start)
-            extra = info.get((item["course_id"], item["file_id"])) or {}
-            days.setdefault(item["day"], []).append({
-                "course_id": item["course_id"], "file_id": item["file_id"], "course": item["course"], "title": item["title"],
-                "reason": item["reason"], "color": extra.get("color"), "minutes": round((end - start).total_seconds() / 60),
-                "start": start.isoformat(timespec="minutes"), "end": end.isoformat(timespec="minutes"),
-                "state": "today" if item["day"] == today.isoformat() else "later", "before": bool(item.get("before"))})
-        for item in revs["done"]:
-            days.setdefault(today.isoformat(), []).append(item | {"state": "done"})
+        days = _timed_revisions(data, agenda, courses)
         return {"monday": monday.isoformat(), "classes": week, "revisions": days, "url": bool(data["url"]),
                 "error": data.get("error") or ""}
     return await run_in_threadpool(build)

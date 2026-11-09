@@ -3219,3 +3219,21 @@ p, li, h1, h2, h3, h4, blockquote, td, th, dd, dt, pre, code, .feedback, .msg-bu
   box-shadow: 0 0 0 1px var(--border), 0 18px 40px -18px rgba(0, 0, 0, .45); animation: view-in .14s ease-out; }
 .wk-ask p { margin: 0 0 10px; font-size: 14px; line-height: 1.35; }
 .wk-ask div { display: flex; gap: 8px; }
+
+/* Accueil : les trois prochains jours (comme le widget Calendrier) */
+.rev-days { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+@media (max-width: 700px) { .rev-days { grid-template-columns: 1fr; } }
+.rev-day h4 { margin: 0 0 8px; font-size: 13.5px; display: flex; align-items: baseline; gap: 6px; }
+.rev-day h4 span { color: var(--muted); font-weight: 500; font-size: 12px; }
+.rev-day.first h4 { color: var(--accent-ink); }
+.rev-day { display: grid; gap: 7px; align-content: start; }
+.day-ev { display: grid; grid-template-columns: 4px minmax(0, 1fr); gap: 9px; padding: 7px 10px 7px 8px; border-radius: 10px;
+  background: color-mix(in srgb, var(--c) 9%, var(--surface)); }
+.day-ev i { border-radius: 4px; background: var(--c); }
+.day-ev b { display: block; font-size: 14px; color: color-mix(in srgb, var(--c) 75%, var(--text)); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.day-ev b span { font-weight: 500; opacity: .8; }
+.day-ev small { color: color-mix(in srgb, var(--c) 55%, var(--muted)); font-size: 12.5px; font-variant-numeric: tabular-nums; }
+.day-ev.is-today { cursor: pointer; }
+.day-ev.done { opacity: .55; cursor: default; } .day-ev.done b::before { content: "✓ "; }
+.day-ev.now { box-shadow: inset 0 0 0 1.5px var(--c); }
+.day-empty { color: var(--muted); font-size: 12.5px; margin: 4px 2px; }
