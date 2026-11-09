@@ -564,7 +564,7 @@ function revName(r, list) {
 }
 // ---------- Accueil : la file des révisions du jour ----------
 // En haut, en grand, la révision à faire maintenant (la plus en retard d'abord) : le seul « Commencer » de la page.
-// Dessous, le reste de la journée (au survol : « C'est fait », « Relire », « Demain »), ce qui est fait, et les jours
+// Dessous, le reste de la journée (au survol : « Relire », « Repousser » ; « C'est relu » pour un cours sans quiz), ce qui est fait, et les jours
 // suivants en une ligne. Un jour sans révision, la grande carte est le quiz du jour (court).
 const DAILY_LIMIT = 15;  // le quiz du jour : 15 questions, ≈ 10 min
 const ICON_CHECK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5L20 7"/></svg>';
@@ -585,12 +585,11 @@ function renderQueue(revs, progress) {
     const w = revWhen(hero);
     const go = quizzable(hero)
       ? `<button class="primary" type="button" data-q="go" data-key="${hero.course_id}:${hero.file_id}">Commencer</button>`
-      : `<button class="primary" type="button" data-q="done" data-key="${hero.course_id}:${hero.file_id}">C'est fait</button>`;
+      : `<button class="primary" type="button" data-q="done" data-key="${hero.course_id}:${hero.file_id}">C'est relu</button>`;
     top = `<div class="q-hero" style="--c:${subjectColor(hero.course_id)}" data-hero="${hero.course_id}:${hero.file_id}">
       <span class="q-ring" style="--m:${Math.round((100 * done.length) / all)}%"><span>${done.length}/${all}</span></span>
       <div class="q-txt"><div class="q-when${w.late ? " late" : ""}">${escapeHtml(w.text)}</div><h2>${revName(hero, pending)} <small>${minLabel(hero.minutes)}</small></h2>
-        <div class="q-small">${quizzable(hero) ? `<button class="q-link" type="button" data-q="done" data-key="${hero.course_id}:${hero.file_id}" title="Tu l'as révisée autrement (relue, fiches…)">${ICON_CHECK}C'est fait</button>` : ""}
-          <button class="q-link" type="button" data-q="later" data-key="${hero.course_id}:${hero.file_id}" title="Un imprévu : à un autre jour">${ICON_LATER}Repousser</button></div></div>
+        <div class="q-small"><button class="q-link" type="button" data-q="later" data-key="${hero.course_id}:${hero.file_id}" title="Un imprévu : à un autre jour">${ICON_LATER}Repousser</button></div></div>
       <div class="q-acts">
         <button class="ghost" type="button" data-q="read" data-key="${hero.course_id}:${hero.file_id}">${REV_DOC}Relire le cours</button>${go}</div>
     </div>`;
@@ -610,7 +609,7 @@ function renderQueue(revs, progress) {
       <span class="q-h">${r.start ? `${r.start.slice(11, 16)} – ${r.end.slice(11, 16)}` : ""}</span><span class="q-dot"></span>
       <div class="q-name"><b>${revName(r, pending)}</b>${w.late ? `<span class="q-late">${escapeHtml(w.text)}</span>` : ""}</div>
       <div class="q-icons">
-        <button class="q-ico" type="button" data-q="done" data-key="${key}">${ICON_CHECK}C'est fait</button>
+        ${quizzable(r) ? "" : `<button class="q-ico" type="button" data-q="done" data-key="${key}">${ICON_CHECK}C'est relu</button>`}
         <button class="q-ico" type="button" data-q="read" data-key="${key}">${REV_DOC}Relire</button>
         <button class="q-ico" type="button" data-q="later" data-key="${key}">${ICON_LATER}Repousser</button>
       </div></div>`;
