@@ -623,21 +623,21 @@ function renderQueue(revs, progress) {
   const rise = state.queueHero && state.queueHero !== heroKey;  // la suivante remonte en glissant
   state.queueHero = heroKey;
   $("#rev-queue").innerHTML = `${top.replace('class="q-hero"', `class="q-hero${rise ? " rise" : ""}"`)}
-    ${rows ? `<div class="q-list"><div class="q-sect">Ensuite</div>${rows}</div>` : ""}${doneRow}<div class="q-next" id="q-next"></div>`;
+    ${rows ? `<div class="q-list"><div class="q-sect">Ensuite</div>${rows}</div>` : ""}${doneRow}`;
 }
 function renderNextDays(next) {
-  const box = $("#q-next");
-  if (!box) return;
+  const box = $("#next-widget");
+  box.hidden = !next.length;
   noteColors(next.map((r) => ({ id: r.course_id, color: r.color })));
   const today = new Date(); today.setHours(12, 0, 0, 0);
   const when = (iso) => {
     const d = new Date(`${iso.slice(0, 10)}T12:00:00`), n = Math.round((d - today) / 86400000);
     if (n === 1) return "Demain";
     if (n < 7) return d.toLocaleDateString("fr-FR", { weekday: "long" }).replace(/^./, (c) => c.toUpperCase());
-    return d.toLocaleDateString("fr-FR", { weekday: "short", day: "numeric", month: "short" }).replace(/\./g, "");
+    return d.toLocaleDateString("fr-FR", { weekday: "short", day: "numeric", month: "short" }).replace(/\./g, "").replace(/^./, (c) => c.toUpperCase());
   };
-  box.innerHTML = next.length ? `<span class="q-next-title">Prochaines</span>${next.map((r) => `<span class="q-chip" style="--c:${subjectColor(r.course_id)}"><i></i><b>${when(r.start)}</b>${escapeHtml(r.course)} · ${hourText(r.start)}</span>`).join("")}`
-    : "";
+  box.innerHTML = `<h3>Prochaines révisions</h3><div class="next-row">${next.map((r) => `<div class="day-ev" style="--c:${subjectColor(r.course_id)}">
+      <i></i><div><b>${escapeHtml(r.course)}</b><small>${when(r.start)} · ${r.start.slice(11, 16)} – ${r.end.slice(11, 16)}</small></div></div>`).join("")}</div>`;
 }
 $("#rev-queue").addEventListener("click", async (e) => {
   const b = e.target.closest("[data-q]");

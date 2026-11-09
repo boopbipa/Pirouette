@@ -3286,3 +3286,9 @@ p, li, h1, h2, h3, h4, blockquote, td, th, dd, dt, pre, code, .feedback, .msg-bu
 .q-later .q-days { display: flex; gap: 6px; margin-bottom: 10px; }
 .q-pick { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 13px; color: var(--muted); margin-bottom: 10px; }
 .q-pick input { width: auto; padding: 6px 8px; font-size: 13px; }
+
+/* Accueil : les trois prochaines révisions, sous la file */
+.next-widget { background: var(--surface); border-radius: 18px; box-shadow: var(--shadow); padding: 14px 18px 16px; margin: -12px 0 26px; }
+.next-widget h3 { margin: 0 0 10px; font-size: 12px; font-weight: 650; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
+.next-row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+@media (max-width: 640px) { .next-row { grid-template-columns: 1fr; } }
