@@ -609,14 +609,15 @@ const REV_DOC = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stro
 function nextIn(days) {
   return days <= 0 ? "aujourd'hui" : days === 1 ? "demain" : `dans ${days} jours`;
 }
-function revRow(r, done) {
+// Le nom affiché : la matière ; le nom du cours seulement si deux cours de la même matière sont dans la liste
+function revName(r, list) {
+  const twin = list.filter((x) => x.course_id === r.course_id).length > 1;
+  return `${escapeHtml(r.course)}${twin ? ` <span>· ${escapeHtml(r.title)}</span>` : ""}`;
+}
+function revRow(r, done, list = []) {
   const content = r.cards + (mixQuestions() ? r.questions : 0);
-  const chips = [
-    r.before && !r.extra ? `<span class="rev-chip hot">${escapeHtml(r.before)}</span>` : "",
-    `<span class="rev-chip${r.late || r.reason === "À refaire" || (r.before && !r.extra) ? "" : " hot"}">${escapeHtml(r.late && !r.extra ? `En retard de ${plural(r.late, "jour", "jours")}` : r.reason)}</span>`,
-    content ? `<span class="rev-chip">${plural(Math.min(content, 16), "question", "questions")} · ${r.minutes} min</span>`
-      : `<span class="rev-chip">Pas encore de quiz : relis-le</span>`,
-  ].join("");
+  const why = r.late && !r.extra ? `En retard de ${plural(r.late, "jour", "jours")}` : r.extra ? "Avant ton cours" : r.reason;
+  const chips = `<span class="rev-chip${r.late ? "" : " hot"}">${escapeHtml(why)}</span>`;
   const read = r.kind !== undefined ? `<button class="ghost small rev-read" type="button" data-open="${r.course_id}:${r.file_id}">${REV_DOC}Relire le cours${r.kind ? `<span class="rev-kind">${escapeHtml(r.kind)}</span>` : ""}</button>` : "";
   const acts = done
     ? `<span class="rev-ok">✓ ${r.pre && !r.last?.startsWith(r.pre) ? "Prêt pour ton cours" : `${r.score != null ? `${r.score} %` : "Relu"} · prochaine ${nextIn(r.in_days)}`}</span>`
@@ -625,7 +626,7 @@ function revRow(r, done) {
   return `<div class="rev-row${done ? " done" : ""}" style="--c:${subjectColor(r.course_id)}">
     <span class="card-glare"></span>
     <span class="subject-dot"></span>
-    <div class="rev-main"><div class="rev-title">${escapeHtml(r.course)} <span>· ${escapeHtml(r.title)}</span></div>
+    <div class="rev-main"><div class="rev-title">${revName(r, list)}</div>
       ${done ? "" : `<div class="rev-chips">${chips}</div>`}</div>
     <div class="rev-acts">${acts}</div>
   </div>`;
@@ -634,10 +635,10 @@ function renderRevisions(revs) {
   const none = !revs.today.length && !revs.done.length && !revs.upcoming.length;
   $("#acc-grid").hidden = none;
   const minutes = revs.today.reduce((n, r) => n + r.minutes, 0);
-  $("#rev-sub").textContent = revs.today.length
-    ? `${plural(revs.today.length, "cours", "cours")} · environ ${minutes} min. Le jour du cours, puis 1, 3, 7, 15 et 30 jours après.`
+  $("#rev-sub").textContent = revs.today.length ? `${plural(revs.today.length, "cours", "cours")} · environ ${minLabel(minutes)}`
     : revs.done.length ? "Tout est fait pour aujourd'hui." : "Rien à réviser aujourd'hui.";
-  $("#rev-list").innerHTML = [...revs.today.map((r) => revRow(r, false)), ...revs.done.map((r) => revRow(r, true))].join("")
+  const shown = [...revs.today, ...revs.done];
+  $("#rev-list").innerHTML = [...revs.today.map((r) => revRow(r, false, shown)), ...revs.done.map((r) => revRow(r, true, shown))].join("")
     || `<p class="muted rev-empty">Chaque cours ajouté revient ici le jour même, puis 1, 3, 7, 15 et 30 jours après.</p>`;
   const groups = {};
   for (const r of revs.upcoming) (groups[r.due] ||= []).push(r);
@@ -645,7 +646,7 @@ function renderRevisions(revs) {
     const d = new Date(`${day}T12:00:00`);
     return `<div class="rev-next">
       <div class="rev-when">${d.toLocaleDateString("fr-FR", { weekday: "short" }).replace(".", "").toUpperCase()}<b>${d.getDate()}</b></div>
-      <div class="rev-next-list">${list.map((r) => `<div><span class="rev-dot" style="--c:${subjectColor(r.course_id)}"></span><b>${escapeHtml(r.course)}</b> · ${escapeHtml(r.title)}<small>${escapeHtml(r.reason)}</small></div>`).join("")}</div>
+      <div class="rev-next-list">${list.map((r) => `<div><span class="rev-dot" style="--c:${subjectColor(r.course_id)}"></span><b>${revName(r, list)}</b></div>`).join("")}</div>
     </div>`;
   }).join("") || `<p class="muted rev-empty">Rien de prévu dans les deux semaines.</p>`;
 }
@@ -867,7 +868,7 @@ async function openPlanning(start = state.planStart) {
             <b>${c.cancelled ? "Annulé · " : ""}${escapeHtml(c.summary)}</b><small>${hourText(c.start)}${c.location ? ` · ${escapeHtml(c.location)}` : ""}</small></div>`).join("")}
           ${wkBlocks(revs).map((r) => `<div class="wk-block is-${r.state}${r.height < 36 ? " tiny" : ""}" style="top:${r.top}px;height:${r.height}px;--c:${subjectColor(r.course_id)}"
               data-wk-rev="${r.course_id}:${r.file_id}" data-day="${key}" data-minutes="${r.minutes}"${r.before ? ' data-before="1"' : ""} title="${escapeHtml(`${r.course} · ${r.title} — ${r.reason}`)}">
-              <b>${escapeHtml(r.title)}</b><small><span class="wk-len">${minLabel(r.minutes)}</span> · ${escapeHtml(r.course)}</small>
+              <b>${escapeHtml(r.course)}</b><small><span class="wk-len">${minLabel(r.minutes)}</span></small>
               <span class="wk-grip" aria-hidden="true"></span></div>`).join("")}</div>
       </div>`;
     }).join("");

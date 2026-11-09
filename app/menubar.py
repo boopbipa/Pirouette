@@ -13,43 +13,30 @@ from datetime import date
 
 REFRESH = 60  # secondes entre deux mises à jour du compteur
 
-DAYS = ["lun", "mar", "mer", "jeu", "ven", "sam", "dim"]
-
-
 def build(data: dict, today: date | None = None) -> tuple[str, list[dict]]:
     """Le chiffre affiché à côté de l'icône, et les lignes du menu ({title, action, enabled}, ou {separator}).
     `data` : la réponse de /api/revisions."""
-    today = today or date.today()
     pending = data.get("today") or []
     done = data.get("done") or []
     quiz = [r for r in pending if r.get("cards", 0) + r.get("questions", 0) > 0]
     rows: list[dict] = []
     if pending:
-        minutes = sum(r.get("minutes", 0) for r in quiz)
-        rows.append({"title": f"Aujourd'hui : {len(pending)} cours à réviser", "enabled": False})
         if quiz:
-            rows.append({"title": f"Faire le quiz du jour (environ {minutes} min)", "action": "quiz", "enabled": True})
+            rows.append({"title": "Faire le quiz du jour", "action": "quiz", "enabled": True})
     elif done:
-        rows.append({"title": "Tes cours du jour sont révisés ✓", "enabled": False})
+        rows.append({"title": "Tout est révisé aujourd'hui ✓", "enabled": False})
     else:
         rows.append({"title": "Rien à réviser aujourd'hui", "enabled": False})
-    if pending or done:
+    if rows and (pending or done):
         rows.append({"separator": True})
+    # Juste la matière (le nom du cours seulement si deux cours de la même matière sont à réviser)
+    names = [r["course"] for r in pending]
     for r in pending:
-        why = r.get("before") or r.get("reason") or ""
         has_quiz = r.get("cards", 0) + r.get("questions", 0) > 0
-        rows.append({"title": f"{r['course']} · {r['title']}  —  {why}",
-                     "action": f"rev:{r['course_id']}:{r['file_id']}" if has_quiz else "home", "enabled": True})
+        title = r["course"] if names.count(r["course"]) == 1 else f"{r['course']} · {r['title']}"
+        rows.append({"title": title, "action": f"rev:{r['course_id']}:{r['file_id']}" if has_quiz else "home", "enabled": True})
     for r in done:
-        rows.append({"title": f"✓ {r['course']} · {r['title']}", "enabled": False})
-    later = [r for r in (data.get("upcoming") or []) if r.get("due", "") > today.isoformat()][:4]
-    if later:
-        rows.append({"separator": True})
-        rows.append({"title": "Prochaines révisions", "enabled": False})
-        for r in later:
-            day = date.fromisoformat(r["due"])
-            label = "demain" if (day - today).days == 1 else f"{DAYS[day.weekday()]} {day.day}"
-            rows.append({"title": f"{label} · {r['course']} · {r['title']}", "enabled": False})
+        rows.append({"title": f"✓ {r['course']}", "enabled": False})
     rows.append({"separator": True})
     rows.append({"title": "Ouvrir Pirouette", "action": "open", "enabled": True})
     rows.append({"title": "Quitter Pirouette", "action": "quit", "enabled": True})

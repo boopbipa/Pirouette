@@ -73,7 +73,7 @@ def place(items: list[dict], busy: list[tuple[datetime, datetime]], hour: str, n
         for item in todo:
             length = timedelta(minutes=max(5, 5 * round(max(item["minutes"], 1) / 5)))
             key = key_of(item["course_id"], item["file_id"], day, item.get("before", False))
-            title = f"Réviser {item['course']} · {item['title']}"
+            title = f"Réviser {item['course']}"
             notes = f"{item['reason']} · environ {item['minutes']} min. Ouvre Pirouette pour faire le quiz.\n\n{marker(key)}"
             if item.get("at"):  # à l'heure choisie : les autres se rangent autour
                 ah, am = (int(x) for x in item["at"].split(":"))

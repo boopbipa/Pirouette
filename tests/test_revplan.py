@@ -74,7 +74,7 @@ def test_sync_creates_marks_done_and_respects_moves(tmp_path, monkeypatch):
     main._calendar_sync(now, cal)
     key = revplan.key_of(cid, fid, today.isoformat())
     event_id, event = cal.by_key(key)
-    assert event["title"] == "Réviser Neurosciences · CM1" and event["start"].hour == 18
+    assert event["title"] == "Réviser Neurosciences" and event["start"].hour == 18
     # Tu la déplaces à 21 h : Pirouette ne la remet pas à 18 h
     event["start"] = event["start"].replace(hour=21)
     main._calendar_sync(now, cal)

@@ -15,13 +15,19 @@ def test_menu_lists_todays_revisions_and_the_next_ones():
     count, rows = menubar.build(data, date(2026, 11, 9))
     titles = [r.get("title") for r in rows]
     assert count == "2"
-    assert "Faire le quiz du jour (environ 4 min)" in titles
-    assert "Psychométrie · CM2  —  Avant ton cours de demain 8 h 30" in titles
-    assert "✓ Psychanalyse · CM1" in titles and "demain · Neurosciences · CM2" in titles and "ven 13 · X · Y" in titles
-    rev = next(r for r in rows if r.get("title", "").startswith("Neurosciences · CM3"))
+    # Sobre : la matière seulement, sans raison ni prochaines révisions
+    assert titles == ["Faire le quiz du jour", None, "Neurosciences", "Psychométrie", "✓ Psychanalyse", None,
+                      "Ouvrir Pirouette", "Quitter Pirouette"]
+    rev = next(r for r in rows if r.get("title") == "Neurosciences")
     assert menubar.route(rev["action"]) == f"#/accueil/r/{'a' * 12}:{'b' * 8}"
-    assert next(r for r in rows if r.get("title", "").startswith("Psychométrie"))["action"] == "home"  # pas de quiz : l'accueil
-    assert menubar.route("quiz") == "#/accueil/quiz" and [r.get("action") for r in rows[-2:]] == ["open", "quit"]
+    assert next(r for r in rows if r.get("title") == "Psychométrie")["action"] == "home"  # pas de quiz : l'accueil
+    assert menubar.route("quiz") == "#/accueil/quiz"
+
+
+def test_two_courses_of_the_same_subject_are_told_apart():
+    item = {"course_id": "a" * 12, "course": "Psychanalyse", "cards": 1, "questions": 0, "minutes": 30}
+    _, rows = menubar.build({"today": [item | {"file_id": "b" * 8, "title": "Le rêve"}, item | {"file_id": "c" * 8, "title": "Lapsus"}]})
+    assert [r.get("title") for r in rows][2:4] == ["Psychanalyse · Le rêve", "Psychanalyse · Lapsus"]
 
 
 def test_nothing_to_do():
