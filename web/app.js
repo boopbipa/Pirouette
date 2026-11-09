@@ -601,6 +601,58 @@ document.addEventListener("click", (e) => {
   pill.classList.toggle("open");
 }, true);
 
+// ---------- Les révisions de cours (comme l'accueil de l'ordinateur) ----------
+// L'ordinateur envoie la file du jour (à leur heure, avec les cartes et les questions de chaque révision) et les trois
+// suivantes. Une révision faite ici devient un évènement « revision », repris par l'ordinateur à la synchro.
+function revisionsToday() {
+  const r = current().meta?.revisions;
+  if (!r || r.day !== dayOf(new Date())) return null;  // pas encore la file d'aujourd'hui : l'ordinateur l'enverra
+  const key = (x) => `${x.course_id}:${x.file_id}`;
+  const doneHere = new Set([...S.remote, ...S.log, ...S.outbox].filter((e) => e.kind === "revision" && String(e.payload.at).startsWith(r.day))
+    .map((e) => key(e.payload)));
+  return { pending: r.today.filter((x) => !doneHere.has(key(x))), done: [...r.done, ...r.today.filter((x) => doneHere.has(key(x)))], next: r.next || [] };
+}
+const hm = (iso) => (iso ? iso.slice(11, 16) : "");
+function revisionItems(r) {
+  const v = current();
+  const course = courses().find((c) => c.id === r.course_id) || { id: r.course_id, name: r.course };
+  const deck = v.deck[r.course_id]?.cards || [];
+  const cards = (r.cards || []).map((id) => deck.find((c) => c.id === id)).filter(Boolean).map((card) => ({ course, card }));
+  const questions = (r.questions || []).map(([quizId, index]) => v.quiz[quizId] && asQuestions(v.quiz[quizId]).find((q) => q.index === index)).filter(Boolean);
+  return interleave(shuffle(cards), shuffle(questions));
+}
+function revisionBlock(rev) {
+  const [hero, ...rest] = rev.pending;
+  const all = rev.pending.length + rev.done.length;
+  const now = new Date();
+  const when = hero.late && !hero.extra ? `En retard de ${plural(hero.late, "jour", "jours")}`
+    : hero.end && new Date(hero.end) < now ? `En retard · prévue à ${hm(hero.start)}`
+      : hero.start && new Date(hero.start) <= now ? "Maintenant" : hero.start ? `À ${hm(hero.start)}` : "Aujourd'hui";
+  const color = (r) => colorOf(courses().find((c) => c.id === r.course_id) || { color: r.color });
+  return `<section class="rev-card" style="--c:${color(hero)}">
+      <span class="ring" style="--m:${Math.round((100 * rev.done.length) / all)}%"><i>${rev.done.length}/${all}</i></span>
+      <p class="rev-when${/retard/i.test(when) ? " late" : ""}">${esc(when)}</p>
+      <h2>${esc(hero.course)}</h2>
+      <p class="muted">${hero.minutes ? `${hero.minutes} min` : ""}</p>
+      ${(hero.cards?.length || hero.questions?.length) ? `<button class="primary" type="button" id="rev-go">Commencer</button>`
+        : `<p class="muted">Pas encore de quiz pour ce cours : relis-le sur ton ordinateur.</p>`}
+    </section>
+    ${rest.length ? `<section class="rev-list"><h3>Ensuite</h3>${rest.map((r) => `<div class="rev-line" style="--c:${color(r)}"><span>${hm(r.start)}</span><i></i><b>${esc(r.course)}</b></div>`).join("")}</section>` : ""}
+    ${rev.done.length ? `<p class="rev-done">✓ Fait aujourd'hui : ${rev.done.map((r) => esc(r.course)).join(", ")}</p>` : ""}`;
+}
+function nextBlock(next) {
+  if (!next.length) return "";
+  const t = today();
+  const when = (iso) => {
+    const n = daysBetween(t, parseDay(iso));
+    if (n === 1) return "Demain";
+    const d = parseDay(iso);
+    return n < 7 ? d.toLocaleDateString("fr-FR", { weekday: "long" }).replace(/^./, (c) => c.toUpperCase())
+      : d.toLocaleDateString("fr-FR", { weekday: "short", day: "numeric", month: "short" }).replace(/\./g, "");
+  };
+  return `<section class="rev-next"><h3>Prochaines révisions</h3>${next.map((r) => `<div class="rev-ev" style="--c:${colorOf(courses().find((c) => c.id === r.course_id) || { color: r.color })}"><i></i><span><b>${esc(r.course)}</b><small>${when(r.start)} · ${hm(r.start)} – ${hm(r.end)}</small></span></div>`).join("")}</section>`;
+}
+
 function renderHome() {
   const v = current();
   if (!v.meta) {
@@ -608,6 +660,21 @@ function renderHome() {
       <p class="muted">Ouvre Pirouette sur ton ordinateur : il envoie tes quiz et tes cartes dans un instant.</p>
       <button class="primary" type="button" id="retry">Réessayer</button></section>`;
     $("#retry").addEventListener("click", () => syncNow());
+    return;
+  }
+  const rev = revisionsToday();
+  if (rev && rev.pending.length) {
+    const exam = courses().filter((c) => c.exam && !c.archived).map((c) => daysBetween(today(), parseDay(c.exam))).filter((d) => d >= 0).sort((a, b) => a - b)[0];
+    const date = new Date().toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" });
+    app.innerHTML = `<header class="home-head"><h1>${hello(v.meta.name)}</h1>
+        <p class="date"><span>${date.charAt(0).toUpperCase() + date.slice(1)}</span>${exam !== undefined ? `<span class="chip">Partiels dans ${plural(exam, "jour", "jours")}</span>` : ""}</p></header>
+      ${revisionBlock(rev)}${nextBlock(rev.next)}`;
+    $("#rev-go")?.addEventListener("click", () => {
+      const hero = rev.pending[0];
+      const list = revisionItems(hero);
+      if (!list.length) return toast("Ce cours n'a pas encore de quiz ici : synchronise ton ordinateur.");
+      startSession(list, { title: hero.course, revision: hero });
+    });
     return;
   }
   const { cards, questions, left } = dailySeries();
@@ -636,7 +703,8 @@ function renderHome() {
       ${total ? `<button class="link" type="button" id="more">ou une série d'entraînement sur tout le semestre</button>` : ""}
     </section>
     ${top && cards.length ? `<div class="hint-card" style="--c:${colorOf(top)}"><i></i><span><b>${esc(top.name)}</b><small>c'est là que tu as le plus à revoir</small></span></div>` : ""}
-    ${courses().length ? "" : `<p class="muted center">Pas encore de matière : crée tes quiz et tes cartes sur ton ordinateur.</p>`}`;
+    ${courses().length ? "" : `<p class="muted center">Pas encore de matière : crée tes quiz et tes cartes sur ton ordinateur.</p>`}
+    ${rev ? nextBlock(rev.next) : ""}`;
   $("#go")?.addEventListener("click", () => startSession(interleave(cards, questions), { title: "Séance du jour", series: true }));
   $("#more")?.addEventListener("click", startPractice);
 
@@ -891,9 +959,9 @@ function m1Bar(box, { min, max, value, onChange, unit = ["question", "questions"
 }
 
 // ---------- Séances : une liste de cartes et de questions, dans l'ordre ----------
-function startSession(list, { title = "", free = false, quiz = null, series = false } = {}) {
+function startSession(list, { title = "", free = false, quiz = null, series = false, revision = null } = {}) {
   if (!list.length) return;
-  session = { list: list.slice(0, 200), index: 0, ok: 0, title, free, quiz, series, back: location.hash || "#/" };
+  session = { list: list.slice(0, 200), index: 0, ok: 0, title, free, quiz, series, revision, back: location.hash || "#/" };
   rememberSeries(session.list);
   sessionTheme(true);
   document.body.classList.add("in-session");  // la page ne défile plus : on reste sur la carte ou la question
@@ -1186,6 +1254,9 @@ function finish() {
   const total = s.list.length;
   const kinds = new Set(s.list.map((x) => x.kind));
   if (s.quiz) addEvent("attempt", { quiz_id: s.quiz.id, score: s.ok, total });
+  if (s.revision) {  // la révision de cours est faite : l'ordinateur la valide à la synchro (et prévoit la suivante)
+    addEvent("revision", { course_id: s.revision.course_id, file_id: s.revision.file_id, extra: Boolean(s.revision.extra), score: total ? s.ok / total : null });
+  }
   const pct = total ? Math.round((100 * s.ok) / total) : 0;
   app.innerHTML = `<section class="center-page finish"><div class="score-ring" style="--m:${pct}%"><span>${s.ok}<small>/${total}</small></span></div>
     <h1>${pct >= 80 ? "Bravo !" : pct >= 50 ? "Bien joué" : "Ça viendra"}</h1>

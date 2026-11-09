@@ -24,6 +24,8 @@ BATCH_BYTES = 500_000          # documents envoyés par paquets d'environ 500 Ko
 ACTIVITY_DAYS = 60             # le journal des révisions envoyé (série de jours, révisions du jour)
 CODE_LETTERS = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"  # sans O/0 ni I/1 : faciles à recopier
 CARD_SKIP = {"undo", "image"}
+# Les révisions du jour (et les trois suivantes), données par main.py : le téléphone affiche la même file que l'accueil
+REVISIONS = None
 
 
 def _hash(data) -> str:
@@ -57,6 +59,11 @@ def build_docs(store) -> dict[tuple[str, str], dict]:
         "daily_size": int(store.get_settings().get("daily_size", 30)),  # taille d'une série (téléphone) = révision du jour
         "activity": {day: v for day, v in store.activity().items() if day >= since},
     }
+    if REVISIONS is not None:
+        try:
+            docs[("meta", "all")]["revisions"] = REVISIONS()
+        except Exception:  # le planning n'est qu'un plus : la synchro des quiz et des cartes passe quand même
+            pass
     for quiz in quizzes:
         if quiz.get("questions"):
             docs[("quiz", quiz["id"])] = quiz
@@ -117,6 +124,20 @@ class Sync:
                 return len(answers)
             if kind == "attempt":
                 self.store.record_attempt(str(p["quiz_id"]), int(p["score"]), int(p["total"]), at=str(p["at"]))
+                return 1
+            if kind == "revision":  # une révision de cours faite sur le téléphone
+                from . import spaced
+                course = self.store.get_course(str(p["course_id"]))
+                entry = next((f for f in course["files"] if f["id"] == str(p["file_id"])), None)
+                if entry is None:
+                    return 0
+                day = date.fromisoformat(str(p["at"])[:10])
+                score = None if p.get("score") is None else max(0.0, min(1.0, float(p["score"])))
+                if p.get("extra") and not spaced.view(entry, day)["today"]:
+                    spaced.ensure(entry, day)["pre"] = day.isoformat()
+                elif (entry.get("rev") or {}).get("last") != day.isoformat():
+                    spaced.done(entry, day, score)
+                self.store._save_course(course)
                 return 1
         except (NotFound, KeyError, TypeError, ValueError):
             pass  # quiz ou carte effacés depuis sur le Mac, ou évènement abîmé : on l'oublie

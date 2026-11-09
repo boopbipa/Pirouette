@@ -457,3 +457,24 @@ body.in-session { touch-action: pan-y; }  /* glisser de côté, c'est pour la ca
   100% { box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--fc) 55%, transparent), 0 14px 28px -20px color-mix(in srgb, var(--fc) 55%, transparent); }
 }
 @media (prefers-reduced-motion: reduce) { .feedback.ok, .feedback.ko { animation: none; } }
+
+/* Les révisions de cours (comme l'accueil de l'ordinateur) */
+.rev-card { display: flex; flex-direction: column; align-items: center; text-align: center; padding: 22px 20px 18px; border-radius: 26px; margin: 0 0 14px;
+  background: color-mix(in srgb, var(--c) 10%, var(--surface)); }
+.rev-card .ring { width: 64px; height: 64px; border-radius: 50%; display: grid; place-items: center; background: conic-gradient(var(--c) var(--m, 0%), var(--sunken, #EFECE6) 0); margin-bottom: 10px; }
+.rev-card .ring i { width: 52px; height: 52px; border-radius: 50%; display: grid; place-items: center; background: var(--surface); font: 700 13px/1 inherit; font-style: normal; }
+.rev-when { margin: 0; font-size: 12.5px; font-weight: 650; text-transform: uppercase; letter-spacing: .04em; color: color-mix(in srgb, var(--c) 75%, var(--text)); }
+.rev-when.late { color: #B45309; }
+.rev-card h2 { margin: 2px 0 0; font-size: 26px; font-weight: 700; text-transform: none; letter-spacing: -.015em; color: var(--text); }
+.rev-card .muted { margin: 2px 0 12px; }
+.rev-list, .rev-next { background: var(--surface); border-radius: 20px; padding: 12px 16px; margin: 0 0 14px; }
+.rev-list h3, .rev-next h3 { margin: 0 0 6px; font-size: 11.5px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
+.rev-line { display: grid; grid-template-columns: 46px 10px 1fr; gap: 10px; align-items: center; padding: 8px 0; }
+.rev-line span { color: var(--muted); font-size: 13px; font-variant-numeric: tabular-nums; }
+.rev-line i { width: 9px; height: 9px; border-radius: 50%; background: var(--c); }
+.rev-done { color: var(--muted); font-size: 13px; margin: 0 4px 14px; }
+.rev-ev { display: grid; grid-template-columns: 4px 1fr; gap: 9px; padding: 8px 10px 8px 8px; border-radius: 12px; margin-top: 7px;
+  background: color-mix(in srgb, var(--c) 10%, var(--surface)); }
+.rev-ev i { border-radius: 4px; background: var(--c); }
+.rev-ev b { display: block; color: color-mix(in srgb, var(--c) 75%, var(--text)); }
+.rev-ev small { color: var(--muted); font-size: 12.5px; }

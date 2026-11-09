@@ -117,3 +117,24 @@ def test_custom_quiz_picks_chapters_questions_and_cards(tmp_path, monkeypatch):
                                                 "chapters": [{"course_id": course["id"], "title": "Chapitre 2 : La myéline"}]}).json()
     assert (one["questions"], one["cards"]) == (3, 2)
     assert all(i["quiz_id"] == "b1b2c3d4e5f6" for i in one["items"] if i["kind"] == "question")
+
+
+def test_a_revision_done_on_the_phone_is_validated_on_the_mac(tmp_path, monkeypatch):
+    from datetime import date
+
+    from app import main, sync as sync_mod
+    from app.storage import Store
+    store = Store(tmp_path)
+    monkeypatch.setattr(main, "store", store)
+    course = store.create_course("Neurosciences")
+    store.add_file(course["id"], "CM1.pdf", b"%PDF", "texte")
+    store.add_card(course["id"], "Q", "R")
+    fid = store.get_course(course["id"])["files"][0]["id"]
+    meta = sync_mod.build_docs(store)[("meta", "all")]
+    [item] = meta["revisions"]["today"]
+    assert item["course"] == "Neurosciences" and len(item["cards"]) == 1  # de quoi la faire hors connexion
+    s = sync_mod.Sync.__new__(sync_mod.Sync)
+    s.store = store
+    assert s._apply("revision", {"course_id": course["id"], "file_id": fid, "score": 1, "at": f"{date.today().isoformat()}T18:00:00"}) == 1
+    rev = store.get_course(course["id"])["files"][0]["rev"]
+    assert rev["last"] == date.today().isoformat() and rev["step"] == 1

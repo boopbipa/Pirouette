@@ -10,6 +10,17 @@ from pathlib import Path
 from .extract import SUPPORTED_EXTENSIONS
 
 
+GOOGLE_STUBS = {".gdoc", ".gslides", ".gsheet"}  # Google Drive pour ordinateur : des raccourcis vers le site, pas des fichiers
+
+
+def google_docs(folder: Path) -> list[str]:
+    """Les documents Google Docs / Slides du dossier : Pirouette ne peut pas les lire tels quels."""
+    try:
+        return sorted(p.name for p in folder.iterdir() if p.suffix.lower() in GOOGLE_STUBS and not p.name.startswith("."))
+    except OSError:
+        return []
+
+
 def _course_files(folder: Path) -> tuple[dict[str, Path], list[str]]:
     """Les cours du dossier (premier niveau), par nom en minuscules ; et ceux qu'iCloud a laissés « dans le nuage »."""
     found, cloud = {}, []
@@ -98,7 +109,8 @@ def scan(course: dict) -> dict:
                 updated.append(path.name)
         else:
             new.append(path.name)
-    return {"updated": updated, "new": new, "cloud": [c for c in cloud if c.lower() not in ignored], "missing": False}
+    return {"updated": updated, "new": new, "cloud": [c for c in cloud if c.lower() not in ignored], "missing": False,
+            "google": [g for g in google_docs(folder) if g.lower() not in ignored]}
 
 
 def take(course: dict, names: list[str]) -> list[tuple[str, bytes]]:

@@ -2728,6 +2728,40 @@ def _revisions_with_times() -> dict:
     return revs
 
 
+def _revision_picks(course: dict, file_id: str, day: str) -> dict:
+    """Les cartes et les questions d'une révision, choisies ici pour le téléphone (ce qu'on rate d'abord, puis ce qui
+    est à revoir ou jamais vu), à la taille de sa durée."""
+    contents = _file_contents(course).get(file_id, {"cards": [], "questions": []})
+    entry = next((f for f in course["files"] if f["id"] == file_id), {})
+    minutes, source = _minutes_for(course, entry, day, 0)
+    n_questions = REVISION_QUESTIONS if source == "auto" else max(3, round(minutes * 0.3))
+    n_total = REVISION_SIZE if source == "auto" else max(6, round(minutes * 0.9))
+    today = date.today()
+    weak_q = lambda e: (not (e["stat"] and (e["stat"].get("last") is False or e["stat"]["wrong"] > e["stat"]["right"])), e["stat"] is not None)  # noqa: E731
+    questions = [[e["quiz"]["id"], e["index"]] for e in sorted(contents["questions"], key=weak_q)[:n_questions]]
+    order = lambda c: (not srs.is_weak(c), not (srs.is_new(c) or srs.is_due(c, today)))  # noqa: E731
+    cards = [c["id"] for c in sorted(contents["cards"], key=order)[:max(0, n_total - len(questions))]]
+    return {"cards": cards, "questions": questions}
+
+
+def _revisions_for_phone() -> dict:
+    """Ce que le téléphone affiche : la file du jour (à leur heure, avec de quoi faire chaque révision hors connexion)
+    et les trois suivantes."""
+    revs = _revisions_with_times()
+    keep = ("course_id", "file_id", "course", "title", "start", "end", "minutes", "reason", "late", "extra", "color")
+    today = date.today().isoformat()
+    out = []
+    for r in revs["today"]:
+        item = {k: r.get(k) for k in keep}
+        item.update(_revision_picks(store.get_course(r["course_id"]), r["file_id"], today))
+        out.append(item)
+    return {"day": today, "today": out, "done": [{k: r.get(k) for k in ("course_id", "file_id", "course")} for r in revs["done"]],
+            "next": [{k: r.get(k) for k in ("course_id", "course", "start", "end", "color")} for r in revs.get("next", [])]}
+
+
+sync.REVISIONS = _revisions_for_phone
+
+
 @app.get("/api/revisions")
 async def revisions_today() -> dict:
     return await run_in_threadpool(_revisions_with_times)

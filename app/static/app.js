@@ -3466,7 +3466,8 @@ $("#watch-refresh").addEventListener("click", async () => {
   renderWatchNew(state.course.id, found.new);
   notify([found.updated.length ? `${plural(found.updated.length, "cours mis à jour", "cours mis à jour")}` : "",
     found.new.length ? `${plural(found.new.length, "nouveau cours", "nouveaux cours")} à ajouter (page Cours)` : "",
-    found.cloud.length ? `${plural(found.cloud.length, "cours", "cours")} encore dans iCloud : ouvre-les une fois dans le Finder` : ""]
+    found.cloud.length ? `${plural(found.cloud.length, "cours", "cours")} encore dans iCloud : ouvre-les une fois dans le Finder` : "",
+    found.google?.length ? `${plural(found.google.length, "document Google Docs", "documents Google Docs")} : dans Google Docs, Fichier › Télécharger › Microsoft Word, et enregistre-le dans ce dossier` : ""]
     .filter(Boolean).join(" · ") || "Rien de nouveau dans le dossier.");
 });
 $("#watch-pick").addEventListener("click", async () => {
