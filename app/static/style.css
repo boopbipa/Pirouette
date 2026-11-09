@@ -3276,3 +3276,12 @@ p, li, h1, h2, h3, h4, blockquote, td, th, dd, dt, pre, code, .feedback, .msg-bu
 .q-next b { color: var(--text); font-weight: 600; margin-right: 6px; }
 @media (max-width: 640px) { .q-row { grid-template-columns: 10px minmax(0, 1fr); } .q-h { display: none; } .q-icons { grid-column: 2; opacity: 1; flex-wrap: wrap; } }
 @media (prefers-reduced-motion: reduce) { .q-hero.rise { animation: none; } }
+
+.q-small { display: flex; gap: 14px; margin-top: 6px; }
+.q-link { display: inline-flex; align-items: center; gap: 5px; border: 0; background: none; padding: 2px 0; font-size: 13px; color: var(--muted); cursor: pointer; }
+.q-link svg { width: 13px; height: 13px; }
+.q-link:hover { color: color-mix(in srgb, var(--c) 80%, var(--text)); }
+.q-later { width: 260px; }
+.q-later .q-days { display: flex; gap: 6px; margin-bottom: 10px; }
+.q-pick { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 13px; color: var(--muted); margin-bottom: 10px; }
+.q-pick input { width: auto; padding: 6px 8px; font-size: 13px; }

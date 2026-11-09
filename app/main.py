@@ -2732,6 +2732,7 @@ async def revisions_today() -> dict:
 class RevisionDoneIn(BaseModel):
     score: float | None = None  # 0 à 1 ; rien : le cours a juste été relu
     extra: bool = False         # révision « avant ton cours » : notée, sans changer le rythme du cours
+    day: str = ""               # « Repousser » : le jour choisi (vide : demain)
 
 
 @app.post("/api/revisions/{course_id}/{file_id}/done")
@@ -2752,17 +2753,24 @@ async def revision_done(course_id: str, file_id: str, body: RevisionDoneIn) -> d
 
 @app.post("/api/revisions/{course_id}/{file_id}/postpone")
 async def revision_postpone(course_id: str, file_id: str, body: RevisionDoneIn) -> dict:
-    """« Demain » (un imprévu) : la révision passe au lendemain ; celle « avant ton cours » est juste sautée."""
+    """« Repousser » (un imprévu) : la révision passe au jour choisi (demain par défaut) ; celle « avant ton cours »
+    est juste sautée."""
     course = store.get_course(course_id)
     entry = next((f for f in course["files"] if f["id"] == file_id), None)
     if entry is None:
         raise HTTPException(404, "Ce cours n'existe plus.")
     today = date.today()
+    try:
+        target = date.fromisoformat(body.day) if body.day else today + timedelta(days=1)
+    except ValueError as exc:
+        raise HTTPException(400, "Date invalide.") from exc
+    if target <= today:
+        raise HTTPException(400, "Choisis un jour à partir de demain.")
     rev = spaced.ensure(entry, today)
     if body.extra and not spaced.view(entry, today)["today"]:
         rev["pre_skip"] = today.isoformat()
     else:
-        rev["due"] = (today + timedelta(days=1)).isoformat()
+        rev["due"] = target.isoformat()
         if (rev.get("at") or {}).get("day") == today.isoformat():
             rev.pop("at", None)
         if (rev.get("len") or {}).get("day") == today.isoformat():

@@ -588,8 +588,10 @@ function renderQueue(revs, progress) {
       : `<button class="primary" type="button" data-q="done" data-key="${hero.course_id}:${hero.file_id}">C'est fait</button>`;
     top = `<div class="q-hero" style="--c:${subjectColor(hero.course_id)}" data-hero="${hero.course_id}:${hero.file_id}">
       <span class="q-ring" style="--m:${Math.round((100 * done.length) / all)}%"><span>${done.length}/${all}</span></span>
-      <div class="q-txt"><div class="q-when${w.late ? " late" : ""}">${escapeHtml(w.text)}</div><h2>${revName(hero, pending)} <small>${minLabel(hero.minutes)}</small></h2></div>
-      <div class="q-acts"><button class="q-ico" type="button" data-q="later" data-key="${hero.course_id}:${hero.file_id}" title="Un imprévu : à demain">${ICON_LATER}Demain</button>
+      <div class="q-txt"><div class="q-when${w.late ? " late" : ""}">${escapeHtml(w.text)}</div><h2>${revName(hero, pending)} <small>${minLabel(hero.minutes)}</small></h2>
+        <div class="q-small">${quizzable(hero) ? `<button class="q-link" type="button" data-q="done" data-key="${hero.course_id}:${hero.file_id}" title="Tu l'as révisée autrement (relue, fiches…)">${ICON_CHECK}C'est fait</button>` : ""}
+          <button class="q-link" type="button" data-q="later" data-key="${hero.course_id}:${hero.file_id}" title="Un imprévu : à un autre jour">${ICON_LATER}Repousser</button></div></div>
+      <div class="q-acts">
         <button class="ghost" type="button" data-q="read" data-key="${hero.course_id}:${hero.file_id}">${REV_DOC}Relire le cours</button>${go}</div>
     </div>`;
   } else {
@@ -610,7 +612,7 @@ function renderQueue(revs, progress) {
       <div class="q-icons">
         <button class="q-ico" type="button" data-q="done" data-key="${key}">${ICON_CHECK}C'est fait</button>
         <button class="q-ico" type="button" data-q="read" data-key="${key}">${REV_DOC}Relire</button>
-        <button class="q-ico" type="button" data-q="later" data-key="${key}">${ICON_LATER}Demain</button>
+        <button class="q-ico" type="button" data-q="later" data-key="${key}">${ICON_LATER}Repousser</button>
       </div></div>`;
   }).join("");
   const doneRow = done.length ? `<div class="q-done"><span class="ok">✓ Fait aujourd'hui</span>${done.map((r) => `<span class="q-chip" style="--c:${subjectColor(r.course_id)}"><i></i>${escapeHtml(r.course)}</span>`).join("")}</div>` : "";
@@ -640,11 +642,42 @@ $("#rev-queue").addEventListener("click", async (e) => {
   const r = (state.revisions?.today || []).find((x) => x.course_id === c && x.file_id === f);
   if (action === "read") return openCourseFile(c, f);
   if (action === "go") return startSession({ mode: "revision", pick: `${c}:${f}` }, { title: r ? r.course : "Révision", back: "#/accueil" });
+  if (action === "later") return askPostpone(b, c, f, Boolean(r?.extra));
   b.disabled = true;
-  const path = action === "later" ? "postpone" : "done";
-  await api(`/api/revisions/${c}/${f}/${path}`, jsonBody("POST", { extra: Boolean(r?.extra) })).catch((err) => notify(err.message));
+  await api(`/api/revisions/${c}/${f}/done`, jsonBody("POST", { extra: Boolean(r?.extra) })).catch((err) => notify(err.message));
   openAccueil();
 });
+// « Repousser » : demain, après-demain, ou le jour qu'on veut (Calendrier suit)
+function askPostpone(button, c, f, extra) {
+  document.querySelector(".wk-ask")?.remove();
+  const day = (n) => { const d = new Date(); d.setDate(d.getDate() + n); return isoDay(d); };
+  const label = (n) => new Date(`${day(n)}T12:00:00`).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric" });
+  const ask = document.createElement("div");
+  ask.className = "wk-ask q-later";
+  ask.innerHTML = extra
+    ? `<p>Cette révision était pour avant ton cours : on la saute ?</p><div><button class="primary small" type="button" data-day="${day(1)}">La sauter</button></div>`
+    : `<p>Repousser à…</p>
+      <div class="q-days"><button class="ghost small" type="button" data-day="${day(1)}">Demain</button>
+        <button class="ghost small" type="button" data-day="${day(2)}">${label(2).replace(/^./, (x) => x.toUpperCase())}</button></div>
+      <label class="q-pick">Un autre jour <input type="date" min="${day(1)}" value="${day(3)}" id="q-later-date"></label>
+      <div><button class="primary small" type="button" data-pick="1">Repousser</button></div>`;
+  document.body.append(ask);
+  const box = button.getBoundingClientRect();
+  Object.assign(ask.style, { left: `${Math.max(8, Math.min(window.innerWidth - ask.offsetWidth - 8, box.left))}px`,
+    top: `${Math.min(window.innerHeight - ask.offsetHeight - 8, box.bottom + 6)}px` });
+  const close = () => { ask.remove(); document.removeEventListener("pointerdown", outside, true); };
+  const outside = (e) => { if (!ask.contains(e.target)) close(); };
+  setTimeout(() => document.addEventListener("pointerdown", outside, true));
+  ask.addEventListener("click", async (e) => {
+    const b = e.target.closest("[data-day], [data-pick]");
+    if (!b) return;
+    const target = b.dataset.day || ask.querySelector("#q-later-date").value;
+    if (!target) return;
+    close();
+    await api(`/api/revisions/${c}/${f}/postpone`, jsonBody("POST", { extra, day: target })).catch((err) => notify(err.message));
+    openAccueil();
+  });
+}
 
 // Après une séance (emploi du temps) sans nouveau cours ajouté : « Tu as eu Neurosciences ce matin »
 function renderAfterClass(list) {
