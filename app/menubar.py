@@ -18,20 +18,21 @@ def build(data: dict, today: date | None = None) -> tuple[str, list[dict]]:
     `data` : la réponse de /api/revisions."""
     pending = data.get("today") or []
     done = data.get("done") or []
-    quiz = [r for r in pending if r.get("cards", 0) + r.get("questions", 0) > 0]
     rows: list[dict] = []
-    if pending:
-        if quiz:
-            rows.append({"title": "Faire le quiz du jour", "action": "quiz", "enabled": True})
-    elif done:
-        rows.append({"title": "Tout est révisé aujourd'hui ✓", "enabled": False})
-    else:
-        rows.append({"title": "Rien à réviser aujourd'hui", "enabled": False})
+    if pending:  # la prochaine révision (la même que la grande carte de l'accueil)
+        first = pending[0]
+        has_quiz = first.get("cards", 0) + first.get("questions", 0) > 0
+        rows.append({"title": f"Commencer : {first['course']}",
+                     "action": f"rev:{first['course_id']}:{first['file_id']}" if has_quiz else "home", "enabled": True})
+    else:  # un jour sans révision (ou tout est fait) : le quiz du jour, court
+        if done:
+            rows.append({"title": "Tout est révisé aujourd'hui ✓", "enabled": False})
+        rows.append({"title": "Quiz du jour (10 min)", "action": "quiz", "enabled": True})
     if rows and (pending or done):
         rows.append({"separator": True})
-    # Juste la matière (le nom du cours seulement si deux cours de la même matière sont à réviser)
+    # Ensuite : juste la matière (le nom du cours seulement si deux cours de la même matière sont à réviser)
     names = [r["course"] for r in pending]
-    for r in pending:
+    for r in pending[1:]:
         has_quiz = r.get("cards", 0) + r.get("questions", 0) > 0
         title = r["course"] if names.count(r["course"]) == 1 else f"{r['course']} · {r['title']}"
         rows.append({"title": title, "action": f"rev:{r['course_id']}:{r['file_id']}" if has_quiz else "home", "enabled": True})

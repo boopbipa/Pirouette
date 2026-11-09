@@ -74,3 +74,16 @@ def test_revisions_api_and_session(tmp_path, monkeypatch):
     data = client.get("/api/revisions").json()
     assert data["today"] == [] and data["done"][0]["file_id"] == fid
     assert "quiz_count" not in store.get_course(course["id"])  # la matière est enregistrée telle quelle
+
+
+def test_postpone_to_tomorrow(tmp_path, monkeypatch):
+    store = Store(tmp_path)
+    monkeypatch.setattr(main, "store", store)
+    course = store.create_course("Neurosciences")
+    store.add_file(course["id"], "CM1.pdf", b"%PDF", "texte")
+    fid = store.get_course(course["id"])["files"][0]["id"]
+    client = TestClient(main.app)
+    assert client.get("/api/revisions").json()["today"][0]["start"]  # à son heure
+    client.post(f"/api/revisions/{course['id']}/{fid}/postpone", json={})
+    data = client.get("/api/revisions").json()
+    assert data["today"] == [] and data["upcoming"][0]["due"] == (date.today() + timedelta(days=1)).isoformat()

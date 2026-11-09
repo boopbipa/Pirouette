@@ -1864,7 +1864,8 @@ SESSION_QUESTIONS = 10
 
 @app.get("/api/session")
 async def session(mode: str = "today", course: str = "", folder: str = "", filter: str = "review",
-                  questions: bool = True, minutes: int = 15, chapter: str = "", file: str = "", pick: str = "") -> dict:
+                  questions: bool = True, minutes: int = 15, chapter: str = "", file: str = "", pick: str = "",
+                  limit: int = 0) -> dict:
     if mode == "revision":  # la révision espacée d'un ou plusieurs cours (accueil)
         return await run_in_threadpool(_revision_session, pick, questions)
     if pick:  # une sélection de cours et de fichiers, de matières différentes (Réviser → « Choisir »)
@@ -1882,6 +1883,10 @@ async def session(mode: str = "today", course: str = "", folder: str = "", filte
         return _session(mode, "", "", filter, questions, minutes, chapter, ids=ids, keep=keep,
                         only=lambda owner, card: _file_of(owner, card) == file)
     result = _session(mode, course, folder, filter, questions, minutes, chapter)
+    if limit and mode == "today" and len(result["items"]) > limit:  # le quiz du jour de l'accueil : court (≈ 10 min)
+        items = result["items"][:limit]
+        return result | {"items": items, "cards": sum(i["kind"] == "card" for i in items),
+                         "questions": sum(i["kind"] == "question" for i in items)}
     if mode == "quiz":
         # Quelques questions au hasard dans tous les quiz (du cours choisi, de la matière…), le tirage après le filtre
         size = int(store.get_settings().get("quiz_size", 10)) or SESSION_QUESTIONS
@@ -2665,6 +2670,8 @@ def _revisions(today: date | None = None, now: datetime | None = None) -> dict:
         last = max(mine, key=lambda i: i["added_at"])
         when = "demain " if c["start"][:10] > today.isoformat() else ""
         before = f"Avant ton cours de {when}{_hour(c['start'])}"
+        if (objs[(last["course_id"], last["file_id"])][1].get("rev") or {}).get("pre_skip") == today.isoformat():
+            continue  # « Demain » sur la révision d'avant le cours : sautée aujourd'hui
         if last in due:
             last["before"] = before
         elif last in done or last["pre"] == today.isoformat():
@@ -2700,9 +2707,26 @@ def _revisions(today: date | None = None, now: datetime | None = None) -> dict:
     return {"today": due, "done": done, "upcoming": upcoming[:12], "after_class": after}
 
 
+def _revisions_with_times() -> dict:
+    """Les révisions du jour avec leur heure (comme dans le Planning et Calendrier), dans l'ordre de la journée :
+    la première non faite est « la prochaine » (celle en retard d'abord, puisque son heure est passée)."""
+    revs = _revisions()
+    agenda = _agenda()
+    data = agenda.load()
+    courses = [c for c in store.list_courses() if c["id"] in set(store.active_course_ids())]
+    today = date.today().isoformat()
+    times = {(r["course_id"], r["file_id"]): r for r in _timed_revisions(data, agenda, courses).get(today, []) if r.get("start")}
+    for r in revs["today"]:
+        t = times.get((r["course_id"], r["file_id"]))
+        if t:
+            r["start"], r["end"], r["minutes"] = t["start"], t["end"], t["minutes"]
+    revs["today"].sort(key=lambda r: (-(r.get("late") or 0) if not r.get("extra") else 0, r.get("start") or "~"))  # les retards d'abord
+    return revs
+
+
 @app.get("/api/revisions")
 async def revisions_today() -> dict:
-    return await run_in_threadpool(_revisions)
+    return await run_in_threadpool(_revisions_with_times)
 
 
 class RevisionDoneIn(BaseModel):
@@ -2724,6 +2748,28 @@ async def revision_done(course_id: str, file_id: str, body: RevisionDoneIn) -> d
     store._save_course(course)
     _calendar_soon()
     return spaced.view(entry, date.today())
+
+
+@app.post("/api/revisions/{course_id}/{file_id}/postpone")
+async def revision_postpone(course_id: str, file_id: str, body: RevisionDoneIn) -> dict:
+    """« Demain » (un imprévu) : la révision passe au lendemain ; celle « avant ton cours » est juste sautée."""
+    course = store.get_course(course_id)
+    entry = next((f for f in course["files"] if f["id"] == file_id), None)
+    if entry is None:
+        raise HTTPException(404, "Ce cours n'existe plus.")
+    today = date.today()
+    rev = spaced.ensure(entry, today)
+    if body.extra and not spaced.view(entry, today)["today"]:
+        rev["pre_skip"] = today.isoformat()
+    else:
+        rev["due"] = (today + timedelta(days=1)).isoformat()
+        if (rev.get("at") or {}).get("day") == today.isoformat():
+            rev.pop("at", None)
+        if (rev.get("len") or {}).get("day") == today.isoformat():
+            rev["len"]["day"] = rev["due"]
+    store._save_course(course)
+    _calendar_soon()
+    return {"ok": True}
 
 
 def _revision_session(pick: str, questions: bool) -> dict:

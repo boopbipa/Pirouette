@@ -3237,3 +3237,42 @@ p, li, h1, h2, h3, h4, blockquote, td, th, dd, dt, pre, code, .feedback, .msg-bu
 .day-ev.done { opacity: .55; cursor: default; } .day-ev.done b::before { content: "✓ "; }
 .day-ev.now { box-shadow: inset 0 0 0 1.5px var(--c); }
 .day-empty { color: var(--muted); font-size: 12.5px; margin: 4px 2px; }
+
+/* Accueil : la file des révisions du jour (un seul bloc) */
+.queue { background: var(--surface); border-radius: 18px; box-shadow: var(--shadow); overflow: hidden; margin-bottom: 26px; }
+.q-hero { display: flex; gap: 18px; align-items: center; flex-wrap: wrap; padding: 20px 22px; background: color-mix(in srgb, var(--c) 8%, var(--surface)); }
+.q-hero.rise { animation: q-rise .45s cubic-bezier(.2, .8, .3, 1); }
+@keyframes q-rise { from { transform: translateY(26px); opacity: 0; } }
+.q-ring { width: 50px; height: 50px; border-radius: 50%; flex: none; display: grid; place-items: center; background: conic-gradient(var(--c) var(--m, 0%), var(--sunken) 0); }
+.q-ring span { width: 41px; height: 41px; border-radius: 50%; background: var(--surface); display: grid; place-items: center; font: 700 12.5px/1 var(--sans); }
+.q-txt { flex: 1 1 220px; min-width: 0; }
+.q-when { font-size: 12.5px; font-weight: 650; text-transform: uppercase; letter-spacing: .04em; color: color-mix(in srgb, var(--c) 75%, var(--text)); }
+.q-when.late { color: var(--warn); }
+.q-txt h2 { margin: 2px 0 0; font-size: 21px; letter-spacing: -.015em; }
+.q-txt h2 span { font-weight: 500; color: var(--muted); }
+.q-txt h2 small { font-size: 14px; font-weight: 500; color: var(--muted); margin-left: 6px; letter-spacing: 0; }
+.q-acts { display: flex; gap: 8px; align-items: center; }
+.q-acts .ghost { display: inline-flex; align-items: center; gap: 6px; }
+.q-acts svg { width: 14px; height: 14px; }
+.q-list { padding: 4px 12px 10px; }
+.q-sect { font-size: 11.5px; font-weight: 650; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); padding: 10px 10px 4px; }
+.q-row { display: grid; grid-template-columns: 104px 10px minmax(0, 1fr) auto; gap: 12px; align-items: center; padding: 8px 10px; border-radius: 12px; min-height: 46px; transition: background .15s; }
+.q-row:hover { background: color-mix(in srgb, var(--c) 7%, transparent); }
+.q-h { color: var(--muted); font-size: 13px; font-variant-numeric: tabular-nums; }
+.q-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--c); }
+.q-name { min-width: 0; } .q-name b { font-size: 15px; } .q-name b span { font-weight: 500; color: var(--muted); }
+.q-late { margin-left: 8px; font-size: 12px; font-weight: 600; color: var(--warn); background: color-mix(in srgb, var(--warn) 12%, var(--surface)); padding: 2px 8px; border-radius: 99px; }
+.q-icons { display: flex; gap: 6px; opacity: 0; transition: opacity .15s; }
+.q-row:hover .q-icons, .q-row:focus-within .q-icons { opacity: 1; }
+.q-ico { display: inline-flex; align-items: center; gap: 5px; height: 30px; padding: 0 11px; border-radius: 99px; border: 0; background: var(--surface);
+  box-shadow: inset 0 0 0 1px var(--border); font-size: 12.5px; color: var(--text); }
+.q-ico svg { width: 14px; height: 14px; }
+.q-ico:hover { box-shadow: inset 0 0 0 1px var(--c); color: color-mix(in srgb, var(--c) 80%, var(--text)); }
+.q-done { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 14px; padding: 11px 22px; border-top: 1px solid var(--border); color: var(--muted); font-size: 13px; }
+.q-done .ok { color: var(--ok); font-weight: 650; }
+.q-chip { display: inline-flex; align-items: center; gap: 5px; margin-right: 8px; } .q-chip i { width: 7px; height: 7px; border-radius: 50%; background: var(--c); }
+.q-next { display: flex; flex-wrap: wrap; gap: 6px 24px; padding: 12px 22px; border-top: 1px solid var(--border); color: var(--muted); font-size: 13px; }
+.q-next:empty { display: none; }
+.q-next b { color: var(--text); font-weight: 600; margin-right: 6px; }
+@media (max-width: 640px) { .q-row { grid-template-columns: 10px minmax(0, 1fr); } .q-h { display: none; } .q-icons { grid-column: 2; opacity: 1; flex-wrap: wrap; } }
+@media (prefers-reduced-motion: reduce) { .q-hero.rise { animation: none; } }

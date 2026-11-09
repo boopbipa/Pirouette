@@ -71,22 +71,9 @@
           <button class="ghost small" type="submit">OK</button>
           <button class="link-button" type="button" id="name-skip">Plus tard</button>
         </form>
-      <!-- Tout le bandeau est le bouton (comme « Révision du jour » dans une matière), avec le reflet qui suit la souris -->
-      <div class="today-bar go-banner" id="today-bar" role="button" tabindex="0" aria-label="Commencer la révision du jour" hidden>
-        <span class="mastery-ring" id="today-ring"><span></span></span>
-        <span class="today-text"><b id="today-title"></b><small id="today-sub"></small></span>
-        <button class="primary go-btn" type="button" id="today-go">Commencer</button>
-      </div>
       <div class="after-class" id="after-class"></div>
-      <div class="acc-grid" id="acc-grid">
-        <div class="acc-card">
-          <div class="acc-head"><b>Tes révisions du jour</b><small id="rev-sub"></small></div>
-          <div id="rev-list"></div>
-        </div>
-        <div class="acc-card acc-side">
-          <div class="rev-days" id="rev-next"></div>
-        </div>
-      </div>
+      <!-- La file des révisions du jour : la prochaine en grand (le seul « Commencer »), le reste dessous -->
+      <div class="queue" id="rev-queue"></div>
     </section>
 
     <!-- Planning : la semaine, les séances de l'emploi du temps et les cours à réviser chaque jour -->

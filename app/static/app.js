@@ -166,7 +166,7 @@ async function route() {
       const [, , go, pick] = hash.slice(1).split("/");
       if (go === "quiz" || go === "r") {
         history.replaceState(null, "", "#/accueil");
-        if (go === "quiz" && !$("#today-go").hidden) $("#today-go").click();
+        if (go === "quiz") $("#rev-queue [data-q=go], #rev-queue [data-q=quiz]")?.click();
         else if (go === "r" && pick) {
           const r = (state.revisions?.today || []).find((x) => `${x.course_id}:${x.file_id}` === pick);
           startSession({ mode: "revision", pick }, { title: r ? `${r.course} · ${r.title}` : "Révision", back: "#/accueil" });
@@ -529,9 +529,10 @@ async function openAccueil() {
     box.innerHTML = x.days <= 0 ? "<b>Partiels en cours</b>" : `<b>Partiels dans ${plural(x.days, "jour", "jours")}</b>`;
     box.title = `${x.course ? `${x.course} : ` : ""}${x.days <= 0 ? "semaine de partiels en cours" : `partiels le ${dayLong(x.date)}`}`;
   }
-  renderTodayBar(profile, progress, revs);
-  renderRevisions(revs);
-  api("/api/revisions/days?n=3").then(renderDays).catch(() => {});
+  $("#hello").textContent = helloText(profile.name);
+  $("#name-prompt").hidden = profile.asked;
+  renderQueue(revs, progress);
+  api("/api/revisions/days?n=4").then(renderNextDays).catch(() => {});
   renderAfterClass(revs.after_class || []);
   show("accueil");
 }
@@ -543,60 +544,6 @@ const revPick = (list) => {
   for (const r of list) (by[r.course_id] ||= []).push(r.file_id);
   return Object.entries(by).map(([c, files]) => `${c}:${files.join(",")}`).join(";");
 };
-
-// Le quiz du jour : les cours à réviser aujourd'hui s'il y en a, sinon les cartes du jour (comme avant)
-function renderTodayBar(profile, progress, revs) {
-  $("#hello").textContent = helloText(profile.name);
-  $("#name-prompt").hidden = profile.asked;
-  const pending = revs.today.filter(quizzable);
-  const today = progress.today || { cards: 0, questions: 0 };
-  const list = progress.courses || [];
-  const total = list.reduce((n, c) => n + (c.cards || 0), 0);
-  $("#today-bar").hidden = !pending.length && !revs.done.length && !total && !today.questions;
-  if (pending.length || (revs.done.length && !revs.today.length)) {
-    const all = pending.length + revs.done.length;
-    const ring = todayRing(revs.done.length, pending.length);
-    $("#today-ring").style.setProperty("--m", `${pending.length ? Math.round((100 * revs.done.length) / all) : 100}%`);
-    $("#today-ring").classList.toggle("done", !pending.length);
-    $("#today-ring span").textContent = pending.length ? `${revs.done.length}/${all}` : ring.text;
-    $("#today-ring").title = "Cours révisés aujourd'hui";
-    const minutes = pending.reduce((n, r) => n + r.minutes, 0);
-    const subjects = new Set(pending.map((r) => r.course_id)).size;
-    $("#today-title").textContent = pending.length ? `Quiz du jour · ${plural(pending.length, "cours à réviser", "cours à réviser")}` : "Tes cours du jour sont révisés";
-    const toRead = revs.today.length - pending.length;
-    $("#today-sub").textContent = pending.length
-      ? `${subjects > 1 ? `${subjects} matières · ` : ""}environ ${minutes} min${toRead ? ` · ${plural(toRead, "autre cours", "autres cours")} à relire, juste en dessous` : ""}`
-      : "Bravo ! Tu peux continuer avec tes cartes du jour, ou souffler.";
-    state.todayQuiz = pending.length ? "revision" : (today.cards + (mixQuestions() ? today.questions : 0) ? "today" : null);
-    $("#today-go").textContent = pending.length ? "Commencer" : "Mes cartes du jour";
-    $("#today-go").hidden = !state.todayQuiz;
-    return;
-  }
-  const due = today.cards + (mixQuestions() ? today.questions : 0);
-  const doneAll = (progress.done_today?.cards || 0) + (mixQuestions() ? progress.done_today?.questions || 0 : 0);
-  const ring = todayRing(doneAll, due);
-  $("#today-ring").style.setProperty("--m", `${ring.pct}%`);
-  $("#today-ring").classList.toggle("done", !due);
-  $("#today-ring span").textContent = ring.text;
-  $("#today-ring").title = ring.title;
-  const subjects = list.filter((c) => c.today).length;
-  const parts = [today.cards ? plural(today.cards, "carte", "cartes") : "",
-    mixQuestions() && today.questions ? plural(today.questions, "question", "questions") : ""].filter(Boolean);
-  $("#today-title").textContent = due ? `Quiz du jour · ${parts.join(" et ")}` : "Tout est à jour aujourd'hui";
-  const minutes = Math.max(1, Math.round(today.cards * 0.2 + (mixQuestions() ? today.questions * 0.5 : 0)));
-  $("#today-sub").textContent = due ? `Rien de prévu aujourd'hui : des cartes à revoir ou pas vues depuis longtemps · environ ${minutes} min`
-    : "Reviens demain, ou révise une matière en particulier";
-  state.todayQuiz = due ? "today" : null;
-  $("#today-go").textContent = "Commencer";
-  $("#today-go").hidden = !due;
-}
-$("#today-go").addEventListener("click", () => {
-  if (state.todayQuiz === "revision") {
-    const pending = (state.revisions?.today || []).filter(quizzable);
-    return startSession({ mode: "revision", pick: revPick(pending) }, { title: "Quiz du jour", back: "#/accueil" });
-  }
-  startSession({ mode: "today" }, { title: "Révision du jour", back: "#/accueil" });
-});
 
 // « Relire le cours » : le fichier d'origine (PDF, Word…) s'ouvre dans son app
 async function openCourseFile(courseId, fileId) {
@@ -615,71 +562,88 @@ function revName(r, list) {
   const twin = list.filter((x) => x.course_id === r.course_id).length > 1;
   return `${escapeHtml(r.course)}${twin ? ` <span>· ${escapeHtml(r.title)}</span>` : ""}`;
 }
-function revRow(r, done, list = []) {
-  const content = r.cards + (mixQuestions() ? r.questions : 0);
-  const why = r.late && !r.extra ? `En retard de ${plural(r.late, "jour", "jours")}` : r.extra ? "Avant ton cours" : r.reason;
-  const chips = `<span class="rev-chip${r.late ? "" : " hot"}">${escapeHtml(why)}</span>`;
-  const read = r.kind !== undefined ? `<button class="ghost small rev-read" type="button" data-open="${r.course_id}:${r.file_id}">${REV_DOC}Relire le cours${r.kind ? `<span class="rev-kind">${escapeHtml(r.kind)}</span>` : ""}</button>` : "";
-  const acts = done
-    ? `<span class="rev-ok">✓ ${r.pre && !r.last?.startsWith(r.pre) ? "Prêt pour ton cours" : `${r.score != null ? `${r.score} %` : "Relu"} · prochaine ${nextIn(r.in_days)}`}</span>`
-    : `${read}${content ? `<button class="primary small rev-go" type="button" data-rev="${r.course_id}:${r.file_id}">Faire le quiz</button>`
-      : `<button class="primary small rev-go" type="button" data-read-done="${r.course_id}:${r.file_id}">C'est relu</button>`}`;
-  return `<div class="rev-row${done ? " done" : ""}" style="--c:${subjectColor(r.course_id)}">
-    <span class="card-glare"></span>
-    <span class="subject-dot"></span>
-    <div class="rev-main"><div class="rev-title">${revName(r, list)}</div>
-      ${done ? "" : `<div class="rev-chips">${chips}</div>`}</div>
-    <div class="rev-acts">${acts}</div>
-  </div>`;
+// ---------- Accueil : la file des révisions du jour ----------
+// En haut, en grand, la révision à faire maintenant (la plus en retard d'abord) : le seul « Commencer » de la page.
+// Dessous, le reste de la journée (au survol : « C'est fait », « Relire », « Demain »), ce qui est fait, et les jours
+// suivants en une ligne. Un jour sans révision, la grande carte est le quiz du jour (court).
+const DAILY_LIMIT = 15;  // le quiz du jour : 15 questions, ≈ 10 min
+const ICON_CHECK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5L20 7"/></svg>';
+const ICON_LATER = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h12M13 6l6 6-6 6"/></svg>';
+function revWhen(r, now = new Date()) {
+  if (r.late && !r.extra) return { text: `En retard de ${plural(r.late, "jour", "jours")}`, late: true };
+  if (!r.start) return { text: "Aujourd'hui", late: false };
+  const start = new Date(r.start), end = new Date(r.end || r.start);
+  if (end < now) return { text: `En retard · prévue à ${hourText(r.start)}`, late: true };
+  if (start <= now) return { text: "Maintenant", late: false };
+  return { text: `À ${hourText(r.start)}`, late: false };
 }
-function renderRevisions(revs) {
-  const none = !revs.today.length && !revs.done.length && !revs.upcoming.length;
-  $("#acc-grid").hidden = none;
-  const minutes = revs.today.reduce((n, r) => n + r.minutes, 0);
-  $("#rev-sub").textContent = revs.today.length ? `${plural(revs.today.length, "cours", "cours")} · environ ${minLabel(minutes)}`
-    : revs.done.length ? "Tout est fait pour aujourd'hui." : "Rien à réviser aujourd'hui.";
-  const shown = [...revs.today, ...revs.done];
-  $("#rev-list").innerHTML = [...revs.today.map((r) => revRow(r, false, shown)), ...revs.done.map((r) => revRow(r, true, shown))].join("")
-    || `<p class="muted rev-empty">Chaque cours ajouté revient ici le jour même, puis 1, 3, 7, 15 et 30 jours après.</p>`;
+function renderQueue(revs, progress) {
+  const pending = revs.today, done = revs.done, all = pending.length + done.length;
+  const hero = pending[0];
+  let top;
+  if (hero) {
+    const w = revWhen(hero);
+    const go = quizzable(hero)
+      ? `<button class="primary" type="button" data-q="go" data-key="${hero.course_id}:${hero.file_id}">Commencer</button>`
+      : `<button class="primary" type="button" data-q="done" data-key="${hero.course_id}:${hero.file_id}">C'est fait</button>`;
+    top = `<div class="q-hero" style="--c:${subjectColor(hero.course_id)}" data-hero="${hero.course_id}:${hero.file_id}">
+      <span class="q-ring" style="--m:${Math.round((100 * done.length) / all)}%"><span>${done.length}/${all}</span></span>
+      <div class="q-txt"><div class="q-when${w.late ? " late" : ""}">${escapeHtml(w.text)}</div><h2>${revName(hero, pending)} <small>${minLabel(hero.minutes)}</small></h2></div>
+      <div class="q-acts"><button class="q-ico" type="button" data-q="later" data-key="${hero.course_id}:${hero.file_id}" title="Un imprévu : à demain">${ICON_LATER}Demain</button>
+        <button class="ghost" type="button" data-q="read" data-key="${hero.course_id}:${hero.file_id}">${REV_DOC}Relire le cours</button>${go}</div>
+    </div>`;
+  } else {
+    const t = progress.today || { cards: 0, questions: 0 };
+    const n = Math.min(DAILY_LIMIT, t.cards + (mixQuestions() ? t.questions : 0));
+    top = `<div class="q-hero" style="--c:var(--accent)" data-hero="quiz">
+      <span class="q-ring" style="--m:${done.length ? 100 : 0}%"><span>${done.length ? "✓" : n}</span></span>
+      <div class="q-txt"><div class="q-when">${done.length ? "Tout est révisé aujourd'hui ✓" : "Quiz du jour"}</div>
+        <h2>${n ? `${done.length ? "Quiz du jour · " : ""}${plural(n, "question", "questions")} <small>environ ${Math.max(2, Math.round(n * 0.6))} min</small>` : "Tout est à jour"}</h2></div>
+      <div class="q-acts">${n ? `<button class="primary" type="button" data-q="quiz">Commencer</button>` : ""}</div>
+    </div>`;
+  }
+  const rows = pending.slice(1).map((r) => {
+    const w = revWhen(r), key = `${r.course_id}:${r.file_id}`;
+    return `<div class="q-row" style="--c:${subjectColor(r.course_id)}">
+      <span class="q-h">${r.start ? `${r.start.slice(11, 16)} – ${r.end.slice(11, 16)}` : ""}</span><span class="q-dot"></span>
+      <div class="q-name"><b>${revName(r, pending)}</b>${w.late ? `<span class="q-late">${escapeHtml(w.text)}</span>` : ""}</div>
+      <div class="q-icons">
+        <button class="q-ico" type="button" data-q="done" data-key="${key}">${ICON_CHECK}C'est fait</button>
+        <button class="q-ico" type="button" data-q="read" data-key="${key}">${REV_DOC}Relire</button>
+        <button class="q-ico" type="button" data-q="later" data-key="${key}">${ICON_LATER}Demain</button>
+      </div></div>`;
+  }).join("");
+  const doneRow = done.length ? `<div class="q-done"><span class="ok">✓ Fait aujourd'hui</span>${done.map((r) => `<span class="q-chip" style="--c:${subjectColor(r.course_id)}"><i></i>${escapeHtml(r.course)}</span>`).join("")}</div>` : "";
+  const heroKey = hero ? `${hero.course_id}:${hero.file_id}` : "quiz";
+  const rise = state.queueHero && state.queueHero !== heroKey;  // la suivante remonte en glissant
+  state.queueHero = heroKey;
+  $("#rev-queue").innerHTML = `${top.replace('class="q-hero"', `class="q-hero${rise ? " rise" : ""}"`)}
+    ${rows ? `<div class="q-list"><div class="q-sect">Ensuite</div>${rows}</div>` : ""}${doneRow}<div class="q-next" id="q-next"></div>`;
 }
-
-// Les trois prochains jours (comme le widget Calendrier du Mac) : chaque révision à son heure, à la couleur de sa
-// matière ; celle en cours est entourée, celles faites sont grisées
-function renderDays(data) {
-  const now = new Date(), today = isoDay(now);
-  const hm = (iso) => iso.slice(11, 16);
+function renderNextDays(data) {
+  const box = $("#q-next");
+  if (!box) return;
   noteColors(data.days.flatMap((d) => d.items).map((r) => ({ id: r.course_id, color: r.color })));
-  $("#rev-next").innerHTML = data.days.map((d, i) => {
+  box.innerHTML = data.days.slice(1).map((d, i) => {
     const date = new Date(`${d.day}T12:00:00`);
-    const name = i === 0 ? "Aujourd'hui" : i === 1 ? "Demain" : date.toLocaleDateString("fr-FR", { weekday: "long" }).replace(/^./, (c) => c.toUpperCase());
-    const small = i < 2 ? date.toLocaleDateString("fr-FR", { weekday: "short", day: "numeric" }).replace(".", "") : String(date.getDate());
-    const items = d.items.map((r) => {
-      const live = r.start && d.day === today && new Date(r.start) <= now && now < new Date(r.end);
-      return `<div class="day-ev${r.state === "done" ? " done" : ""}${live ? " now" : ""}${r.state === "today" ? " is-today" : ""}" style="--c:${subjectColor(r.course_id)}"
-          data-wk-rev="${r.course_id}:${r.file_id}"><i></i><div><b>${revName(r, d.items)}</b><small>${r.state === "done" ? "Faite" : `${hm(r.start)} – ${hm(r.end)}`}</small></div></div>`;
-    }).join("");
-    return `<div class="rev-day${i === 0 ? " first" : ""}"><h4>${name} <span>${small}</span></h4>${items || `<p class="day-empty">Rien de prévu</p>`}</div>`;
+    const name = i === 0 ? "Demain" : date.toLocaleDateString("fr-FR", { weekday: "long" }).replace(/^./, (c) => c.toUpperCase());
+    const items = d.items.filter((r) => r.start).map((r) => `<span class="q-chip" style="--c:${subjectColor(r.course_id)}"><i></i>${escapeHtml(r.course)} ${hourText(r.start)}</span>`).join("");
+    return `<span><b>${name}</b>${items || "rien de prévu"}</span>`;
   }).join("");
 }
-$("#rev-next").addEventListener("click", (e) => {
-  const ev = e.target.closest(".day-ev.is-today:not(.done)");
-  if (ev) askRevision(ev);
-});
-$("#rev-list").addEventListener("click", async (e) => {
-  const open = e.target.closest("[data-open]");
-  if (open) return openCourseFile(...open.dataset.open.split(":"));
-  const go = e.target.closest("[data-rev]");
-  if (go) {
-    const r = state.revisions.today.find((x) => `${x.course_id}:${x.file_id}` === go.dataset.rev);
-    return startSession({ mode: "revision", pick: go.dataset.rev }, { title: r ? `${r.course} · ${r.title}` : "Révision", back: "#/accueil" });
-  }
-  const read = e.target.closest("[data-read-done]");
-  if (read) {
-    const [c, f] = read.dataset.readDone.split(":");
-    const extra = Boolean(state.revisions?.today.find((x) => `${x.course_id}:${x.file_id}` === read.dataset.readDone)?.extra);
-    await api(`/api/revisions/${c}/${f}/done`, jsonBody("POST", { extra })).catch((err) => notify(err.message));
-    openAccueil();
-  }
+$("#rev-queue").addEventListener("click", async (e) => {
+  const b = e.target.closest("[data-q]");
+  if (!b) return;
+  const action = b.dataset.q;
+  if (action === "quiz") return startSession({ mode: "today", limit: DAILY_LIMIT }, { title: "Quiz du jour", back: "#/accueil" });
+  const [c, f] = b.dataset.key.split(":");
+  const r = (state.revisions?.today || []).find((x) => x.course_id === c && x.file_id === f);
+  if (action === "read") return openCourseFile(c, f);
+  if (action === "go") return startSession({ mode: "revision", pick: `${c}:${f}` }, { title: r ? r.course : "Révision", back: "#/accueil" });
+  b.disabled = true;
+  const path = action === "later" ? "postpone" : "done";
+  await api(`/api/revisions/${c}/${f}/${path}`, jsonBody("POST", { extra: Boolean(r?.extra) })).catch((err) => notify(err.message));
+  openAccueil();
 });
 
 // Après une séance (emploi du temps) sans nouveau cours ajouté : « Tu as eu Neurosciences ce matin »
@@ -1025,15 +989,6 @@ function saveRevisions(s) {
     return api(`/api/revisions/${c}/${f}/done`, jsonBody("POST", { score: points.reduce((a, b) => a + b, 0) / points.length, extra })).catch(() => {});
   }));
 }
-$("#today-bar").addEventListener("click", (e) => {
-  if (e.target.closest("button, a") || $("#today-go").hidden) return;
-  $("#today-go").click();
-});
-$("#today-bar").addEventListener("keydown", (e) => {
-  if ((e.key === "Enter" || e.key === " ") && e.target.id === "today-bar" && !$("#today-go").hidden) { e.preventDefault(); $("#today-go").click(); }
-});
-
-
 // Une couleur par matière, adoucie : le serveur donne à chaque nouvelle matière la couleur la moins prise
 // (autant de couleurs que storage.SUBJECT_COLORS). Sans numéro connu, on la tire de l'identifiant.
 const SUBJECT_COLORS = ["#B4532A", "#5B7A99", "#6E8B6A", "#8E7499", "#A88A5C", "#4F8A8B", "#A0606E", "#8A8A45", "#5F649C", "#7D6B5D"];
@@ -1202,15 +1157,6 @@ $("#view-courses").addEventListener("pointermove", (e) => {
   const box = card.getBoundingClientRect();
   card.style.setProperty("--gx", `${((e.clientX - box.left) / box.width) * 100}%`);
   card.style.setProperty("--gy", `${((e.clientY - box.top) / box.height) * 100}%`);
-});
-
-// Accueil : la même lumière sur les cours à réviser
-$("#rev-list").addEventListener("pointermove", (e) => {
-  const row = e.target.closest(".rev-row");
-  if (!row || e.pointerType === "touch") return;
-  const box = row.getBoundingClientRect();
-  row.style.setProperty("--gx", `${((e.clientX - box.left) / box.width) * 100}%`);
-  row.style.setProperty("--gy", `${((e.clientY - box.top) / box.height) * 100}%`);
 });
 
 $("#view-courses").addEventListener("click", async (e) => {

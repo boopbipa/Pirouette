@@ -16,23 +16,25 @@ def test_menu_lists_todays_revisions_and_the_next_ones():
     titles = [r.get("title") for r in rows]
     assert count == "2"
     # Sobre : la matière seulement, sans raison ni prochaines révisions
-    assert titles == ["Faire le quiz du jour", None, "Neurosciences", "Psychométrie", "✓ Psychanalyse", None,
+    assert titles == ["Commencer : Neurosciences", None, "Psychométrie", "✓ Psychanalyse", None,
                       "Ouvrir Pirouette", "Quitter Pirouette"]
-    rev = next(r for r in rows if r.get("title") == "Neurosciences")
+    rev = next(r for r in rows if r.get("title") == "Commencer : Neurosciences")
     assert menubar.route(rev["action"]) == f"#/accueil/r/{'a' * 12}:{'b' * 8}"
     assert next(r for r in rows if r.get("title") == "Psychométrie")["action"] == "home"  # pas de quiz : l'accueil
     assert menubar.route("quiz") == "#/accueil/quiz"
+    _, rows = menubar.build({"today": [], "done": [{"course": "Neurosciences"}]})
+    assert [r.get("title") for r in rows][:2] == ["Tout est révisé aujourd'hui ✓", "Quiz du jour (10 min)"]
 
 
 def test_two_courses_of_the_same_subject_are_told_apart():
     item = {"course_id": "a" * 12, "course": "Psychanalyse", "cards": 1, "questions": 0, "minutes": 30}
     _, rows = menubar.build({"today": [item | {"file_id": "b" * 8, "title": "Le rêve"}, item | {"file_id": "c" * 8, "title": "Lapsus"}]})
-    assert [r.get("title") for r in rows][2:4] == ["Psychanalyse · Le rêve", "Psychanalyse · Lapsus"]
+    assert [r.get("title") for r in rows][:3] == ["Commencer : Psychanalyse", None, "Psychanalyse · Lapsus"]
 
 
 def test_nothing_to_do():
     count, rows = menubar.build({"today": [], "done": [], "upcoming": []})
-    assert count == "" and rows[0]["title"] == "Rien à réviser aujourd'hui"
+    assert count == "" and rows[0]["title"] == "Quiz du jour (10 min)"
 
 
 def test_mac_settings(tmp_path, monkeypatch):
