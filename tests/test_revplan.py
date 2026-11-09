@@ -24,6 +24,9 @@ class FakeCalendar:
     def retitle(self, event_id, title):
         self.items[event_id]["title"] = title
 
+    def move(self, event_id, start, end):
+        self.items[event_id]["start"], self.items[event_id]["end"] = start, end
+
     def resize(self, event_id, end):
         self.items[event_id]["end"] = end
 
@@ -51,6 +54,8 @@ def test_placed_at_the_chosen_hour_after_classes():
 def _setup(tmp_path, monkeypatch):
     store = Store(tmp_path)
     monkeypatch.setattr(main, "store", store)
+    # Pas de mise à jour en arrière-plan vers le vrai Calendrier (sur le Mac des tests, elle attendrait une autorisation)
+    monkeypatch.setattr(main, "_calendar_soon", lambda: None)
     course = store.create_course("Neurosciences")
     store.add_file(course["id"], "CM1.pdf", b"%PDF", "texte")
     store.add_card(course["id"], "Q", "R")
@@ -166,3 +171,34 @@ def test_durations_both_ways(tmp_path, monkeypatch):
     assert main._revisions(today, now)["today"][0]["minutes"] == 60
     main._calendar_sync(now, cal)
     assert cal.items[event_id]["end"] - cal.items[event_id]["start"] == timedelta(minutes=60)
+
+
+def test_moving_in_pirouette_and_in_calendar(tmp_path, monkeypatch):
+    store, cid, fid = _setup(tmp_path, monkeypatch)
+    cal = FakeCalendar()
+    today = date.today()
+    now = datetime.combine(today, datetime.min.time()) + timedelta(hours=9)
+    client = TestClient(main.app)
+    main._calendar_sync(now, cal)
+    event_id, event = cal.by_key(revplan.key_of(cid, fid, today.isoformat()))
+    # Déplacée dans le planning de Pirouette : à 20 h 30 le surlendemain → l'agenda suit (un seul événement)
+    later = today + timedelta(days=2)
+    r = client.put(f"/api/revisions/{cid}/{fid}/move", json={"from_day": today.isoformat(), "day": later.isoformat(), "time": "20:30"})
+    assert r.status_code == 200
+    main._calendar_sync(now, cal)
+    assert len(cal.items) == 1
+    _, event = cal.by_key(revplan.key_of(cid, fid, later.isoformat()))
+    assert event["start"] == datetime.combine(later, datetime.min.time()) + timedelta(hours=20, minutes=30)
+    assert store.get_course(cid)["files"][0]["rev"]["due"] == later.isoformat()
+    # Déplacée à 7 h dans Calendrier : Pirouette garde 7 h
+    event_id, event = cal.by_key(revplan.key_of(cid, fid, later.isoformat()))
+    length = event["end"] - event["start"]
+    event["start"] = datetime.combine(later, datetime.min.time()) + timedelta(hours=7)
+    event["end"] = event["start"] + length
+    main._calendar_sync(now, cal)
+    assert store.get_course(cid)["files"][0]["rev"]["at"] == {"day": later.isoformat(), "time": "07:00"}
+    main._calendar_sync(now, cal)
+    assert cal.items[event_id]["start"].hour == 7 and len(cal.items) == 1
+    week = client.get(f"/api/agenda/week?start={later.isoformat()}").json()
+    assert any(r["start"].endswith("07:00") for r in week["revisions"].get(later.isoformat(), []))
+    assert client.put(f"/api/revisions/{cid}/{fid}/move", json={"from_day": later.isoformat(), "day": "2000-01-01", "time": "10:00"}).status_code == 400

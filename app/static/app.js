@@ -860,13 +860,13 @@ async function openPlanning(start = state.planStart) {
       const key = isoDay(d);
       const revs = data.revisions[key] || [];
       const cls = data.classes.filter((c) => c.start.startsWith(key));
-      return `<div class="wk-day${key === today ? " now" : ""}${key < today ? " past" : ""}">
+      return `<div class="wk-day${key === today ? " now" : ""}${key < today ? " past" : ""}" data-day="${key}">
         <div class="wk-dayhd">${d.toLocaleDateString("fr-FR", { weekday: "short" }).replace(".", "")}<b>${d.getDate()}</b></div>
         <div class="wk-revs">${revs.filter((r) => !r.start).map((r) => `<button type="button" class="wk-rev is-${r.state}" style="--c:${subjectColor(r.course_id)}" data-wk-rev="${r.course_id}:${r.file_id}" title="${escapeHtml(`${r.course} · ${r.title} — ${r.reason}`)}">${r.state === "done" ? "✓ " : ""}${escapeHtml(r.title)}</button>`).join("")}</div>
         <div class="wk-col">${cls.map((c) => `<div class="wk-class${c.cancelled ? " cancelled" : ""}${c.course_id ? "" : " other"}" style="top:${pos(c.start)}%;height:${Math.max(4, pos(c.end) - pos(c.start))}%;${c.course_id ? `--c:${subjectColor(c.course_id)}` : ""}">
             <b>${c.cancelled ? "Annulé · " : ""}${escapeHtml(c.summary)}</b><small>${hourText(c.start)}${c.location ? ` · ${escapeHtml(c.location)}` : ""}</small></div>`).join("")}
           ${wkBlocks(revs).map((r) => `<div class="wk-block is-${r.state}${r.height < 36 ? " tiny" : ""}" style="top:${r.top}px;height:${r.height}px;--c:${subjectColor(r.course_id)}"
-              data-wk-rev="${r.course_id}:${r.file_id}" data-day="${key}" data-minutes="${r.minutes}" title="${escapeHtml(`${r.course} · ${r.title} — ${r.reason}`)}">
+              data-wk-rev="${r.course_id}:${r.file_id}" data-day="${key}" data-minutes="${r.minutes}"${r.before ? ' data-before="1"' : ""} title="${escapeHtml(`${r.course} · ${r.title} — ${r.reason}`)}">
               <b>${escapeHtml(r.title)}</b><small><span class="wk-len">${minLabel(r.minutes)}</span> · ${escapeHtml(r.course)}</small>
               <span class="wk-grip" aria-label="Étirer pour changer la durée" title="Étirer pour changer la durée"></span></div>`).join("")}</div>
       </div>`;
@@ -883,6 +883,48 @@ $("#wk-week").addEventListener("click", (e) => {
 });
 // Étirer une révision (sa poignée en bas) : sa durée change, dans Pirouette et dans l'agenda du Mac
 const wkDrag = { justResized: false };
+// Déplacer une révision (en la faisant glisser) : à une autre heure, ou à un autre jour
+$("#wk-week").addEventListener("pointerdown", (e) => {
+  const block = e.target.closest(".wk-block");
+  if (!block || e.target.closest(".wk-grip") || e.button !== 0 || e.pointerType === "touch") return;
+  const col = block.parentElement;
+  const perMinute = col.getBoundingClientRect().height / ((PLAN_TO - PLAN_FROM) * 60);
+  const x0 = e.clientX, y0 = e.clientY, top0 = block.getBoundingClientRect().top;
+  let dragging = false, target = null;
+  const where = (ev) => {
+    const under = document.elementsFromPoint(ev.clientX, ev.clientY).find((el) => !block.contains(el) && el.closest?.(".wk-day[data-day]"));
+    const day = under?.closest(".wk-day[data-day]");
+    if (!day) return null;
+    const box = day.querySelector(".wk-col").getBoundingClientRect();
+    let minutes = PLAN_FROM * 60 + Math.round((top0 + ev.clientY - y0 - box.top) / perMinute / 5) * 5;
+    minutes = Math.max(PLAN_FROM * 60, Math.min(PLAN_TO * 60 - 5, minutes));
+    const time = `${String(Math.floor(minutes / 60)).padStart(2, "0")}:${String(minutes % 60).padStart(2, "0")}`;
+    return { day: block.dataset.before ? block.dataset.day : day.dataset.day, time, past: day.classList.contains("past") };
+  };
+  const move = (ev) => {
+    if (!dragging && Math.hypot(ev.clientX - x0, ev.clientY - y0) < 5) return;
+    if (!dragging) { dragging = true; block.setPointerCapture(e.pointerId); block.classList.add("moving"); }
+    block.style.transform = `translate(${block.dataset.before ? 0 : ev.clientX - x0}px, ${ev.clientY - y0}px)`;
+    target = where(ev);
+    const label = block.querySelector(".wk-len");
+    if (target && label) label.textContent = target.past ? "jour passé" : target.time.replace(":", " h ").replace(" h 00", " h");
+  };
+  const up = async () => {
+    block.removeEventListener("pointermove", move);
+    if (!dragging) return;
+    wkDrag.justResized = true;
+    setTimeout(() => { wkDrag.justResized = false; }, 250);
+    block.classList.remove("moving");
+    if (!target || target.past) return openPlanning();
+    const [c, f] = block.dataset.wkRev.split(":");
+    try { await api(`/api/revisions/${c}/${f}/move`, jsonBody("PUT", { from_day: block.dataset.day, day: target.day, time: target.time })); }
+    catch (err) { notify(err.message); }
+    openPlanning();
+  };
+  block.addEventListener("pointermove", move);
+  block.addEventListener("pointerup", up, { once: true });
+  block.addEventListener("pointercancel", up, { once: true });
+});
 $("#wk-week").addEventListener("pointerdown", (e) => {
   const grip = e.target.closest(".wk-grip");
   if (!grip) return;

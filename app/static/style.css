@@ -3213,3 +3213,5 @@ p, li, h1, h2, h3, h4, blockquote, td, th, dd, dt, pre, code, .feedback, .msg-bu
 .wk-block:hover .wk-grip::after { opacity: .9; }
 #rev-length label small, .cal-hour label small { display: block; font-size: 12.5px; }
 @media (max-width: 760px) { .wk-block { position: static; height: auto !important; margin-top: 4px; } .wk-grip { display: none; } }
+.wk-block { cursor: grab; touch-action: none; user-select: none; -webkit-user-select: none; }
+.wk-block.moving { cursor: grabbing; z-index: 3; opacity: .92; box-shadow: 0 0 0 2px var(--c), 0 14px 30px -12px var(--c); transition: none; }

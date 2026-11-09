@@ -146,6 +146,13 @@ class MacCalendar:
             event.setTitle_(title)
             self.store.saveEvent_span_commit_error_(event, self.ek.EKSpanThisEvent, True, None)
 
+    def move(self, event_id: str, start: datetime, end: datetime) -> None:
+        event = self.store.eventWithIdentifier_(event_id)
+        if event is not None:
+            event.setStartDate_(_ns_date(start))
+            event.setEndDate_(_ns_date(end))
+            self.store.saveEvent_span_commit_error_(event, self.ek.EKSpanThisEvent, True, None)
+
     def resize(self, event_id: str, end: datetime) -> None:
         event = self.store.eventWithIdentifier_(event_id)
         if event is not None:

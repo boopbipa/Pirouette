@@ -28,6 +28,7 @@ class Slot:
     notes: str
     start: datetime
     end: datetime
+    fixed: bool = False  # heure choisie (déplacée dans le planning de Pirouette ou dans Calendrier)
 
 
 def key_of(course_id: str, file_id: str, day: str, before: bool = False) -> str:
@@ -63,21 +64,29 @@ def place(items: list[dict], busy: list[tuple[datetime, datetime]], hour: str, n
     for item in items:
         by_day.setdefault(item["day"], []).append(item)
     for day, todo in sorted(by_day.items()):
-        cursor = datetime.combine(date.fromisoformat(day), datetime.min.time()).replace(hour=h, minute=m)
+        midnight = datetime.combine(date.fromisoformat(day), datetime.min.time())
+        cursor = midnight.replace(hour=h, minute=m)
         if day == now.date().isoformat():
             cursor = max(cursor, _round_up(now + GAP))
-        todo.sort(key=lambda i: (not i.get("before"), i["course"], i["title"]))
+        todo.sort(key=lambda i: (not i.get("at"), not i.get("before"), i["course"], i["title"]))
+        taken = list(busy)
         for item in todo:
             length = timedelta(minutes=max(5, 5 * round(max(item["minutes"], 1) / 5)))
-            moved = True
-            while moved:  # après les cours qui chevauchent
-                moved = False
-                for start, end in busy:
-                    if start < cursor + length and end > cursor:
-                        cursor, moved = _round_up(end + GAP), True
             key = key_of(item["course_id"], item["file_id"], day, item.get("before", False))
             title = f"Réviser {item['course']} · {item['title']}"
             notes = f"{item['reason']} · environ {item['minutes']} min. Ouvre Pirouette pour faire le quiz.\n\n{marker(key)}"
+            if item.get("at"):  # à l'heure choisie : les autres se rangent autour
+                ah, am = (int(x) for x in item["at"].split(":"))
+                start = midnight.replace(hour=ah, minute=am)
+                out.append(Slot(key, title, notes, start, start + length, fixed=True))
+                taken.append((start, start + length))
+                continue
+            moved = True
+            while moved:  # après les cours (et les révisions placées à la main) qui chevauchent
+                moved = False
+                for start, end in taken:
+                    if start < cursor + length and end > cursor:
+                        cursor, moved = _round_up(end + GAP), True
             out.append(Slot(key, title, notes, cursor, cursor + length))
             cursor = cursor + length + GAP
     return out
@@ -96,7 +105,8 @@ def sync(calendar, slots: list[Slot], state: dict, is_done, now: datetime) -> di
     found = {e["key"]: e for e in calendar.events(today - timedelta(days=31), today + timedelta(days=62)) if e.get("key")}
     created: dict = state.setdefault("created", {})
     skipped: list = state.setdefault("skipped", [])
-    stats = {"postponed": [], "moved": [], "resized": [], "created": 0, "deleted": 0, "done": 0}
+    stats = {"postponed": [], "moved": [], "resized": [], "retimed": [], "created": 0, "deleted": 0, "done": 0}
+    starts: dict = state.setdefault("starts", {})  # heure de début de chaque révision la dernière fois qu'on l'a vue
     lens: dict = state.setdefault("lens", {})  # durée (min) de chaque révision la dernière fois qu'on l'a vue
 
     # Déplacée à un autre jour dans Calendrier : Pirouette suit (la révision est prévue ce jour-là), et l'événement
@@ -111,6 +121,7 @@ def sync(calendar, slots: list[Slot], state: dict, is_done, now: datetime) -> di
         found[new_key] = found.pop(k)
         if k in lens:
             lens[new_key] = lens.pop(k)
+        starts.pop(k, None)
         created.pop(k, None)
         created[new_key] = event["start"].isoformat(timespec="minutes")
         if new_key in skipped:
@@ -136,8 +147,18 @@ def sync(calendar, slots: list[Slot], state: dict, is_done, now: datetime) -> di
         if slot.key in skipped:
             continue
         event = found.get(slot.key)
-        if event:  # déjà là : ni l'heure ni le titre ne sont touchés (tu as pu les changer)
-            created.setdefault(slot.key, event["start"].isoformat(timespec="minutes"))
+        if event:  # déjà là : le titre n'est pas touché (tu as pu le changer)
+            # L'heure : déplacée dans Calendrier → Pirouette suit ; déplacée dans le planning de Pirouette → l'événement suit
+            at = event["start"].strftime("%H:%M")
+            if slot.key in starts and at != starts[slot.key]:
+                stats["retimed"].append((slot.key, at))
+            elif slot.fixed and event["start"] != slot.start:
+                calendar.move(event["id"], slot.start, slot.start + (event["end"] - event["start"]))
+                event["end"] = slot.start + (event["end"] - event["start"])
+                event["start"] = slot.start
+                at = slot.start.strftime("%H:%M")
+            starts[slot.key] = at
+            created[slot.key] = event["start"].isoformat(timespec="minutes")
             # La durée : étirée dans Calendrier → Pirouette suit ; changée dans Pirouette → l'événement suit
             in_calendar = round((event["end"] - event["start"]).total_seconds() / 60)
             wanted_len = round((slot.end - slot.start).total_seconds() / 60)
@@ -149,6 +170,7 @@ def sync(calendar, slots: list[Slot], state: dict, is_done, now: datetime) -> di
             lens[slot.key] = in_calendar
             continue
         calendar.create(slot)
+        starts[slot.key] = slot.start.strftime("%H:%M")
         lens[slot.key] = round((slot.end - slot.start).total_seconds() / 60)
         created[slot.key] = slot.start.isoformat(timespec="minutes")
         stats["created"] += 1
@@ -166,4 +188,6 @@ def sync(calendar, slots: list[Slot], state: dict, is_done, now: datetime) -> di
     state["skipped"] = skipped[-300:]
     for k in [k for k in lens if k not in found and k not in wanted]:
         lens.pop(k, None)
+    for k in [k for k in starts if k not in found and k not in wanted]:
+        starts.pop(k, None)
     return stats
