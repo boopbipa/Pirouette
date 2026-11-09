@@ -870,6 +870,19 @@
           <div class="cal-hour"><label for="cal-hour">Heure de tes révisions</label><select id="cal-hour"></select></div>
           <p class="agenda-status" id="cal-status" hidden></p>
         </div>
+        <div class="cal-sync" id="mac-keep" hidden>
+          <h3>Sur ce Mac</h3>
+          <label class="toggle-row first">
+            <input type="checkbox" id="mac-menubar">
+            <span><strong>Garder Pirouette dans la barre des menus</strong>
+              <small class="muted">Fermer la fenêtre la cache : Pirouette continue de tenir ton agenda à jour. Pour la fermer pour de bon : ⌘Q, ou « Quitter » dans le menu de l'icône.</small></span>
+          </label>
+          <label class="toggle-row" id="mac-login-row" hidden>
+            <input type="checkbox" id="mac-login">
+            <span><strong>Ouvrir Pirouette au démarrage du Mac</strong>
+              <small class="muted">Avec la case du dessus, Pirouette tourne tout le temps sans te gêner.</small></span>
+          </label>
+        </div>
         <div id="agenda-subjects" hidden>
           <h3>Quel cours va avec quelle matière</h3>
           <p class="muted small-text">Reconnu d'après les noms. Corrige si besoin : c'est retenu. « Aucune » pour les réunions et ce qui ne se révise pas.</p>

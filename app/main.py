@@ -3013,7 +3013,8 @@ def _calendar_view() -> dict:
 
     state = _calendar_state()
     return {"available": apple_calendar.available(), "enabled": state["enabled"], "hour": state["hour"],
-            "error": state.get("error") or "", "synced_at": state.get("synced_at"), "count": state.get("count", 0)}
+            "error": state.get("error") or "", "synced_at": state.get("synced_at"), "count": state.get("count", 0),
+            "where": state.get("where") or ""}
 
 
 class CalendarIn(BaseModel):
@@ -3024,6 +3025,40 @@ class CalendarIn(BaseModel):
 @app.get("/api/calendar")
 async def calendar_get() -> dict:
     return _calendar_view()
+
+
+# ---------- Sur ce Mac : rester dans la barre des menus, ouvrir au démarrage ----------
+class MacIn(BaseModel):
+    menubar_keep: bool | None = None  # fermer la fenêtre la cache (Pirouette reste dans la barre des menus)
+    login: bool | None = None         # ouvrir Pirouette au démarrage du Mac
+
+
+def _mac_view() -> dict:
+    from . import login_item
+
+    settings = store.get_settings()
+    return {"desktop_mac": sys.platform == "darwin" and os.getenv("PIROUETTE_DESKTOP") == "1",
+            "menubar_keep": settings.get("menubar_keep", True) is not False,
+            "login_available": login_item.available(), "login": login_item.enabled() if login_item.available() else False}
+
+
+@app.get("/api/mac")
+async def mac_get() -> dict:
+    return await run_in_threadpool(_mac_view)
+
+
+@app.put("/api/mac")
+async def mac_set(body: MacIn) -> dict:
+    from . import login_item
+
+    if body.menubar_keep is not None:
+        store.save_settings(menubar_keep=body.menubar_keep)
+    if body.login is not None:
+        try:
+            await run_in_threadpool(login_item.set_enabled, body.login)
+        except RuntimeError as exc:
+            raise HTTPException(400, str(exc)) from exc
+    return await run_in_threadpool(_mac_view)
 
 
 @app.put("/api/calendar")

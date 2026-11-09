@@ -52,6 +52,7 @@ def build(data: dict, today: date | None = None) -> tuple[str, list[dict]]:
             rows.append({"title": f"{label} · {r['course']} · {r['title']}", "enabled": False})
     rows.append({"separator": True})
     rows.append({"title": "Ouvrir Pirouette", "action": "open", "enabled": True})
+    rows.append({"title": "Quitter Pirouette", "action": "quit", "enabled": True})
     return (str(len(pending)) if pending else ""), rows
 
 
@@ -157,18 +158,88 @@ def _loop() -> None:
         time.sleep(REFRESH)
 
 
-def _act(action: str) -> None:
-    """Un clic dans le menu (sur le fil principal) : la fenêtre passe devant, sur la bonne page."""
+QUITTING = threading.Event()  # on quitte pour de bon (⌘Q, « Quitter », une mise à jour) : la fenêtre se ferme vraiment
+
+
+def reveal() -> None:
+    """La fenêtre revient (sur le fil principal) : l'icône du Dock aussi."""
     window = _keep.get("window")
     if window is None:
         return
     try:
         from AppKit import NSApplication
 
+        app = NSApplication.sharedApplication()
+        app.setActivationPolicy_(0)  # comme une app normale : dans le Dock et le ⌘Tab
         window.show()
-        NSApplication.sharedApplication().activateIgnoringOtherApps_(True)
+        app.activateIgnoringOtherApps_(True)
     except Exception:
         pass
+
+
+def quit_app() -> None:
+    QUITTING.set()
+    try:
+        from AppKit import NSApplication
+
+        NSApplication.sharedApplication().terminate_(None)
+    except Exception:
+        pass
+
+
+def _terminating() -> bool:
+    """La fermeture vient-elle de ⌘Q / Quitter (macOS demande à toute l'app de s'arrêter) plutôt que du bouton rouge ?"""
+    frame = sys._getframe()
+    while frame is not None:
+        if frame.f_code.co_name == "applicationShouldTerminate_":
+            return True
+        frame = frame.f_back
+    return False
+
+
+def keep_running(window, wanted) -> None:
+    """Fermer la fenêtre (bouton rouge, ⌘W) la cache : Pirouette reste dans la barre des menus et continue de tenir
+    l'agenda à jour. ⌘Q, « Quitter » et les mises à jour ferment pour de bon. `wanted()` : le réglage (activé ou non)."""
+    if sys.platform != "darwin":
+        return
+    _keep["window"] = window
+
+    def closing():
+        if QUITTING.is_set() or _terminating() or "item" not in _keep or not wanted():
+            return True
+        try:
+            from AppKit import NSApplication
+
+            window.hide()
+            NSApplication.sharedApplication().setActivationPolicy_(1)  # plus dans le Dock : seulement en haut de l'écran
+        except Exception:
+            return True
+        return False  # la fenêtre n'est pas fermée, juste cachée
+
+    window.events.closing += closing
+    # Rouvrir Pirouette (Dock, Spotlight, Launchpad) pendant qu'elle tourne cachée : la fenêtre revient
+    try:
+        import objc
+        from webview.platforms.cocoa import BrowserView
+
+        def reopen(self, app, has_windows):
+            reveal()
+            return True
+
+        objc.classAddMethods(BrowserView.AppDelegate, [objc.selector(
+            reopen, selector=b"applicationShouldHandleReopen:hasVisibleWindows:", signature=b"Z@:@Z")])
+    except Exception as exc:
+        print(f"Rouvrir depuis le Dock : {exc!r}", file=sys.stderr)
+
+
+def _act(action: str) -> None:
+    """Un clic dans le menu (sur le fil principal) : la fenêtre passe devant, sur la bonne page."""
+    if action == "quit":
+        return quit_app()
+    window = _keep.get("window")
+    if window is None:
+        return
+    reveal()
     target = route(action)
     # evaluate_js attend le fil principal : on l'appelle d'ailleurs, sinon l'app se bloquerait
     threading.Thread(target=lambda: window.evaluate_js(f"location.hash = {json.dumps(target)}"), daemon=True).start()

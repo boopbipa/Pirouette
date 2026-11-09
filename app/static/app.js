@@ -734,6 +734,21 @@ function renderAgendaView(v) {
 async function renderAgendaSettings() {
   try { renderAgendaView(await api("/api/agenda")); } catch (err) { notify(err.message); }
   try { renderCalendarView(await api("/api/calendar")); } catch { $("#cal-sync").hidden = true; }
+  try { renderMacView(await api("/api/mac")); } catch { $("#mac-keep").hidden = true; }
+}
+
+// Sur ce Mac : rester dans la barre des menus, ouvrir au démarrage
+function renderMacView(v) {
+  $("#mac-keep").hidden = !v.desktop_mac;
+  $("#mac-menubar").checked = v.menubar_keep;
+  $("#mac-login-row").hidden = !v.login_available;
+  $("#mac-login").checked = v.login;
+}
+for (const [id, field] of [["#mac-menubar", "menubar_keep"], ["#mac-login", "login"]]) {
+  $(id).addEventListener("change", async () => {
+    try { renderMacView(await api("/api/mac", jsonBody("PUT", { [field]: $(id).checked }))); }
+    catch (err) { notify(err.message); renderMacView(await api("/api/mac").catch(() => ({ desktop_mac: true }))); }
+  });
 }
 
 // Les révisions dans le Calendrier du Mac (calendrier « Pirouette »)
@@ -751,7 +766,7 @@ function renderCalendarView(v) {
   const st = $("#cal-status");
   st.hidden = !v.enabled;
   st.classList.toggle("bad", Boolean(v.error));
-  st.textContent = v.error || `✓ ${plural(v.count, "révision prévue", "révisions prévues")} dans les deux semaines · à jour ${agendaAgo(v.synced_at)}`;
+  st.textContent = v.error || `✓ ${plural(v.count, "révision prévue", "révisions prévues")} dans le calendrier « Pirouette »${v.where ? ` (compte ${v.where})` : ""} · à jour ${agendaAgo(v.synced_at)}`;
 }
 $("#cal-on").addEventListener("change", async () => {
   const st = $("#cal-status");

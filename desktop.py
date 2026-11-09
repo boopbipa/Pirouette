@@ -120,6 +120,9 @@ class DesktopApi:
                 except Exception:
                     pass
 
+        if sys.platform == "darwin":  # fermer pour de bon, même si la fenêtre se cache d'habitude dans la barre des menus
+            from app import menubar
+            menubar.QUITTING.set()
         threading.Thread(target=close, daemon=True).start()
         threading.Timer(4, lambda: os._exit(0)).start()
 
@@ -334,6 +337,18 @@ def main() -> None:
         text_select=True,  # indispensable pour sélectionner un mot et demander sa définition
     )
     started: dict = {}
+    if sys.platform == "darwin":
+        # Fermer la fenêtre la cache (Pirouette reste dans la barre des menus), sauf si c'est désactivé dans Réglages
+        from app import menubar
+
+        def keep_wanted() -> bool:
+            try:
+                settings = json.loads((Path(os.environ["QUIZZ_DATA_DIR"]) / "settings.json").read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                settings = {}
+            return settings.get("menubar_keep", True) is not False
+
+        menubar.keep_running(window, keep_wanted)
 
     def boot() -> None:
         try:

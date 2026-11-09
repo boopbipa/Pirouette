@@ -179,6 +179,9 @@ def main(binary: str) -> None:
             calendar = json.loads(request(base + "/api/calendar")[1])
             assert calendar["available"] is (sys.platform == "darwin"), calendar
             print(f"Calendrier du Mac disponible : {calendar['available']}")
+            mac = json.loads(request(base + "/api/mac")[1])
+            assert mac["login_available"] is (sys.platform == "darwin"), mac  # (l'app installée : son Pirouette.app)
+            print(f"Sur ce Mac : {mac}")
             print(f"OK : interface servie, PDF/Word/PowerPoint lus ({chars}), données dans {data_dir}")
         finally:
             proc.terminate()

@@ -26,7 +26,7 @@ a = Analysis(
                    # PDF scannés : la reconnaissance de texte du système (importée à la demande, dans app/ocr.py)
                    *(["Vision", "Foundation", "objc"] if sys.platform == "darwin" else []),
                    # Les révisions dans le Calendrier du Mac (app/apple_calendar.py)
-                   *(["EventKit", "AppKit"] if sys.platform == "darwin" else []),
+                   *(["EventKit", "AppKit", "ServiceManagement"] if sys.platform == "darwin" else []),
                    *([*collect_submodules("winrt")] if sys.platform == "win32" else [])],
     excludes=["tkinter", "pytest", "playwright", "IPython"],
     noarchive=False,

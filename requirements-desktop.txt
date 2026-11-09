@@ -6,6 +6,8 @@ pyinstaller>=6.10
 pyobjc-framework-Vision; sys_platform == "darwin"
 # Les révisions dans le Calendrier du Mac (calendrier « Pirouette »)
 pyobjc-framework-EventKit; sys_platform == "darwin"
+# « Ouvrir Pirouette au démarrage du Mac »
+pyobjc-framework-ServiceManagement; sys_platform == "darwin"
 winrt-runtime; sys_platform == "win32"
 winrt-Windows.Foundation; sys_platform == "win32"
 winrt-Windows.Foundation.Collections; sys_platform == "win32"

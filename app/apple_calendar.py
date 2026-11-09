@@ -82,6 +82,7 @@ class MacCalendar:
             or next((c for c in calendars if c.title() == TITLE and c.allowsContentModifications()), None)
         if mine:
             state["calendar_id"] = mine.calendarIdentifier()
+            state["where"] = str(mine.source().title() or "")  # « iCloud », « Sur mon Mac »… : montré dans les Réglages
             return mine
         if known:  # le calendrier a disparu (supprimé dans Calendrier) : on repart de zéro
             state["created"], state["skipped"] = {}, []
@@ -102,6 +103,7 @@ class MacCalendar:
         if not ok:
             raise CalendarError(f"Impossible de créer le calendrier « Pirouette » : {error}")
         state["calendar_id"] = cal.calendarIdentifier()
+        state["where"] = str(source.title() or "")
         return cal
 
     def _source(self):
