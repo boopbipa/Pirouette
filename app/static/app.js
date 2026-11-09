@@ -4839,7 +4839,9 @@ function endSwipe() {
   const s = state.session;
   const el = $("#flashcard");
   if (s?.revealed && Math.abs(dx) >= SWIPE_AT) return rateCard(dx > 0 ? "good" : "again", { thrown: true });
-  if (!s?.revealed && Math.abs(dx) > 12) showCardToast("Retourne d'abord la carte");
+  // Un clic qui a un peu bougé (pavé tactile, souris) : c'est un clic, la carte se retourne
+  if (!s?.revealed && Math.abs(dx) <= 30) flipCard();
+  else if (!s?.revealed) showCardToast("Retourne d'abord la carte");
   el.classList.remove("dragging");
   ["--dx", "--dy", "--dr"].forEach((v) => el.style.removeProperty(v));
   leanCard(0);
@@ -5180,7 +5182,7 @@ $("#session-done-back").addEventListener("click", (e) => { state.sessionBack = s
 
 $("#flashcard").addEventListener("click", () => {
   if (swipe.justDragged) return;
-  if (!window.getSelection().toString()) flipCard();
+  flipCard();  // (un texte sélectionné ailleurs dans la page ne bloque plus le clic)
 });
 // « ⋯ » sous la carte : modifier ou supprimer la carte
 const closeCardMore = () => { $("#card-more-menu").hidden = true; $("#card-more-btn").setAttribute("aria-expanded", "false"); };
@@ -7276,6 +7278,7 @@ function quizKeys(e) {
   if (index >= 0) { e.preventDefault(); chooseByKey("input[name=choice]", index, validate); }
 }
 
+const FLIP_KEYS = [" ", "ArrowUp", "ArrowDown"];
 function sessionKeys(e) {
   const s = state.session;
   const item = s?.items[s.index];
@@ -7285,8 +7288,14 @@ function sessionKeys(e) {
   if (item.kind === "card") {
     if (e.target.id === "typed-answer") return;
     if (isKey(e, "speak")) { e.preventDefault(); return speakCard(); }
-    const flip = isKey(e, "flip") || (isKey(e, "validate") && !s.revealed);
-    if (flip && !e.target.closest?.("button")) { e.preventDefault(); return flipCard(); }
+    // Plusieurs touches retournent la carte : celle des réglages (Espace), ↑, ↓, et Entrée tant que la réponse est cachée
+    const flip = isKey(e, "flip") || FLIP_KEYS.includes(pressedKey(e)) || (isKey(e, "validate") && !s.revealed);
+    // Même si un bouton a gardé la main (après un clic sur « Je savais »…) : Espace retourne la carte, pas le bouton
+    if (flip && !e.target.closest?.("dialog, #card-more-menu, input, textarea")) {
+      e.preventDefault();
+      if (e.target.closest?.("button")) e.target.blur();
+      return flipCard();
+    }
     // Les flèches et 1 / 2 marchent toujours, en plus des touches réglées
     const rating = ["again", "good"].find((r) => isKey(e, r))
       || { ArrowLeft: "again", 1: "again", ArrowRight: "good", 2: "good" }[pressedKey(e)];
