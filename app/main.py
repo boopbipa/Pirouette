@@ -941,7 +941,7 @@ async def microsoft_status() -> dict:
 @app.post("/api/microsoft/connect")
 async def microsoft_connect(request: Request) -> dict:
     """La page de connexion de Microsoft s'ouvre dans le navigateur ; Microsoft revient ensuite sur Pirouette."""
-    redirect = f"http://localhost:{request.url.port}/"  # l'adresse déclarée chez Microsoft : http://localhost (tout port)
+    redirect = f"http://localhost:{request.url.port}"  # l'adresse déclarée chez Microsoft : http://localhost (tout port)
     url = _ms(microsoft.begin, store, redirect)
     if sys.platform == "darwin":
         await run_in_threadpool(subprocess.run, ["open", url], capture_output=True, timeout=15)

@@ -31,15 +31,23 @@ sign_with_certificate() {
   KEYCHAIN="$PWD/build/signature.keychain-db"
   KEYPASS="$(uuidgen)"
   rm -f "$KEYCHAIN"
-  # Le secret collé dans GitHub peut contenir des espaces ou des retours à la ligne : on ne garde que le base64
   python3 -c "import base64, os, re, sys
-raw = re.sub(r'[^A-Za-z0-9+/=]', '', os.environ['MAC_SIGN_P12'])
-print(f'  secret : {len(raw)} caractères', file=sys.stderr)
-open('build/signature.p12', 'wb').write(base64.b64decode(raw + '=' * (-len(raw) % 4)))" || return 1
+# Le secret collé dans GitHub peut contenir autre chose que la valeur (espaces, retours à la ligne, un bout du texte
+# autour) : on part du début du certificat (« MII… ») et on le coupe à sa longueur exacte, écrite dans son en-tête
+raw = re.sub(r'\\s', '', os.environ['MAC_SIGN_P12'])
+raw = raw[max(0, raw.find('MII')):]
+raw = re.match(r'[A-Za-z0-9+/]*={0,2}', raw).group(0)
+raw = raw[:len(raw) - len(raw) % 4]
+data = base64.b64decode(raw)
+size = 4 + int.from_bytes(data[2:4], 'big') if data[:2] == b'\\x30\\x82' else len(data)
+print(f'  secret : {len(raw)} caractères utiles, certificat de {size} octets', file=sys.stderr)
+open('build/signature.p12', 'wb').write(data[:size])" || return 1
   security create-keychain -p "$KEYPASS" "$KEYCHAIN" || return 1
   security set-keychain-settings -lut 3600 "$KEYCHAIN"
   security unlock-keychain -p "$KEYPASS" "$KEYCHAIN" || return 1
-  PASS="$(printf %s "${MAC_SIGN_PASSWORD:-}" | tr -d '[:space:]')"
+  # Le mot de passe : 24 caractères hexadécimaux (même s'il a été collé avec du texte autour)
+  PASS="$(printf %s "${MAC_SIGN_PASSWORD:-}" | grep -oE '[0-9a-f]{24}' | head -1 || true)"
+  [ -n "$PASS" ] || PASS="$(printf %s "${MAC_SIGN_PASSWORD:-}" | tr -d '[:space:]')"
   security import build/signature.p12 -k "$KEYCHAIN" -P "$PASS" -T /usr/bin/codesign || { rm -f build/signature.p12; return 1; }
   rm -f build/signature.p12
   security set-key-partition-list -S apple-tool:,apple: -s -k "$KEYPASS" "$KEYCHAIN" >/dev/null || return 1

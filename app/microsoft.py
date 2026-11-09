@@ -26,7 +26,7 @@ from .extract import SUPPORTED_EXTENSIONS
 
 # L'identifiant de l'application Pirouette chez Microsoft (inscription gratuite, « Applications mobiles et de bureau »,
 # adresse de retour http://localhost). Pas un secret : il est dans toutes les applications de bureau.
-CLIENT_ID = ""
+CLIENT_ID = "35441499-f3ec-42fd-b6dd-6376f027384a"
 AUTH = "https://login.microsoftonline.com/common/oauth2/v2.0"
 GRAPH = "https://graph.microsoft.com/v1.0"
 SCOPES = "offline_access User.Read Files.Read Notes.Read"
