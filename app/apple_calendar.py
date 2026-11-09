@@ -123,7 +123,7 @@ class MacCalendar:
         out = []
         for e in self.store.eventsMatchingPredicate_(pred) or []:
             out.append({"id": e.eventIdentifier(), "key": revplan.key_in(e.notes()), "title": str(e.title() or ""),
-                        "start": _py_date(e.startDate())})
+                        "notes": str(e.notes() or ""), "start": _py_date(e.startDate())})
         return out
 
     def create(self, slot: revplan.Slot) -> str:
@@ -144,6 +144,12 @@ class MacCalendar:
         event = self.store.eventWithIdentifier_(event_id)
         if event is not None:
             event.setTitle_(title)
+            self.store.saveEvent_span_commit_error_(event, self.ek.EKSpanThisEvent, True, None)
+
+    def renote(self, event_id: str, notes: str) -> None:
+        event = self.store.eventWithIdentifier_(event_id)
+        if event is not None:
+            event.setNotes_(notes)
             self.store.saveEvent_span_commit_error_(event, self.ek.EKSpanThisEvent, True, None)
 
     def delete(self, event_id: str) -> None:

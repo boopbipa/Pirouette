@@ -13,7 +13,7 @@ class FakeCalendar:
         self.items, self.n = {}, 0
 
     def events(self, start, end):
-        return [{"id": i, "key": revplan.key_in(e["notes"]), "title": e["title"], "start": e["start"]}
+        return [{"id": i, "key": revplan.key_in(e["notes"]), "title": e["title"], "notes": e["notes"], "start": e["start"]}
                 for i, e in self.items.items() if start.isoformat() <= e["start"].date().isoformat() < end.isoformat()]
 
     def create(self, slot):
@@ -23,6 +23,9 @@ class FakeCalendar:
 
     def retitle(self, event_id, title):
         self.items[event_id]["title"] = title
+
+    def renote(self, event_id, notes):
+        self.items[event_id]["notes"] = notes
 
     def delete(self, event_id):
         self.items.pop(event_id, None)
@@ -114,3 +117,23 @@ def test_calendar_settings(tmp_path, monkeypatch):
     assert client.put("/api/calendar", json={"hour": "25:00"}).status_code == 400
     view = client.put("/api/calendar", json={"enabled": True}).json()
     assert view["enabled"] and "pas disponible" in view["error"]
+
+
+def test_moving_a_revision_to_another_day_moves_it_in_pirouette(tmp_path, monkeypatch):
+    store, cid, fid = _setup(tmp_path, monkeypatch)
+    cal = FakeCalendar()
+    today = date.today()
+    now = datetime.combine(today, datetime.min.time()) + timedelta(hours=9)
+    main._calendar_sync(now, cal)
+    event_id, event = cal.by_key(revplan.key_of(cid, fid, today.isoformat()))
+    later = today + timedelta(days=2)
+    event["start"] = datetime.combine(later, datetime.min.time()) + timedelta(hours=20)
+    event["title"] = "Neuro avant le sport"  # renommée aussi
+    state = main._calendar_sync(now, cal)
+    assert state["moved"] == 1 and len(cal.items) == 1  # pas de doublon
+    assert store.get_course(cid)["files"][0]["rev"]["due"] == later.isoformat()  # l'accueil et le planning suivent
+    assert revplan.key_in(cal.items[event_id]["notes"]) == revplan.key_of(cid, fid, later.isoformat())
+    assert cal.items[event_id]["title"] == "Neuro avant le sport"  # ton titre est gardé
+    # Le lendemain : toujours un seul événement, au jour choisi
+    main._calendar_sync(now + timedelta(days=1), cal)
+    assert len(cal.items) == 1 and cal.items[event_id]["start"].date() == later

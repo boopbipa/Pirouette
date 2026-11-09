@@ -2944,6 +2944,22 @@ def _calendar_done(key: str) -> bool:
 _calendar_lock = threading.Lock()
 
 
+def _follow_moves(moves: list[tuple[str, str]], today: date) -> None:
+    """Révisions déplacées à un autre jour dans Calendrier : Pirouette les prévoit ce jour-là (accueil, planning)."""
+    for key, new_day in moves:
+        course_id, file_id, _, before = revplan.parse_key(key)
+        if before:
+            continue
+        try:
+            course = store.get_course(course_id)
+        except (NotFound, OSError):
+            continue
+        entry = next((f for f in course["files"] if f["id"] == file_id), None)
+        if entry is not None:
+            spaced.ensure(entry, today)["due"] = new_day
+            store._save_course(course)
+
+
 def _postpone(keys: list[str], today: date) -> None:
     """Révisions supprimées à la main dans Calendrier : remises au lendemain (celles « avant ton cours » sont juste
     sautées)."""
@@ -2983,14 +2999,16 @@ def _calendar_sync(now: datetime | None = None, calendar=None) -> dict:
             accent = (store.get_settings().get("appearance") or {}).get("accent") or "#B4532A"
 
             def work(cal) -> dict:
-                total = {"postponed": []}
-                for _ in range(2):  # une révision supprimée à la main est reportée, puis écrite au lendemain
+                total = {"postponed": [], "moved": []}
+                for _ in range(3):  # d'abord ce que tu as changé dans Calendrier (reporté, déplacé), puis le reste
                     slots = revplan.place(_calendar_items(today, now), busy, state["hour"], now)
                     stats = revplan.sync(cal, slots, state, _calendar_done, now)
-                    if not stats["postponed"]:
+                    if not stats["postponed"] and not stats["moved"]:
                         break
                     total["postponed"] += stats["postponed"]
+                    total["moved"] += stats["moved"]
                     _postpone(stats["postponed"], today)
+                    _follow_moves(stats["moved"], today)
                 total["count"] = len(slots)
                 return total
 
@@ -3001,7 +3019,7 @@ def _calendar_sync(now: datetime | None = None, calendar=None) -> dict:
             else:
                 stats = apple_calendar.run(state, accent, work)
             state.update(error="", synced_at=now.isoformat(timespec="seconds"), count=stats["count"],
-                         postponed=len(stats["postponed"]))
+                         postponed=len(stats["postponed"]), moved=len(stats["moved"]))
         except Exception as exc:  # accès refusé, calendrier en lecture seule… : montré dans les Réglages
             state["error"] = str(exc) or exc.__class__.__name__
         _calendar_save(state)

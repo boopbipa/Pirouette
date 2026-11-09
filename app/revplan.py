@@ -5,7 +5,8 @@ l'agenda à jour sans jamais défaire ce que tu y as changé.
   note de l'événement : c'est comme ça que Pirouette retrouve les siens.
 - Placement : à l'heure choisie (18 h par défaut), après les cours de l'école s'ils débordent, les unes après les
   autres. Aujourd'hui : pas avant maintenant.
-- Tu déplaces un événement dans Calendrier : Pirouette ne le remet jamais à sa place (il ne touche plus à l'heure).
+- Tu déplaces un événement dans Calendrier : Pirouette ne le remet jamais à sa place ; à un autre jour, Pirouette
+  suit (la révision est prévue ce jour-là, dans l'accueil et le planning aussi). Tu le renommes : il garde ton titre.
 - Tu le supprimes : la révision est remise au lendemain (et elle n'est pas recréée).
 - Faite : l'événement reste, coché « ✓ ». Plus prévue (le rythme a changé) : supprimée, si elle n'est pas passée."""
 
@@ -86,14 +87,33 @@ DONE = "✓ "
 
 
 def sync(calendar, slots: list[Slot], state: dict, is_done, now: datetime) -> dict:
-    """Met l'agenda en accord avec les révisions prévues. `calendar` : events(début, fin) → [{id, key, title, start}],
-    create(slot) → id, retitle(id, titre), delete(id). `state` : {"created": {clé: début}, "skipped": [clés]}.
-    Renvoie {"postponed": [clés supprimées à la main], "created": n, "deleted": n, "done": n}."""
+    """Met l'agenda en accord avec les révisions prévues. `calendar` : events(début, fin) → [{id, key, title, notes,
+    start}], create(slot) → id, retitle(id, titre), renote(id, note), delete(id). `state` : {"created": {clé: début},
+    "skipped": [clés]}. Renvoie {"postponed": [clés supprimées à la main], "moved": [(clé, nouveau jour)], …} :
+    à Pirouette de reporter ou de suivre (puis de relancer un tour pour que tout concorde)."""
     today = now.date()
-    found = {e["key"]: e for e in calendar.events(today - timedelta(days=1), today + timedelta(days=16)) if e.get("key")}
+    # Large : une révision déplacée loin (dans un mois) ne doit pas passer pour supprimée
+    found = {e["key"]: e for e in calendar.events(today - timedelta(days=31), today + timedelta(days=62)) if e.get("key")}
     created: dict = state.setdefault("created", {})
     skipped: list = state.setdefault("skipped", [])
-    postponed = []
+    stats = {"postponed": [], "moved": [], "created": 0, "deleted": 0, "done": 0}
+
+    # Déplacée à un autre jour dans Calendrier : Pirouette suit (la révision est prévue ce jour-là), et l'événement
+    # prend la clé de son nouveau jour (sinon Pirouette en créerait un second)
+    for k, event in list(found.items()):
+        course_id, file_id, day, before = parse_key(k)
+        new_day = event["start"].date().isoformat()
+        if new_day == day or is_done(k):
+            continue
+        new_key = key_of(course_id, file_id, new_day, before)
+        calendar.renote(event["id"], (event.get("notes") or "").replace(marker(k), marker(new_key)))
+        found[new_key] = found.pop(k)
+        created.pop(k, None)
+        created[new_key] = event["start"].isoformat(timespec="minutes")
+        if new_key in skipped:
+            skipped.remove(new_key)
+        stats["moved"].append((k, new_day))
+
     gone = [k for k in created if k not in found and parse_key(k)[2] >= (today - timedelta(days=1)).isoformat()]
     if len(gone) >= MASS_DELETE:  # calendrier supprimé ou vidé : on repart de zéro, sans rien reporter
         for k in gone:
@@ -102,18 +122,18 @@ def sync(calendar, slots: list[Slot], state: dict, is_done, now: datetime) -> di
     for k in gone:
         created.pop(k, None)
         if parse_key(k)[2] >= today.isoformat() and not is_done(k):
-            postponed.append(k)
+            stats["postponed"].append(k)
             skipped.append(k)
+    if stats["moved"] or stats["postponed"]:  # Pirouette ajuste d'abord ses dates, puis un nouveau tour écrit le reste
+        state["skipped"] = skipped[-300:]
+        return stats
+
     wanted = {s.key for s in slots}
-    stats = {"postponed": postponed, "created": 0, "deleted": 0, "done": 0}
     for slot in slots:
         if slot.key in skipped:
             continue
-        event = found.get(slot.key)
-        if event:
-            created.setdefault(slot.key, event["start"].isoformat(timespec="minutes"))
-            if event["title"] != slot.title and not event["title"].startswith(DONE):
-                calendar.retitle(event["id"], slot.title)  # l'heure, elle, reste celle que tu as choisie
+        if slot.key in found:  # déjà là : ni l'heure ni le titre ne sont touchés (tu as pu les changer)
+            created.setdefault(slot.key, found[slot.key]["start"].isoformat(timespec="minutes"))
             continue
         calendar.create(slot)
         created[slot.key] = slot.start.isoformat(timespec="minutes")
@@ -125,8 +145,8 @@ def sync(calendar, slots: list[Slot], state: dict, is_done, now: datetime) -> di
             if not event["title"].startswith(DONE):
                 calendar.retitle(event["id"], DONE + event["title"])
                 stats["done"] += 1
-        elif event["start"] > now:
-            calendar.delete(event["id"])
+        elif event["start"] > now and parse_key(k)[2] <= (today + timedelta(days=16)).isoformat():
+            calendar.delete(event["id"])  # plus prévue (le rythme a changé)
             created.pop(k, None)
             stats["deleted"] += 1
     state["skipped"] = skipped[-300:]
