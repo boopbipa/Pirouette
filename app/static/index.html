@@ -844,6 +844,14 @@
         </div>
       </div>
 
+      <!-- État des synchronisations : une ligne par chose que Pirouette garde à jour (vert, orange, rouge) -->
+      <div class="card" id="health-card">
+        <h2>Synchronisations</h2>
+        <div class="health-list" id="health-list"><p class="muted">Vérification…</p></div>
+        <div class="health-foot"><small class="muted" id="health-note"></small>
+          <button class="ghost small" type="button" id="health-refresh">Vérifier maintenant</button></div>
+      </div>
+
       <!-- Compte Microsoft (école) : OneDrive et OneNote, suivis comme un dossier de l'ordinateur (microsoft.py) -->
       <div class="card" id="ms-card" hidden>
         <h2>OneDrive et OneNote</h2>
@@ -1273,6 +1281,15 @@
       <div class="session-top">
         <p class="muted small-text session-origin"><span id="session-origin"></span><span class="retry-tag" id="session-retry" hidden></span></p>
         <div class="session-tools">
+          <button class="icon flag-btn" type="button" id="session-flag" title="Signaler une erreur" aria-label="Signaler une erreur dans cette carte ou cette question">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 21V4"/><path d="M5 4h11l-2 4 2 4H5"/></svg></button>
+          <div class="flag-pop" id="flag-pop" role="dialog" aria-label="Signaler une erreur" hidden>
+            <strong>Qu'est-ce qui ne va pas ?</strong>
+            <input type="text" id="flag-note" maxlength="300" placeholder="Facultatif : « la réponse est l'inverse », « hors programme »…" autocomplete="off">
+            <small class="muted">Elle ne sera plus posée. Claude la vérifie dans le cours et la corrige (page de la matière).</small>
+            <div class="flag-actions"><button class="ghost small" type="button" id="flag-cancel">Annuler</button>
+              <button class="primary small" type="button" id="flag-send">Signaler</button></div>
+          </div>
           <button class="ghost small" type="button" id="session-prev" title="Revenir à la carte ou la question d'avant, et changer ta réponse" hidden>← Précédent</button>
           <button class="icon voice-toggle" type="button" id="voice-toggle" aria-pressed="false" aria-label="Lire les cartes à voix haute">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z"/><path class="wave" d="M15.5 9a4 4 0 0 1 0 6"/><path class="wave" d="M18 6.5a7.5 7.5 0 0 1 0 11"/><path class="mute" d="M16 9.5l5 5M21 9.5l-5 5"/></svg></button>

@@ -549,7 +549,8 @@ async def get_course(course_id: str) -> dict:
         "quizzes": store.list_quizzes(course_id),
         "cards": {"total": len(cards), "known": known, "review": len(cards) - known},
         "exam": store.exam_info(course),
-        "outdated": sum(len(v) for v in store.outdated_items(course_id).values()) if course["files"] else 0,
+        "outdated": sum(len(v) for v in store.outdated_items(course_id).values()) if course["files"] or course.get("flags") else 0,
+        "flagged": len(course.get("flags") or {}),
         "revision": {"today": len(store.today_cards([course_id])),
                      "weak": len(store.weak_cards([course_id])) + len(store.weak_questions([course_id]))},
     }
@@ -1155,6 +1156,35 @@ async def find_chapters_in_background(course_id: str, file_id: str, provider: st
 
     return jobs.submit({"kind": "chapters", "course_id": course_id, "course_name": course["name"], "file_id": file_id,
                         "provider": provider, "label": entry["name"]}, job)
+
+
+class FlagIn(BaseModel):
+    kind: str                # card / question
+    card_id: str = ""
+    quiz_id: str = ""
+    index: int = -1
+    note: str = ""
+
+
+@app.post("/api/courses/{course_id}/flag")
+async def flag_item(course_id: str, body: FlagIn) -> dict:
+    """« Cette carte / cette question est fausse » : mise de côté, et à corriger (par Claude ou soi-même)."""
+    if body.kind == "card":
+        store._deck_card(course_id, body.card_id)  # existe bien
+        key = f"card:{body.card_id}"
+    else:
+        quiz = store.get_quiz(body.quiz_id)
+        if not 0 <= body.index < len(quiz["questions"]):
+            raise HTTPException(404, "Question introuvable")
+        key = f"{body.quiz_id}:{quiz['questions'][body.index]['question']}"
+    store.flag(course_id, key, body.note)
+    return {"flagged": sum(1 for _ in store.get_course(course_id).get("flags") or {})}
+
+
+@app.delete("/api/courses/{course_id}/flag")
+async def unflag_item(course_id: str, key: str) -> dict:
+    store.clear_flag(course_id, key)
+    return {"ok": True}
 
 
 @app.get("/api/courses/{course_id}/outdated")
@@ -1974,10 +2004,31 @@ def _interleave(cards: list, questions: list) -> list:
 SESSION_QUESTIONS = 10
 
 
+def _item_key(item: dict) -> str:
+    """La clé d'un élément de séance, comme celles des signalements (« card:… » ou « quiz:question »)."""
+    if item.get("kind") == "card":
+        return f"card:{item['card']['id']}"
+    return f"{item.get('quiz_id')}:{(item.get('question') or {}).get('question')}"
+
+
+def _without_flagged(result: dict) -> dict:
+    """Une question ou une carte signalée fausse n'est plus posée (en attendant d'être corrigée)."""
+    flagged = store.flagged_keys()
+    if not flagged:
+        return result
+    items = [i for i in result["items"] if _item_key(i) not in flagged]
+    return result | {"items": items, "cards": sum(i["kind"] == "card" for i in items),
+                     "questions": sum(i["kind"] == "question" for i in items)}
+
+
 @app.get("/api/session")
 async def session(mode: str = "today", course: str = "", folder: str = "", filter: str = "review",
                   questions: bool = True, minutes: int = 15, chapter: str = "", file: str = "", pick: str = "",
                   limit: int = 0) -> dict:
+    return _without_flagged(await _session_request(mode, course, folder, filter, questions, minutes, chapter, file, pick, limit))
+
+
+async def _session_request(mode, course, folder, filter, questions, minutes, chapter, file, pick, limit) -> dict:
     if mode == "revision":  # la révision espacée d'un ou plusieurs cours (accueil)
         return await run_in_threadpool(_revision_session, pick, questions)
     if pick:  # une sélection de cours et de fichiers, de matières différentes (Réviser → « Choisir »)
@@ -2121,7 +2172,7 @@ async def custom_quiz(body: CustomQuizIn) -> dict:
     items = _interleave(picked, asked)
     if not items:
         raise HTTPException(400, "Rien à demander avec ces choix : essaie d'autres chapitres.")
-    return {"items": items, "cards": len(picked), "questions": len(asked)}
+    return _without_flagged({"items": items, "cards": len(picked), "questions": len(asked)})
 
 
 @app.get("/api/review/catalog")
@@ -3477,8 +3528,78 @@ class CalendarIn(BaseModel):
     hour: str | None = None  # « HH:MM »
 
 
+# ---------- État des synchronisations : tout ce que Pirouette garde à jour, et si ça marche ----------
+def _ago_ok(at: str | None, hours: float, now: datetime) -> bool:
+    try:
+        return bool(at) and now - datetime.fromisoformat(str(at).replace("Z", "+00:00")).replace(tzinfo=None) < timedelta(hours=hours)
+    except ValueError:
+        return False
+
+
+def _health(now: datetime | None = None) -> list[dict]:
+    """Une ligne par synchronisation en service : {id, label, state (ok / late / error), detail, at, pref}.
+    « late » : pas de mise à jour depuis longtemps (l'app fermée, le Mac en veille…), sans erreur."""
+    now = now or datetime.now()
+    rows = []
+
+    def row(id_, label, error, at, hours, ok_text, pref):
+        state = "error" if error else ("ok" if _ago_ok(at, hours, now) else "late")
+        rows.append({"id": id_, "label": label, "state": state, "detail": error or ok_text, "at": at, "pref": pref})
+
+    agenda = _agenda().load()
+    if agenda.get("url"):
+        row("agenda", "Emploi du temps", agenda.get("error") or "", agenda.get("fetched_at"), 3,
+            f"{plural_fr(len(agenda.get('events') or []), 'séance')} lues", "agenda")
+    cal = _calendar_state()
+    if cal.get("enabled"):
+        row("calendar", "Calendrier", cal.get("error") or "", cal.get("synced_at"), 3,
+            f"{plural_fr(cal.get('count', 0), 'révision')} dans le calendrier « Pirouette »", "agenda")
+    try:
+        phone = sync.Sync(_online()).status()
+    except Exception:  # noqa: BLE001 — service en ligne absent : pas de ligne
+        phone = {}
+    if phone.get("on"):
+        row("phone", "Téléphone et tablette", phone.get("error") or "", phone.get("last"), 48,
+            "Tes révisions et tes cartes sont sur ton téléphone", "appareils")
+    ms = microsoft.status(store)
+    for course in store.list_courses():
+        full = store.get_course(course["id"])
+        if full.get("watch"):
+            folder = full["watch"].get("path") or ""
+            missing = not Path(folder).is_dir()
+            rows.append({"id": f"watch:{course['id']}", "label": f"Dossier suivi · {course['name']}",
+                         "state": "error" if missing else "ok", "at": None, "pref": f"cours:{course['id']}",
+                         "detail": "Dossier introuvable (déplacé, renommé, ou disque débranché) : choisis-le de nouveau"
+                         if missing else folder.replace(str(Path.home()), "~")})
+        if full.get("cloud"):
+            cloud = full["cloud"]
+            where = "OneNote" if cloud.get("kind") == "onenote" else "OneDrive"
+            rows.append({"id": f"cloud:{course['id']}", "label": f"{where} · {course['name']}",
+                         "state": "ok" if ms.get("connected") else "error", "at": None, "pref": f"cours:{course['id']}",
+                         "detail": cloud.get("name", "") if ms.get("connected")
+                         else "Compte Microsoft déconnecté : reconnecte-le dans Réglages › Agenda et OneDrive"})
+    return rows
+
+
+def plural_fr(n: int, word: str) -> str:
+    return f"{n} {word}{'s' if n > 1 else ''}"
+
+
+@app.get("/api/health")
+async def health() -> dict:
+    rows = await run_in_threadpool(_health)
+    return {"rows": rows, "errors": sum(r["state"] == "error" for r in rows)}
+
+
 @app.get("/api/calendar")
 async def calendar_get() -> dict:
+    return _calendar_view()
+
+
+@app.post("/api/calendar/sync")
+async def calendar_sync_now() -> dict:
+    """« Vérifier maintenant » (Réglages › Synchronisations) : réécrire le Calendrier tout de suite."""
+    await run_in_threadpool(_calendar_sync)
     return _calendar_view()
 
 

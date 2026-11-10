@@ -755,6 +755,7 @@ class Store:
         if (front, back) != (card["front"], card["back"]):
             card.update(front=front, back=back, edited_at=_now())
             _write(self._doc_path(course_id, "cards"), deck)
+            self.clear_flag(course_id, f"card:{card_id}")  # corrigée à la main : le signalement est réglé
         return card
 
     def set_card_content(self, course_id: str, card_id: str, front: str, back: str, source: str) -> dict:
@@ -762,6 +763,7 @@ class Store:
         deck, card = self._deck_card(course_id, card_id)
         card.update(front=front, back=back, source=source, edited_at=_now())
         _write(self._doc_path(course_id, "cards"), deck)
+        self.clear_flag(course_id, f"card:{card_id}")
         return card
 
     def add_card(self, course_id: str, front: str, back: str) -> dict:
@@ -905,8 +907,11 @@ class Store:
         quiz = self.get_quiz(quiz_id)
         if not 0 <= index < len(quiz["questions"]):
             raise NotFound(str(index))
+        old = quiz["questions"][index]
         quiz["questions"][index] = question | {"edited_at": _now()}
         _write(self._quiz_path(quiz_id), quiz)
+        if quiz.get("course_id"):
+            self.clear_flag(quiz["course_id"], f"{quiz_id}:{old['question']}")
         return quiz
 
     def remove_question(self, quiz_id: str, index: int) -> dict:
@@ -928,25 +933,51 @@ class Store:
 
         course = self.get_course(course_id)
         kept = set(course.get("kept_outdated", []))
+        flags = course.get("flags") or {}
         grounding = Grounding("\n\n".join(text for _, text in self.course_sources(course_id)))
         questions, cards = [], []
         for summary in self.list_quizzes(course_id):
             quiz = self.get_quiz(summary["id"])
             for index, q in enumerate(quiz["questions"]):
                 key = f"{quiz['id']}:{q['question']}"
-                if q.get("source") and key not in kept and not grounding.quote_found(q["source"]):
+                if key in flags or (q.get("source") and key not in kept and not grounding.quote_found(q["source"])):
                     questions.append({"quiz_id": quiz["id"], "quiz_title": quiz["title"], "index": index,
-                                      "question": q["question"], "source": q["source"], "key": key})
+                                      "question": q["question"], "source": q.get("source", ""), "key": key,
+                                      **({"flagged": True, "note": flags[key]["note"]} if key in flags else {})})
         for card in (self.get_doc(course_id, "cards") or {}).get("cards", []):
             key = f"card:{card['id']}"
-            if card.get("source") and key not in kept and not grounding.quote_found(card["source"]):
-                cards.append({"id": card["id"], "front": card["front"], "source": card["source"], "key": key})
+            if key in flags or (card.get("source") and key not in kept and not grounding.quote_found(card["source"])):
+                cards.append({"id": card["id"], "front": card["front"], "source": card.get("source", ""), "key": key,
+                              **({"flagged": True, "note": flags[key]["note"]} if key in flags else {})})
         return {"questions": questions, "cards": cards}
 
     def keep_outdated(self, course_id: str, keys: list[str]) -> None:
         course = self.get_course(course_id)
         course["kept_outdated"] = sorted(set(course.get("kept_outdated", [])) | set(keys))
+        flags = course.get("flags") or {}
+        for key in keys:  # « garder » une carte signalée : finalement elle est juste
+            flags.pop(key, None)
         self._save_course(course)
+
+    # ---------- Signalements : « cette question / cette carte est fausse » ----------
+    # Clés comme pour les questions dépassées : « quiz:texte de la question » ou « card:identifiant ». Une question ou
+    # une carte signalée n'est plus posée ; Claude la corrige (pirouette_mise_a_jour), ou on la vérifie soi-même.
+    def flag(self, course_id: str, key: str, note: str = "") -> None:
+        course = self.get_course(course_id)
+        course.setdefault("flags", {})[key] = {"note": note.strip()[:300], "at": _now()}
+        self._save_course(course)
+
+    def clear_flag(self, course_id: str, key: str) -> None:
+        try:
+            course = self.get_course(course_id)
+        except NotFound:
+            return
+        if key in (course.get("flags") or {}):
+            course["flags"].pop(key)
+            self._save_course(course)
+
+    def flagged_keys(self) -> set[str]:
+        return {key for path in self.courses_dir.glob("*/course.json") for key in (_read(path).get("flags") or {})}
 
     def remove_outdated(self, course_id: str, questions: list[dict], card_ids: list[str]) -> None:
         """Supprime des questions ({quiz_id, index}) et des cartes ; les index d'un même quiz, du plus grand au plus petit."""

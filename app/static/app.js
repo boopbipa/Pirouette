@@ -766,6 +766,41 @@ async function renderAgendaSettings() {
   renderMsSettings();
 }
 
+// Réglages › Synchronisations : vert = à jour, orange = pas de nouvelles depuis un moment, rouge = erreur à régler.
+// Une pastille rouge sur « Réglages » dès qu'une synchronisation est en erreur.
+const HEALTH_TEXT = { ok: "À jour", late: "Pas de mise à jour récente", error: "Erreur" };
+async function renderHealth({ quiet = false } = {}) {
+  const data = await api("/api/health").catch(() => null);
+  if (!data) return;
+  document.querySelector('[data-nav="reglages"]')?.classList.toggle("has-alert", data.errors > 0);
+  document.querySelector('[data-pref="etat"]')?.classList.toggle("has-alert", data.errors > 0);
+  if (quiet) return;
+  $("#health-list").innerHTML = data.rows.length ? data.rows.map((r) => `<div class="health-row ${r.state}">
+      <span class="health-dot" aria-hidden="true"></span>
+      <span class="health-text"><b>${escapeHtml(r.label)}</b><small>${escapeHtml(r.detail)}</small></span>
+      <span class="health-when">${HEALTH_TEXT[r.state]}${r.at ? `<small>${sinceText(r.at)}</small>` : ""}</span>
+      ${r.state !== "ok" ? `<button class="ghost small" type="button" data-health-go="${escapeHtml(r.pref)}">Régler</button>` : ""}
+    </div>`).join("")
+    : `<p class="muted">Rien à synchroniser pour l'instant : ni emploi du temps, ni Calendrier, ni téléphone, ni dossier suivi.</p>`;
+  $("#health-note").textContent = data.errors ? `${plural(data.errors, "problème", "problèmes")} à régler` : "Tout fonctionne.";
+}
+$("#health-refresh").addEventListener("click", async () => {
+  $("#health-refresh").disabled = true;
+  // Relire l'emploi du temps et réécrire le Calendrier tout de suite, puis l'état
+  await api("/api/agenda/refresh", { method: "POST" }).catch(() => {});
+  await api("/api/calendar/sync", { method: "POST" }).catch(() => {});
+  await renderHealth();
+  $("#health-refresh").disabled = false;
+});
+$("#health-list").addEventListener("click", (e) => {
+  const go = e.target.closest("[data-health-go]")?.dataset.healthGo;
+  if (!go) return;
+  if (go.startsWith("cours:")) location.hash = `#/cours/${go.slice(6)}/reglages`;
+  else showPref(go);
+});
+setTimeout(() => renderHealth({ quiet: true }), 8000);
+setInterval(() => renderHealth({ quiet: true }), 15 * 60 * 1000);
+
 // Réglages › OneDrive et OneNote : se connecter (ou se déconnecter) une fois pour toutes les matières
 async function renderMsSettings() {
   const ms = await api("/api/microsoft").catch(() => ({ available: false }));
@@ -1553,6 +1588,8 @@ const PREFS = [
     icon: '<rect x="4" y="6" width="12" height="15" rx="2"/><path d="M8 3h10a2 2 0 0 1 2 2v12"/>' },
   { id: "agenda", label: "Agenda et OneDrive", desc: "Ton emploi du temps, ton Calendrier, et OneDrive / OneNote.", cards: ["agenda-card", "ms-card"],
     icon: '<rect x="4" y="5" width="16" height="15" rx="2"/><path d="M4 10h16M9 3v4M15 3v4"/>' },
+  { id: "etat", label: "Synchronisations", desc: "Tout ce que Pirouette garde à jour, et si ça marche.", cards: ["health-card"],
+    icon: '<path d="M20 11a8 8 0 0 0-14.3-4.9L4 8"/><path d="M4 3v5h5"/><path d="M4 13a8 8 0 0 0 14.3 4.9L20 16"/><path d="M20 21v-5h-5"/>' },
   { id: "claude", label: "App Claude", desc: "Branche Claude pour créer quiz et flashcards à partir de tes cours.",
     cards: ["claude-app-card", "settings-key-form", "local-ai"], icon: '<path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z"/>' },
   { id: "appareils", label: "Téléphone et tablette", desc: "Tes quiz et tes flashcards, aussi sur ton iPhone, ton iPad ou ton Android.", cards: ["devices-card"],
@@ -1588,6 +1625,7 @@ function showPref(id) {
   if (pref.id === "clavier") $("#keys-card").open = true;
   if (pref.id === "revisions") renderVoiceSettings();
   if (pref.id === "agenda") renderAgendaSettings();
+  if (pref.id === "etat") renderHealth();
   // Le titre d'une carte qui répète celui de la rubrique (« Révisions » dans Révisions) est masqué
   pref.cards.forEach((card) => {
     const h2 = $(`#${card}`)?.querySelector("h2, summary h2");
@@ -2564,7 +2602,13 @@ async function renderNews(course) {
   if (state.course?.id !== course.id) return;
   state.news = units;
   $("#news-card").hidden = !units.length && !course.outdated;
-  $("#news-text").textContent = "Nouvelle version : " + [
+  // Seulement des cartes ou questions signalées fausses (pas de nouvelle version du cours)
+  const onlyFlags = !units.length && course.flagged && course.flagged >= course.outdated;
+  $("#news-card h2").textContent = onlyFlags ? "Erreurs signalées" : "Ton cours a changé";
+  $("#news-copy").textContent = onlyFlags ? "Corriger avec Claude" : "Mettre à jour avec Claude";
+  if (onlyFlags) {
+    $("#news-text").textContent = `${plural(course.flagged, "question ou carte signalée", "questions ou cartes signalées")} : elles ne sont plus posées en attendant. Claude les vérifie dans le cours et les corrige.`;
+  } else $("#news-text").textContent = "Nouvelle version : " + [
     units.length ? plural(units.length, "chapitre changé", "chapitres changés") : "",
     course.outdated ? `${plural(course.outdated, "question ou carte", "questions ou cartes")} à revoir` : "",
   ].filter(Boolean).join(", ") + ".";
@@ -2577,6 +2621,11 @@ async function renderNews(course) {
 }
 function newsRequest() {
   const c = state.course;
+  if (c.flagged && !state.news?.length) {
+    return `Pirouette : dans mon cours « ${c.name} » (identifiant ${c.id}), j'ai signalé des questions ou des cartes fausses. `
+      + `pirouette_mise_a_jour te les donne (« SIGNALÉE FAUSSE ») : vérifie chacune dans le cours, puis corrige-la, garde-la `
+      + `ou supprime-la avec pirouette_corriger. Réponds ensuite par un résumé court.`;
+  }
   return `Pirouette : mon cours « ${c.name} » (identifiant ${c.id}) a une nouvelle version. Mets-le à jour : `
     + `pirouette_mise_a_jour te dit ce qui a changé et quoi faire (nouvelles questions et cartes sur les passages nouveaux, `
     + `questions et cartes dépassées à modifier ou supprimer avec pirouette_corriger). Réponds ensuite par un résumé court.`;
@@ -7311,10 +7360,46 @@ function quizKeys(e) {
 }
 
 const FLIP_KEYS = [" ", "ArrowUp", "ArrowDown"];
+
+// ⚑ « Cette carte / cette question est fausse » : elle quitte la séance et n'est plus posée ; Claude la corrigera
+function closeFlag() { $("#flag-pop").hidden = true; $("#session-flag").setAttribute("aria-expanded", "false"); }
+$("#session-flag").addEventListener("click", (e) => {
+  e.stopPropagation();
+  const open = $("#flag-pop").hidden;
+  $("#flag-pop").hidden = !open;
+  $("#session-flag").setAttribute("aria-expanded", String(open));
+  if (open) { $("#flag-note").value = ""; $("#flag-note").focus(); }
+});
+$("#flag-cancel").addEventListener("click", closeFlag);
+$("#flag-send").addEventListener("click", () => sendFlag());
+document.addEventListener("pointerdown", (e) => {
+  if (!$("#flag-pop").hidden && !e.target.closest("#flag-pop, #session-flag")) closeFlag();
+});
+async function sendFlag() {
+  const s = state.session;
+  const item = s?.items[s.index];
+  if (!item) return closeFlag();
+  const body = item.kind === "card" ? { kind: "card", card_id: item.card.id }
+    : { kind: "question", quiz_id: item.quiz_id, index: item.index };
+  try {
+    await api(`/api/courses/${item.course_id}/flag`, jsonBody("POST", { ...body, note: $("#flag-note").value.trim() }));
+  } catch (err) { return notify(err.message); }
+  closeFlag();
+  stopSpeaking();
+  notify("C’est noté. Elle n’est plus posée, et Claude la corrigera depuis la page de la matière.");
+  s.items.splice(s.index, 1);
+  if (s.index < s.items.length) showItem();
+  else finishSession();
+}
 function sessionKeys(e) {
   const s = state.session;
   const item = s?.items[s.index];
   if (!item || e.metaKey || e.ctrlKey) return;
+  if (e.target.closest?.("#flag-pop")) {  // on écrit ce qui ne va pas : les touches restent au champ
+    if (e.key === "Escape") { e.preventDefault(); closeFlag(); }
+    else if (e.key === "Enter") { e.preventDefault(); sendFlag(); }
+    return;
+  }
   if (isKey(e, "quit")) { e.preventDefault(); return quitByKey(); }
   if (!$("#cards-done").hidden) return;
   if (item.kind === "card") {

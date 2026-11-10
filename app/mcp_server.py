@@ -219,6 +219,14 @@ TOOLS = [
 ]
 
 
+
+def _why(item: dict) -> str:
+    """Pourquoi une question ou une carte est à vérifier (pirouette_mise_a_jour)."""
+    if item.get("flagged"):
+        note = f" : « {item['note']} »" if item.get("note") else ""
+        return f"SIGNALÉE FAUSSE par l'étudiant{note}" + (f" — source : « {item['source']} »" if item.get("source") else "")
+    return f"ancienne source : « {item['source']} »"
+
 class ToolError(Exception):
     """Erreur expliquée à Claude (mauvais identifiant, rien de valable…)."""
 
@@ -476,11 +484,11 @@ class Pirouette:
             q = self.store.get_quiz(item["quiz_id"])["questions"][item["index"]]
             checks.append(f"- {self._question_ref(item['quiz_id'], q['question'])} — question ({q['type']}) : {q['question']}"
                           + (f" — propositions : {' | '.join(q['choices'])}" if q.get("choices") else "")
-                          + f" — réponse : {q['answer']} — ancienne source : « {item['source']} »")
+                          + f" — réponse : {q['answer']} — " + _why(item))
         deck = {c["id"]: c for c in (self.store.get_doc(course["id"], "cards") or {}).get("cards", [])}
         for item in outdated["cards"]:
             card = deck[item["id"]]
-            checks.append(f"- c:{card['id']} — carte : {card['front']} → {card['back']} — ancienne source : « {item['source']} »")
+            checks.append(f"- c:{card['id']} — carte : {card['front']} → {card['back']} — " + _why(item))
         if not fresh and not gone and not checks:
             return (f"Rien à mettre à jour dans « {course['name']} » : pas de nouvelle version en attente, et toutes les "
                     "questions et cartes correspondent au cours.")
@@ -497,7 +505,9 @@ class Pirouette:
         if gone:
             out.append(section("Passages retirés ou réécrits (ancienne version)", gone))
         if checks:
-            out.append(f"## Questions et cartes à vérifier ({len(checks)}) : leur phrase du cours n'existe plus\n" + "\n".join(checks))
+            out.append(f"## Questions et cartes à vérifier ({len(checks)}) : signalées fausses par l'étudiant, ou leur phrase "
+                       "du cours n'existe plus. Vérifie-les dans le cours : modifier si elle est fausse ou mal posée, "
+                       "garder si elle est juste, supprimer si elle n'a rien à faire là.\n" + "\n".join(checks))
         out.append("## À faire\n"
                    "1. Questions et cartes à vérifier : compare-les à la nouvelle version (pirouette_lire du chapitre si "
                    "besoin), puis pirouette_corriger : « modifier » si la notion a changé (avec une source de la nouvelle "
