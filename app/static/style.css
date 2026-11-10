@@ -3323,3 +3323,10 @@ p, li, h1, h2, h3, h4, blockquote, td, th, dd, dt, pre, code, .feedback, .msg-bu
 .weak-text { display: grid; flex: 1; min-width: 0; }
 .weak-text small { color: var(--muted); font-size: 12.5px; }
 .weak-go { color: var(--ko); font-weight: 600; font-size: 13.5px; white-space: nowrap; }
+
+/* Bouton Microsoft (OneDrive / OneNote) : avec le logo, pour qu'on le repère */
+.ms-btn { display: inline-flex; align-items: center; gap: 7px; }
+.ms-logo { width: 14px; height: 14px; flex: none; }
+.ms-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 10px; }
+.ms-status { font-weight: 600; }
+.start-cloud { margin: 10px auto 0; display: flex; }

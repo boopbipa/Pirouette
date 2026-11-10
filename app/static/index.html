@@ -844,6 +844,17 @@
         </div>
       </div>
 
+      <!-- Compte Microsoft (école) : OneDrive et OneNote, suivis comme un dossier de l'ordinateur (microsoft.py) -->
+      <div class="card" id="ms-card" hidden>
+        <h2>OneDrive et OneNote</h2>
+        <p class="muted small-text">Tes cours sont sur OneDrive (Word en ligne) ou dans OneNote ? Connecte ton compte Microsoft (celui de l'école). Ensuite, dans chaque matière : <b>Réglages</b> › <b>Dossier suivi</b> › <b>OneDrive / OneNote</b>. Pirouette ne fait que lire tes cours.</p>
+        <div class="ms-row">
+          <span class="ms-status" id="ms-status"></span>
+          <button class="primary small ms-btn" type="button" id="ms-connect"><svg class="ms-logo" viewBox="0 0 16 16" aria-hidden="true"><path fill="#f25022" d="M0 0h7.5v7.5H0z"/><path fill="#7fba00" d="M8.5 0H16v7.5H8.5z"/><path fill="#00a4ef" d="M0 8.5h7.5V16H0z"/><path fill="#ffb900" d="M8.5 8.5H16V16H8.5z"/></svg>Se connecter avec Microsoft</button>
+          <button class="ghost small" type="button" id="ms-disconnect" hidden>Se déconnecter</button>
+        </div>
+      </div>
+
       <div class="card" id="agenda-card">
         <h2>Emploi du temps</h2>
         <p class="muted small-text">Colle le lien d'abonnement de ton emploi du temps (« iCal », « .ics » ou « S'abonner »). Pirouette le relit toutes les heures : la veille d'un cours, il te fait réviser le précédent, et après la séance il récupère ton cours.</p>
@@ -957,6 +968,7 @@
         <span class="muted">Glisse le fichier ici, ou clique. PDF, Word, PowerPoint, Pages, Keynote, texte.</span>
         <span class="primary small fake-button">Choisir un fichier</span>
       </label>
+      <button class="ghost small ms-btn start-cloud" type="button" id="start-cloud" hidden><svg class="ms-logo" viewBox="0 0 16 16" aria-hidden="true"><path fill="#f25022" d="M0 0h7.5v7.5H0z"/><path fill="#7fba00" d="M8.5 0H16v7.5H8.5z"/><path fill="#00a4ef" d="M0 8.5h7.5V16H0z"/><path fill="#ffb900" d="M8.5 8.5H16V16H8.5z"/></svg>Ou suivre un dossier OneDrive / une section OneNote</button>
       <!-- Hors de l'arbre : visible aussi sur une matière vide (barre de chargement, erreur de lecture) -->
       <p id="upload-status" class="status" hidden></p>
       <!-- Dossier suivi : les nouveaux cours trouvés, à ajouter ou à ignorer (choix retenu) -->
@@ -1077,7 +1089,7 @@
             <span class="set-value" id="watch-path">Aucun</span>
             <button class="ghost small" type="button" id="watch-refresh" hidden>Actualiser</button>
             <button class="ghost small" type="button" id="watch-pick">Choisir…</button>
-            <button class="ghost small" type="button" id="cloud-pick" hidden>OneDrive / OneNote…</button>
+            <button class="ghost small ms-btn" type="button" id="cloud-pick" hidden><svg class="ms-logo" viewBox="0 0 16 16" aria-hidden="true"><path fill="#f25022" d="M0 0h7.5v7.5H0z"/><path fill="#7fba00" d="M8.5 0H16v7.5H8.5z"/><path fill="#00a4ef" d="M0 8.5h7.5V16H0z"/><path fill="#ffb900" d="M8.5 8.5H16V16H8.5z"/></svg>OneDrive / OneNote…</button>
             <button class="ghost small" type="button" id="watch-stop" hidden>Ne plus suivre</button></div>
           <div class="set-row"><label class="set-label" for="course-rev-minutes">Durée d'une révision<small>Le quiz de chaque révision s'adapte à cette durée.</small></label>
             <select id="course-rev-minutes" class="chip set-select"></select></div>

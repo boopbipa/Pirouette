@@ -763,7 +763,36 @@ async function renderAgendaSettings() {
   try { renderAgendaView(await api("/api/agenda")); } catch (err) { notify(err.message); }
   try { renderCalendarView(await api("/api/calendar")); } catch { $("#cal-sync").hidden = true; }
   try { renderMacView(await api("/api/mac")); } catch { $("#mac-keep").hidden = true; }
+  renderMsSettings();
 }
+
+// Réglages › OneDrive et OneNote : se connecter (ou se déconnecter) une fois pour toutes les matières
+async function renderMsSettings() {
+  const ms = await api("/api/microsoft").catch(() => ({ available: false }));
+  $("#ms-card").hidden = !ms.available;
+  // Deux encarts dans la rubrique : chacun garde son titre (la règle « un seul encart → pas de titre » a tourné avant)
+  document.querySelectorAll("#ms-card > h2, #agenda-card > h2").forEach((h) => h.classList.toggle("pref-dup", !ms.available));
+  $("#ms-status").textContent = ms.connected ? `Connecté : ${ms.account || "compte Microsoft"}` : "";
+  $("#ms-status").hidden = !ms.connected;
+  $("#ms-connect").hidden = Boolean(ms.connected);
+  $("#ms-disconnect").hidden = !ms.connected;
+}
+$("#ms-connect").addEventListener("click", async () => {
+  try { await api("/api/microsoft/connect", { method: "POST" }); }
+  catch (err) { return notify(err.message); }
+  $("#ms-status").hidden = false;
+  $("#ms-status").textContent = "Termine la connexion dans ton navigateur…";
+  let tries = 0;
+  clearInterval(state.msPoll);
+  state.msPoll = setInterval(async () => {
+    const now = await api("/api/microsoft").catch(() => ({}));
+    if (now.connected || ++tries > 120) { clearInterval(state.msPoll); renderMsSettings(); }
+  }, 2000);
+});
+$("#ms-disconnect").addEventListener("click", async () => {
+  await api("/api/microsoft/disconnect", { method: "POST" }).catch(() => {});
+  renderMsSettings();
+});
 
 // Sur ce Mac : rester dans la barre des menus, ouvrir au démarrage
 function renderMacView(v) {
@@ -1522,7 +1551,7 @@ const PREF_ICON = (d) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentCo
 const PREFS = [
   { id: "revisions", label: "Révisions", desc: "Ton rythme, comment tu réponds, et la voix qui lit les cartes.", cards: ["revision-card", "voice-card", "definitions-card"],
     icon: '<rect x="4" y="6" width="12" height="15" rx="2"/><path d="M8 3h10a2 2 0 0 1 2 2v12"/>' },
-  { id: "agenda", label: "Emploi du temps", desc: "Ton emploi du temps de l'école, pour réviser au bon moment.", cards: ["agenda-card"],
+  { id: "agenda", label: "Agenda et OneDrive", desc: "Ton emploi du temps, ton Calendrier, et OneDrive / OneNote.", cards: ["agenda-card", "ms-card"],
     icon: '<rect x="4" y="5" width="16" height="15" rx="2"/><path d="M4 10h16M9 3v4M15 3v4"/>' },
   { id: "claude", label: "App Claude", desc: "Branche Claude pour créer quiz et flashcards à partir de tes cours.",
     cards: ["claude-app-card", "settings-key-form", "local-ai"], icon: '<path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z"/>' },
@@ -3463,6 +3492,8 @@ function renderWatchRow(course) {
     state.msAvailable = ms.available;
     $("#cloud-pick").hidden = !ms.available;
     if (ms.available) $("#watch-row").hidden = false;
+    // Matière encore vide : on propose aussi OneDrive / OneNote à côté du grand cadre d'import
+    $("#start-cloud").hidden = !ms.available || $("#start-drop").hidden || Boolean(cloud);
   }).catch(() => {});
 }
 
@@ -3542,6 +3573,7 @@ async function openCloudPicker() {
   start();
 }
 $("#cloud-pick").addEventListener("click", openCloudPicker);
+$("#start-cloud").addEventListener("click", openCloudPicker);
 $("#watch-refresh").addEventListener("click", async () => {
   const found = await api(`/api/courses/${state.course.id}/watch/scan`, { method: "POST" }).catch((err) => ({ error: err.message }));
   if (found.error) return notify(found.error);
