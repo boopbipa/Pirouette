@@ -1,3 +1,4 @@
+from collections import Counter
 from datetime import date, timedelta
 
 from fastapi.testclient import TestClient
@@ -133,3 +134,36 @@ def test_a_failed_card_says_why_it_comes_back(tmp_path, monkeypatch):
     assert [(i["card"]["front"], i["retry"]) for i in items] == [("Neurone ?", "Ratée la dernière fois")]
     assert main._question_retry({"right": 1, "wrong": 3, "last": True}) == "À retravailler"
     assert main._question_retry({"right": 2, "wrong": 0, "last": True}) == ""
+
+
+def test_many_courses_added_at_once_are_spread_over_the_next_days(tmp_path, monkeypatch):
+    store = Store(tmp_path)
+    monkeypatch.setattr(main, "store", store)
+    today = date.today()
+    for name, n in [("Neurosciences", 5), ("Psychométrie", 4), ("Méthode expérimentale", 2)]:
+        course = store.create_course(name)
+        for i in range(n):
+            store.add_file(course["id"], f"CM{i + 1}.pdf", b"%PDF", f"texte {i}")
+    client = TestClient(main.app)
+    data = client.get("/api/revisions").json()
+    assert len(data["today"]) == spaced.FIRST_PER_DAY                      # 4 aujourd'hui, pas 11
+    assert len({r["course"] for r in data["today"]}) == 3                   # en alternant les matières
+    days = Counter(r["due"] for r in data["upcoming"])
+    assert days[(today + timedelta(days=1)).isoformat()] == 4 and days[(today + timedelta(days=2)).isoformat()] == 3
+    assert all(r["late"] == 0 for r in data["today"] + data["upcoming"])    # reportées, pas « en retard »
+    again = client.get("/api/revisions").json()                            # rien ne bouge au deuxième passage
+    assert [r["file_id"] for r in again["today"]] == [r["file_id"] for r in data["today"]]
+    # Une fois faites, elles gardent leur rythme (J+1 après le jour où elles sont révisées), sans se regrouper
+    first = data["today"][0]
+    client.post(f"/api/revisions/{first['course_id']}/{first['file_id']}/done", json={"score": 1})
+    assert len(client.get("/api/revisions").json()["today"]) == 3
+
+
+def test_a_few_courses_are_not_spread():
+    today = D
+    entries = [("a", {"id": f"f{i}", "name": f"CM{i}", "added_at": today.isoformat()}) for i in range(4)]
+    assert spaced.spread_first(entries, today) == [] and all(e["rev"]["due"] == today.isoformat() for _, e in entries)
+    old = ("a", {"id": "vieux", "name": "x", "added_at": today.isoformat(), "rev": {"start": "2026-10-01", "step": 3, "due": today.isoformat(), "last": "2026-10-25"}})
+    more = [("b", {"id": f"g{i}", "name": f"CM{i}", "added_at": today.isoformat()}) for i in range(3)]
+    moved = spaced.spread_first([old, *entries, *more], today)
+    assert len(moved) == 3 and old[1]["rev"]["due"] == today.isoformat()  # une révision déjà dans son rythme n'est jamais déplacée

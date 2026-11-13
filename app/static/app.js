@@ -919,12 +919,15 @@ function wkBlocks(revs) {
     return Math.max(0, Math.min(PLAN_H, ((h - PLAN_FROM) / (PLAN_TO - PLAN_FROM)) * PLAN_H));
   };
   let bottom = -1;
-  return revs.filter((r) => r.start).sort((a, b) => a.start.localeCompare(b.start)).map((r) => {
+  const blocks = revs.filter((r) => r.start).sort((a, b) => a.start.localeCompare(b.start)).map((r) => {
     const top = Math.max(px(r.start), bottom + 2);
     const height = Math.max(26, px(r.end) - px(r.start));
     bottom = top + height;
     return { ...r, top, height };
   });
+  // Trop de révisions le même soir : la pile remonte pour rester dans la grille (elle débordait sous le planning)
+  const over = Math.min(bottom - PLAN_H, blocks[0]?.top ?? 0);
+  return over > 0 ? blocks.map((b) => ({ ...b, top: b.top - over })) : blocks;
 }  // heures montrées (les séances hors de ces heures sont collées au bord)
 function isoDay(d) { return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; }
 async function openPlanning(start = state.planStart, keepScroll = false) {
@@ -1677,7 +1680,8 @@ async function openSettings() {
   setCrumbs();
   show("settings");
   openAppearance(settings.appearance);
-  await refreshLocalAi();
+  renderPrefsSide();  // le menu de gauche tout de suite (il attendait la recherche de l'IA locale, lente sur certains PC)
+  refreshLocalAi();   // en arrière-plan : la page n'attend plus
 }
 
 $("#local-thinking").addEventListener("change", async (e) => {

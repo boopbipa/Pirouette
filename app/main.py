@@ -2792,6 +2792,11 @@ def _revisions(today: date | None = None, now: datetime | None = None) -> dict:
     soon = agenda_classes(data, agenda, courses, now, datetime.combine(today + timedelta(days=2), datetime.min.time()))
     recent = agenda_classes(data, agenda, courses, now - timedelta(hours=20), now)
     by_file, objs = {}, {}
+    # Beaucoup de cours ajoutés d'un coup : leurs premières révisions sont étalées sur les jours suivants
+    loaded = {c["id"]: store.get_course(c["id"]) for c in courses if c.get("files")}
+    moved = spaced.spread_first([(cid, f) for cid, c in loaded.items() for f in c["files"]], today)
+    for cid in {cid for cid, c in loaded.items() if any(f in moved for f in c["files"])}:
+        store._save_course(loaded[cid])
     for listed in courses:
         if not listed.get("files"):
             continue

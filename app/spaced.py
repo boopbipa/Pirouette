@@ -55,6 +55,35 @@ def ensure(entry: dict, today: date) -> dict:
     return rev
 
 
+FIRST_PER_DAY = 4  # premières révisions par jour quand beaucoup de cours arrivent d'un coup
+
+
+def spread_first(entries: list[tuple[str, dict]], today: date, per_day: int = FIRST_PER_DAY) -> list[dict]:
+    """Beaucoup de cours ajoutés le même jour (au début, ou tout un semestre d'un coup) : leurs premières révisions
+    tombaient toutes aujourd'hui, puis toutes ensemble à J+1, J+3… On les étale : `per_day` aujourd'hui, les
+    suivantes les jours d'après (en alternant les matières). Chaque cours garde ensuite son rythme à partir du jour
+    où il est révisé. `entries` : (matière, fichier). Renvoie les fichiers dont la date a changé."""
+    waiting: dict[str, list[dict]] = {}
+    for course_id, entry in entries:
+        rev = ensure(entry, today)
+        if int(rev.get("step", 0)) == 0 and not rev.get("last") and (_day(rev["due"]) or today) <= today:
+            waiting.setdefault(course_id, []).append(entry)
+    if sum(map(len, waiting.values())) <= per_day:
+        return []
+    for files in waiting.values():
+        files.sort(key=lambda e: (e.get("added_at") or "", e.get("name") or ""))
+    queue = []  # une de chaque matière à tour de rôle : chaque jour mélange les matières
+    while any(waiting.values()):
+        for course_id in sorted(waiting):
+            if waiting[course_id]:
+                queue.append(waiting[course_id].pop(0))
+    moved = []
+    for position, entry in enumerate(queue[per_day:]):
+        entry["rev"]["due"] = (today + timedelta(days=1 + position // per_day)).isoformat()
+        moved.append(entry)
+    return moved
+
+
 def restart(entry: dict, today: date) -> dict:
     """Le cours vient d'être repris dans le même fichier (les notes prises en cours, après la séance) : il repart de
     J+0, comme un cours d'aujourd'hui."""
