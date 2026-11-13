@@ -167,3 +167,26 @@ def test_a_few_courses_are_not_spread():
     more = [("b", {"id": f"g{i}", "name": f"CM{i}", "added_at": today.isoformat()}) for i in range(3)]
     moved = spaced.spread_first([old, *entries, *more], today)
     assert len(moved) == 3 and old[1]["rev"]["due"] == today.isoformat()  # une révision déjà dans son rythme n'est jamais déplacée
+
+
+def test_too_many_late_revisions_are_spread():
+    """Tout un semestre en retard le même jour (15 révisions) : 6 aujourd'hui, le reste les jours suivants."""
+    today = D
+    late = [(m, {"id": f"{m}{i}", "name": f"CM{i}", "added_at": "2026-10-01",
+                 "rev": {"start": "2026-10-01", "step": 2 + i, "due": (today - timedelta(days=i)).isoformat(), "last": "2026-10-20"}})
+            for m in "abc" for i in range(5)]
+    planned = ("a", {"id": "demain", "name": "x", "rev": {"start": "2026-10-01", "step": 3, "due": (today + timedelta(days=1)).isoformat()}})
+    moved = spaced.spread([*late, planned], today)
+    days = Counter(max(e["rev"]["due"], today.isoformat()) for _, e in [*late, planned])
+    assert len(moved) == 9 and days[today.isoformat()] == spaced.LATE_PER_DAY
+    assert max(days.values()) <= spaced.LATE_PER_DAY                         # demain : 5 + celle déjà prévue
+    assert days[(today + timedelta(days=1)).isoformat()] == 6 and days[(today + timedelta(days=2)).isoformat()] == 4
+    assert len({m for m, e in late if e["rev"]["due"] <= today.isoformat()}) == 3  # les matières alternent
+    assert spaced.spread([*late, planned], today) == []                     # stable au deuxième passage
+
+
+def test_a_normal_day_is_not_spread():
+    today = D
+    some = [("a", {"id": f"f{i}", "name": f"CM{i}", "rev": {"start": "2026-10-01", "step": 3, "due": today.isoformat(), "last": "2026-10-25"}})
+            for i in range(6)]
+    assert spaced.spread(some, today) == []

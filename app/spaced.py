@@ -84,6 +84,48 @@ def spread_first(entries: list[tuple[str, dict]], today: date, per_day: int = FI
     return moved
 
 
+LATE_PER_DAY = 6  # révisions par jour quand trop de cours sont à rattraper en même temps
+
+
+def spread_late(entries: list[tuple[str, dict]], today: date, per_day: int = LATE_PER_DAY) -> list[dict]:
+    """Trop de révisions à faire aujourd'hui (des jours sans réviser, ou tout un semestre arrivé d'un coup avec son
+    emploi du temps) : infaisable. On en garde `per_day` aujourd'hui (une matière après l'autre, les cours les plus
+    récemment vus d'abord) et le reste glisse sur les jours suivants, sans dépasser `per_day` par jour en comptant
+    ce qui y était déjà prévu. Renvoie les fichiers dont la date a changé."""
+    waiting: dict[str, list[dict]] = {}
+    load: dict[date, int] = {}
+    for course_id, entry in entries:
+        rev = ensure(entry, today)
+        due = _day(rev["due"]) or today
+        if due > today:
+            load[due] = load.get(due, 0) + 1
+        elif _day(rev.get("last")) != today:
+            waiting.setdefault(course_id, []).append(entry)
+    if sum(map(len, waiting.values())) <= per_day:
+        return []
+    for files in waiting.values():
+        files.sort(key=lambda e: (int(e["rev"].get("step", 0)), e["rev"]["due"], e.get("name") or ""))
+    queue = []
+    while any(waiting.values()):
+        for course_id in sorted(waiting):
+            if waiting[course_id]:
+                queue.append(waiting[course_id].pop(0))
+    moved, day = [], today
+    for entry in queue[per_day:]:
+        while day == today or load.get(day, 0) >= per_day:
+            day += timedelta(days=1)
+        load[day] = load.get(day, 0) + 1
+        entry["rev"]["due"] = day.isoformat()
+        moved.append(entry)
+    return moved
+
+
+def spread(entries: list[tuple[str, dict]], today: date) -> list[dict]:
+    """Les deux étalements, dans l'ordre : les premières révisions, puis tout ce qui déborde encore d'aujourd'hui."""
+    moved = spread_first(entries, today)
+    return moved + [e for e in spread_late(entries, today) if e not in moved]
+
+
 def restart(entry: dict, today: date) -> dict:
     """Le cours vient d'être repris dans le même fichier (les notes prises en cours, après la séance) : il repart de
     J+0, comme un cours d'aujourd'hui."""
